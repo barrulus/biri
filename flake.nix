@@ -148,7 +148,7 @@
                 "-Wl,--pop-state"
               ]
             );
-            NIRI_BUILD_COMMIT = self.shortRev;
+            NIRI_BUILD_COMMIT = self.shortRev or self.dirtyShortRev or "unknown";
           };
 
           passthru = {
