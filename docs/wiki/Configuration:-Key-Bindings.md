@@ -432,3 +432,38 @@ binds {
 
 The toggle state is combined with the [`off` setting](./Configuration:-Input.md#pointing-devices) in the config: both the config and the toggle must allow the touchpad for it to be enabled.
 The toggle state resets when niri restarts, and applies to newly hot-plugged touchpads.
+
+#### `overview-zoom-cycle`
+
+Cycle through the zoom levels defined in [`zoom-presets`](./Configuration:-Miscellaneous.md#zoom-presets) while in the [Overview](./Overview.md).
+Does nothing if no presets are configured or if the overview is closed.
+
+Zoom changes are animated and reset to the config default when the overview closes.
+
+```kdl
+binds {
+    // Cycle forward through preset zoom levels
+    Mod+Z { overview-zoom-cycle; }
+
+    // Cycle backward through preset zoom levels
+    Mod+Shift+Z { overview-zoom-cycle reverse=true; }
+}
+```
+
+#### `overview-zoom-in`, `overview-zoom-out`
+
+Zoom in or out to the next preset in [`zoom-presets`](./Configuration:-Miscellaneous.md#zoom-presets) while in the [Overview](./Overview.md).
+Unlike `overview-zoom-cycle`, these actions move directionally based on zoom value rather than cycling through the preset list.
+
+- `overview-zoom-in`: moves to the next higher zoom value (workspaces appear larger)
+- `overview-zoom-out`: moves to the next lower zoom value (workspaces appear smaller)
+
+Does nothing if already at the highest/lowest preset, no presets are configured, or the overview is closed.
+
+```kdl
+binds {
+    // Scroll to zoom in/out in the overview
+    Mod+WheelScrollUp   cooldown-ms=150 { overview-zoom-in; }
+    Mod+WheelScrollDown cooldown-ms=150 { overview-zoom-out; }
+}
+```
