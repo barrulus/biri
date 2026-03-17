@@ -264,6 +264,8 @@ pub struct Niri {
     /// Runtime toggle for touchpad disabled state (combined with config.touchpad.off).
     pub touchpad_disabled_by_toggle: bool,
 
+    pub dwt_disabled_by_toggle: bool,
+
     pub devices: HashSet<input::Device>,
     pub tablets: HashMap<input::Device, TabletData>,
     pub touch: HashSet<input::Device>,
@@ -1635,6 +1637,7 @@ impl State {
                     &config.input,
                     &mut device,
                     self.niri.touchpad_disabled_by_toggle,
+                    self.niri.dwt_disabled_by_toggle,
                 );
             }
         }
@@ -2455,6 +2458,8 @@ impl Niri {
             monitors_active: true,
             is_lid_closed: false,
             touchpad_disabled_by_toggle: false,
+
+            dwt_disabled_by_toggle: false,
 
             devices: HashSet::new(),
             tablets: HashMap::new(),

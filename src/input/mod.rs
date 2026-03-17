@@ -232,6 +232,7 @@ impl State {
                     &self.niri.config.borrow().input,
                     device,
                     self.niri.touchpad_disabled_by_toggle,
+                    self.niri.dwt_disabled_by_toggle,
                 );
             }
             InputEvent::DeviceRemoved { device } => {
@@ -705,6 +706,7 @@ impl State {
                             &config.input,
                             &mut device,
                             self.niri.touchpad_disabled_by_toggle,
+                            self.niri.dwt_disabled_by_toggle,
                         );
                     }
                 }
@@ -2405,6 +2407,20 @@ impl State {
                     window.set_urgent(false);
                 }
                 self.niri.queue_redraw_all();
+            }
+            Action::ToggleDwt => {
+                self.niri.dwt_disabled_by_toggle = !self.niri.dwt_disabled_by_toggle;
+                let config = self.niri.config.borrow();
+                for mut device in self.niri.devices.iter().cloned() {
+                    if device.config_tap_finger_count() > 0 {
+                        apply_libinput_settings(
+                            &config.input,
+                            &mut device,
+                            self.niri.touchpad_disabled_by_toggle,
+                            self.niri.dwt_disabled_by_toggle,
+                        );
+                    }
+                }
             }
             Action::LoadConfigFile(path) => {
                 if let Some(watcher) = &self.niri.config_file_watcher {
@@ -4781,6 +4797,7 @@ pub fn apply_libinput_settings(
     config: &niri_config::Input,
     device: &mut input::Device,
     touchpad_disabled_by_toggle: bool,
+    dwt_disabled_by_toggle: bool,
 ) {
     // According to Mutter code, this setting is specific to touchpads.
     let is_touchpad = device.config_tap_finger_count() > 0;
@@ -4795,7 +4812,8 @@ pub fn apply_libinput_settings(
             input::SendEventsMode::ENABLED
         });
         let _ = device.config_tap_set_enabled(c.tap);
-        let _ = device.config_dwt_set_enabled(c.dwt);
+        let dwt_enabled = c.dwt && !dwt_disabled_by_toggle;
+        let _ = device.config_dwt_set_enabled(dwt_enabled);
         let _ = device.config_dwtp_set_enabled(c.dwtp);
         let _ = device.config_tap_set_drag_lock_enabled(c.drag_lock);
         let _ = device.config_scroll_set_natural_scroll_enabled(c.natural_scroll);
