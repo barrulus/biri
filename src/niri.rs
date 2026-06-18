@@ -4240,16 +4240,20 @@ impl Niri {
             push
         };
 
-        // The pointer goes on the top.
-        if include_pointer && self.pointer_visibility.is_visible() {
-            self.render_pointer(ctx.renderer, output, &mut |elem| push(elem.into()));
-        }
-
         // Global post-process shader: only push for the real Output sink (never screenshots or
         // screencopy), so the effect does not leak into recordings and the per-output ping-pong
         // state is not corrupted by capture renders. A compiled program is also required; this
         // gate has zero overhead when no program is loaded.
-        if ctx.target == RenderTarget::Output
+        //
+        // When reads_cursor is active, the element must render ABOVE the cursor (pushed before
+        // render_pointer) so the cursor is captured into the screen texture. Otherwise it renders
+        // BELOW the cursor (pushed after render_pointer) so the hardware cursor is unaffected.
+        let reads_cursor = {
+            let cfg = self.config.borrow();
+            cfg.global_shader.enable && cfg.global_shader.reads_cursor
+        };
+        let mut global_shader_elem: Option<GlobalShaderElement> = if ctx.target
+            == RenderTarget::Output
             && Shaders::get(ctx.renderer)
                 .program(ProgramType::Global)
                 .is_some()
@@ -4274,7 +4278,7 @@ impl Niri {
                 (pointer_local.y * scale as f64) as f32,
             );
 
-            let elem = GlobalShaderElement::new(
+            Some(GlobalShaderElement::new(
                 Id::new(),
                 area,
                 scale,
@@ -4282,8 +4286,30 @@ impl Niri {
                 cursor,
                 state.global_shader_prev.clone(),
                 state.global_shader_result.clone(),
-            );
-            push(elem.into());
+            ))
+        } else {
+            None
+        };
+
+        // When reads_cursor is on, push the global shader element first so the cursor is
+        // composited into niri_screen (the cursor becomes part of the captured screen texture).
+        if reads_cursor {
+            if let Some(elem) = global_shader_elem.take() {
+                push(elem.into());
+            }
+        }
+
+        // The pointer goes on the top (or below the global shader when reads_cursor is on).
+        if include_pointer && self.pointer_visibility.is_visible() {
+            self.render_pointer(ctx.renderer, output, &mut |elem| push(elem.into()));
+        }
+
+        // When reads_cursor is off (default), push the global shader element after the pointer
+        // so the hardware cursor remains above the effect.
+        if !reads_cursor {
+            if let Some(elem) = global_shader_elem {
+                push(elem.into());
+            }
         }
 
         // Next, the screen transition texture.

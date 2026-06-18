@@ -1902,6 +1902,10 @@ impl Tty {
 
         // Overlay planes are disabled by default as they cause weird performance issues on my
         // system.
+        let global_shader_reads_cursor = {
+            let cfg = self.config.borrow();
+            cfg.global_shader.enable && cfg.global_shader.reads_cursor
+        };
         let flags = {
             let debug = &self.config.borrow().debug;
 
@@ -1919,7 +1923,7 @@ impl Tty {
                 flags.remove(primary_scanout_flag);
                 flags.remove(FrameFlags::ALLOW_OVERLAY_PLANE_SCANOUT);
             }
-            if debug.disable_cursor_plane {
+            if debug.disable_cursor_plane || global_shader_reads_cursor {
                 flags.remove(FrameFlags::ALLOW_CURSOR_PLANE_SCANOUT);
             }
             if debug.skip_cursor_only_updates_during_vrr {
