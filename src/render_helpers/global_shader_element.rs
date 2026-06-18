@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -18,10 +19,10 @@ use crate::render_helpers::shaders::{ProgramType, Shaders};
 /// A render element that captures the composited framebuffer below it and re-draws it through the
 /// global post-process program.
 ///
-/// This is currently a passthrough: `niri_prev` is bound to the freshly-captured screen and
-/// `niri_time`/`niri_cursor` are fixed zeros. Prev-frame ping-pong, real time and cursor come in a
-/// later task.
-#[derive(Debug, Clone)]
+/// After `draw()` completes, the rendered result is captured into `result` so that the caller can
+/// retrieve it via `into_texture()` for prev-frame ping-pong. Real `niri_time`/`niri_cursor`
+/// values and wiring into `OutputState` come in a later task.
+#[derive(Debug)]
 pub struct GlobalShaderElement {
     id: Id,
     commit: CommitCounter,
@@ -30,6 +31,8 @@ pub struct GlobalShaderElement {
     time: f32,
     cursor: (f32, f32),
     prev: Option<GlesTexture>,
+    /// Captured result of this element's draw pass, stored for prev-frame ping-pong.
+    result: RefCell<Option<GlesTexture>>,
 }
 
 impl GlobalShaderElement {
@@ -49,14 +52,15 @@ impl GlobalShaderElement {
             time,
             cursor,
             prev,
+            result: RefCell::new(None),
         }
     }
 
     /// Returns the captured-result texture for prev-frame ping-pong.
     ///
-    /// For this task it always returns `None`; a later task wires the real captured result.
+    /// Only populated after `draw()` has been called. Task 5 moves this into `OutputState`.
     pub fn into_texture(self) -> Option<GlesTexture> {
-        None
+        self.result.into_inner()
     }
 }
 
@@ -157,7 +161,19 @@ impl RenderElement<GlesRenderer> for GlobalShaderElement {
             damage,
             &[],
             None,
-        )
+        )?;
+
+        // Capture the rendered result for prev-frame ping-pong (Task 5 moves this into
+        // OutputState.global_shader_prev).
+        let result_tex = {
+            let mut guard = frame.renderer();
+            let renderer = guard.as_mut();
+            renderer.create_buffer(Fourcc::Abgr8888, buffer_size)?
+        };
+        capture::capture_framebuffer_region(frame, dst, &result_tex)?;
+        *self.result.borrow_mut() = Some(result_tex);
+
+        Ok(())
     }
 }
 
