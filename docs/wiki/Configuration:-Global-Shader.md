@@ -44,7 +44,7 @@ Fields:
 |---|---|---|---|
 | `enable` | flag | off | Activate the shader. Without this, the block is parsed but has no effect. |
 | `source` | string | — | Inline GLSL fragment source. Mutually exclusive with `path`. |
-| `path` | string | — | Path to a `.frag` file. The file is read at startup and on every config reload. Mutually exclusive with `source`. |
+| `path` | string | — | Path to a `.frag` file, re-read whenever the config is reloaded. Editing the `.frag` file alone does **not** trigger a reload — you must also reload the config (e.g. re-save `config.kdl`). Mutually exclusive with `source`. |
 | `mode` | string | `"niri"` | API flavour: `"niri"` or `"hyprland"`. |
 | `reads-cursor` | flag | off | Include cursor pixels in `niri_screen`. See [reads-cursor](#reads-cursor) below. |
 
@@ -200,7 +200,7 @@ global-shader {
 
 ### Hot-Reload
 
-Any change to the `global-shader` block (or the file pointed to by `path`) takes effect the next time niri reloads its config.
+Any change to the `global-shader` block takes effect the next time niri reloads its config. When using `path`, the file is re-read on config reload only — editing the `.frag` file by itself does not trigger a reload, so re-save your `config.kdl` (or otherwise reload the config) to pick up shader-file edits.
 If the new shader fails to compile, the old shader (if any) continues running and a warning is logged — the compositor never crashes.
 
 ---

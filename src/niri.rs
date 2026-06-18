@@ -4202,6 +4202,10 @@ impl Niri {
 
         if ctx.target == RenderTarget::Output {
             if let Some(preview) = self.config.borrow().debug.preview_render {
+                // Note: this retargets away from RenderTarget::Output, which means the global
+                // post-process shader (gated on `ctx.target == Output` further down) is disabled
+                // while debug.preview_render is active — the preview deliberately simulates the
+                // screencast/capture path, which is shaderless by design.
                 ctx.target = match preview {
                     PreviewRender::Screencast => RenderTarget::Screencast,
                     PreviewRender::ScreenCapture => RenderTarget::ScreenCapture,
