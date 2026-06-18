@@ -19,10 +19,10 @@ use crate::render_helpers::shaders::{ProgramType, Shaders};
 /// A render element that captures the composited framebuffer below it and re-draws it through the
 /// global post-process program.
 ///
-/// After `draw()` completes, the rendered result is captured into `result` so that the caller can
-/// retrieve it via `into_texture()` for prev-frame ping-pong. Real `niri_time`/`niri_cursor`
-/// values and wiring into `OutputState` come in a later task.
-#[derive(Debug)]
+/// After `draw()` completes, the rendered result is written into the shared `result` handle so the
+/// caller (`OutputState`) can pick it up after the frame is submitted, for prev-frame ping-pong.
+/// The handle is an `Rc<RefCell<..>>` shared with `OutputState.global_shader_result`.
+#[derive(Debug, Clone)]
 pub struct GlobalShaderElement {
     id: Id,
     commit: CommitCounter,
@@ -31,8 +31,10 @@ pub struct GlobalShaderElement {
     time: f32,
     cursor: (f32, f32),
     prev: Option<GlesTexture>,
-    /// Captured result of this element's draw pass, stored for prev-frame ping-pong.
-    result: RefCell<Option<GlesTexture>>,
+    /// Shared sink for the captured result of this element's draw pass, used for prev-frame
+    /// ping-pong. After the frame is submitted, the owner takes the texture out of this handle and
+    /// moves it into `global_shader_prev`.
+    result: Rc<RefCell<Option<GlesTexture>>>,
 }
 
 impl GlobalShaderElement {
@@ -43,6 +45,7 @@ impl GlobalShaderElement {
         time: f32,
         cursor: (f32, f32),
         prev: Option<GlesTexture>,
+        result: Rc<RefCell<Option<GlesTexture>>>,
     ) -> Self {
         Self {
             id,
@@ -52,15 +55,8 @@ impl GlobalShaderElement {
             time,
             cursor,
             prev,
-            result: RefCell::new(None),
+            result,
         }
-    }
-
-    /// Returns the captured-result texture for prev-frame ping-pong.
-    ///
-    /// Only populated after `draw()` has been called. Task 5 moves this into `OutputState`.
-    pub fn into_texture(self) -> Option<GlesTexture> {
-        self.result.into_inner()
     }
 }
 
@@ -163,8 +159,9 @@ impl RenderElement<GlesRenderer> for GlobalShaderElement {
             None,
         )?;
 
-        // Capture the rendered result for prev-frame ping-pong (Task 5 moves this into
-        // OutputState.global_shader_prev).
+        // Capture the rendered result for prev-frame ping-pong. The shared handle is also held by
+        // OutputState.global_shader_result; after the frame is submitted, the owner moves this into
+        // OutputState.global_shader_prev.
         let result_tex = {
             let mut guard = frame.renderer();
             let renderer = guard.as_mut();

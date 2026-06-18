@@ -153,8 +153,10 @@ use crate::protocols::screencopy::{Screencopy, ScreencopyBuffer, ScreencopyManag
 use crate::protocols::virtual_pointer::VirtualPointerManagerState;
 use crate::render_helpers::blur::BlurOptions;
 use crate::render_helpers::debug::push_opaque_regions;
+use crate::render_helpers::global_shader_element::GlobalShaderElement;
 use crate::render_helpers::primary_gpu_texture::PrimaryGpuTextureRenderElement;
 use crate::render_helpers::renderer::NiriRenderer;
+use crate::render_helpers::shaders::{ProgramType, Shaders};
 use crate::render_helpers::solid_color::{SolidColorBuffer, SolidColorRenderElement};
 use crate::render_helpers::surface::push_elements_from_surface_tree;
 use crate::render_helpers::texture::TextureBuffer;
@@ -484,8 +486,12 @@ pub struct OutputState {
     screen_transition: Option<ScreenTransition>,
     /// Previous frame's output, fed to the global shader as `niri_prev`.
     pub global_shader_prev: Option<GlesTexture>,
-    /// When the global shader became active; origin for `niri_time`.
-    pub global_shader_start: Option<std::time::Instant>,
+    /// When the global shader became active; origin for `niri_time`. Interior-mutable because the
+    /// time origin is lazily initialized from the (`&self`) `render_inner` path.
+    pub global_shader_start: Cell<Option<std::time::Instant>>,
+    /// Shared sink written by `GlobalShaderElement::draw`; after the frame is submitted, its
+    /// texture is moved into `global_shader_prev` for the next frame's `niri_prev`.
+    pub global_shader_result: Rc<RefCell<Option<GlesTexture>>>,
     /// Damage tracker used for the debug damage visualization.
     pub debug_damage_tracker: OutputDamageTracker,
 }
@@ -1576,6 +1582,25 @@ impl State {
             self.backend.with_primary_renderer(|renderer| {
                 shaders::set_custom_open_program(renderer, src);
             });
+            shaders_changed = true;
+        }
+
+        if config.global_shader.enable != old_config.global_shader.enable
+            || config.global_shader.source != old_config.global_shader.source
+            || config.global_shader.path != old_config.global_shader.path
+            || config.global_shader.mode != old_config.global_shader.mode
+        {
+            let src = global_shader_source(&config.global_shader);
+            let hyprland = config.global_shader.mode == "hyprland";
+            self.backend.with_primary_renderer(|renderer| {
+                shaders::set_custom_global_program(renderer, src.as_deref(), hyprland);
+            });
+            // Reset per-output time origin / prev texture on (re)load.
+            for state in self.niri.output_state.values_mut() {
+                state.global_shader_start.set(None);
+                state.global_shader_prev = None;
+                *state.global_shader_result.borrow_mut() = None;
+            }
             shaders_changed = true;
         }
 
@@ -2879,7 +2904,8 @@ impl Niri {
             lock_color_buffer: SolidColorBuffer::new(size, CLEAR_COLOR_LOCKED),
             screen_transition: None,
             global_shader_prev: None,
-            global_shader_start: None,
+            global_shader_start: Cell::new(None),
+            global_shader_result: Rc::new(RefCell::new(None)),
             debug_damage_tracker: OutputDamageTracker::from_output(&output),
         };
         let rv = self.output_state.insert(output.clone(), state);
@@ -4217,6 +4243,47 @@ impl Niri {
         // The pointer goes on the top.
         if include_pointer && self.pointer_visibility.is_visible() {
             self.render_pointer(ctx.renderer, output, &mut |elem| push(elem.into()));
+        }
+
+        // Global post-process shader: only push for the real Output sink (never screenshots or
+        // screencopy), so the effect does not leak into recordings and the per-output ping-pong
+        // state is not corrupted by capture renders. A compiled program is also required; this
+        // gate has zero overhead when no program is loaded.
+        if ctx.target == RenderTarget::Output
+            && Shaders::get(ctx.renderer)
+                .program(ProgramType::Global)
+                .is_some()
+        {
+            let start = state.global_shader_start.get().unwrap_or_else(|| {
+                let now = std::time::Instant::now();
+                state.global_shader_start.set(Some(now));
+                now
+            });
+            let time = start.elapsed().as_secs_f32();
+            let scale = output.current_scale().fractional_scale() as f32;
+            let area = Rectangle::from_size(output_size(output));
+
+            // Cursor in output-local physical pixels (same source as render_pointer).
+            let output_pos = self.global_space.output_geometry(output).unwrap().loc;
+            let pointer_pos = self
+                .tablet_cursor_location
+                .unwrap_or_else(|| self.seat.get_pointer().unwrap().current_location());
+            let pointer_local = pointer_pos - output_pos.to_f64();
+            let cursor = (
+                (pointer_local.x * scale as f64) as f32,
+                (pointer_local.y * scale as f64) as f32,
+            );
+
+            let elem = GlobalShaderElement::new(
+                Id::new(),
+                area,
+                scale,
+                time,
+                cursor,
+                state.global_shader_prev.clone(),
+                state.global_shader_result.clone(),
+            );
+            push(elem.into());
         }
 
         // Next, the screen transition texture.
@@ -6486,6 +6553,51 @@ impl ClientData for ClientState {
     fn disconnected(&self, _client_id: ClientId, _reason: DisconnectReason) {}
 }
 
+/// Resolves the global post-process shader source from config: inline `source` vs `path`.
+///
+/// Returns `None` (and warns) when disabled, when neither/both of `source`/`path` are set, when an
+/// inline source is empty, or when a path can't be read.
+pub(crate) fn global_shader_source(cfg: &niri_config::GlobalShader) -> Option<String> {
+    if !cfg.enable {
+        return None;
+    }
+    match (&cfg.source, &cfg.path) {
+        (Some(s), None) => {
+            if s.trim().is_empty() {
+                warn!("global-shader: empty source, disabling");
+                None
+            } else {
+                Some(s.clone())
+            }
+        }
+        (None, Some(p)) => {
+            let path = match expand_home(std::path::Path::new(p)) {
+                Ok(Some(expanded)) => expanded,
+                Ok(None) => std::path::PathBuf::from(p),
+                Err(err) => {
+                    warn!("global-shader: cannot expand path {p:?}: {err}; disabling");
+                    return None;
+                }
+            };
+            match std::fs::read_to_string(&path) {
+                Ok(s) => Some(s),
+                Err(err) => {
+                    warn!("global-shader: cannot read path {p:?}: {err}; disabling");
+                    None
+                }
+            }
+        }
+        (Some(_), Some(_)) => {
+            warn!("global-shader: both source and path set, disabling");
+            None
+        }
+        (None, None) => {
+            warn!("global-shader: enabled but no source or path, disabling");
+            None
+        }
+    }
+}
+
 fn scale_relocate_crop<E: Element>(
     elem: E,
     output_scale: Scale<f64>,
@@ -6532,5 +6644,6 @@ niri_render_elements! {
         Texture = PrimaryGpuTextureRenderElement,
         // Used for the CPU-rendered panels.
         RelocatedMemoryBuffer = RelocateRenderElement<MemoryRenderBufferRenderElement<R>>,
+        GlobalShader = GlobalShaderElement,
     }
 }

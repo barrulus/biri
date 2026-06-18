@@ -64,7 +64,7 @@ use wayland_protocols::wp::presentation_time::server::wp_presentation_feedback;
 use super::{IpcOutputMap, RenderResult};
 use crate::backend::OutputId;
 use crate::frame_clock::FrameClock;
-use crate::niri::{Niri, RedrawState, State};
+use crate::niri::{global_shader_source, Niri, RedrawState, State};
 use crate::render_helpers::debug::draw_damage;
 use crate::render_helpers::renderer::AsGlesRenderer;
 use crate::render_helpers::{resources, shaders, RenderCtx, RenderTarget};
@@ -842,6 +842,11 @@ impl Tty {
             }
             if let Some(src) = config.animations.window_open.custom_shader.as_deref() {
                 shaders::set_custom_open_program(gles_renderer, Some(src));
+            }
+            {
+                let src = global_shader_source(&config.global_shader);
+                let hyprland = config.global_shader.mode == "hyprland";
+                shaders::set_custom_global_program(gles_renderer, src.as_deref(), hyprland);
             }
             drop(config);
 
@@ -1931,6 +1936,15 @@ impl Tty {
         let drm_compositor = &mut surface.compositor;
         match drm_compositor.render_frame::<_, _>(&mut renderer, &elements, [0.; 4], flags) {
             Ok(res) => {
+                // Global post-process shader ping-pong: the element wrote its captured result into
+                // the shared handle during render_frame; move it into prev for the next frame.
+                if let Some(output_state) = niri.output_state.get_mut(output) {
+                    let result = output_state.global_shader_result.borrow_mut().take();
+                    if result.is_some() {
+                        output_state.global_shader_prev = result;
+                    }
+                }
+
                 let needs_sync = res.needs_sync()
                     || self
                         .config
