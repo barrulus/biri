@@ -4,9 +4,7 @@ use glam::{Mat3, Vec2};
 use niri_config::CornerRadius;
 use smithay::backend::allocator::Fourcc;
 use smithay::backend::renderer::element::{Element, Id, RenderElement};
-use smithay::backend::renderer::gles::{
-    ffi, GlesError, GlesFrame, GlesRenderer, GlesTexture, Uniform,
-};
+use smithay::backend::renderer::gles::{GlesError, GlesFrame, GlesRenderer, GlesTexture, Uniform};
 use smithay::backend::renderer::utils::CommitCounter;
 use smithay::backend::renderer::{Frame as _, FrameContext, Offscreen, Texture as _};
 use smithay::gpu_span_location;
@@ -16,6 +14,7 @@ use smithay::utils::{Buffer, Logical, Physical, Rectangle, Scale, Transform};
 use crate::backend::tty::{TtyFrame, TtyRenderer, TtyRendererError};
 use crate::render_helpers::background_effect::RenderParams;
 use crate::render_helpers::blur::{Blur, BlurOptions};
+use crate::render_helpers::capture;
 use crate::render_helpers::renderer::AsGlesFrame as _;
 use crate::render_helpers::shaders::{mat3_uniform, Shaders};
 use crate::utils::region::TransformedRegion;
@@ -247,55 +246,11 @@ impl RenderElement<GlesRenderer> for FramebufferEffectElement {
 
             // We can't use renderer.with_context() as that will reset the GlesFrame binding that we
             // want to blit from.
+            let framebuffer = framebuffer.clone();
             drop(guard);
 
             // Blit the framebuffer contents.
-            frame.with_context(|gl| unsafe {
-                while gl.GetError() != ffi::NO_ERROR {}
-
-                let mut current_fbo = 0i32;
-                gl.GetIntegerv(ffi::DRAW_FRAMEBUFFER_BINDING, &mut current_fbo as *mut _);
-
-                // BlitFramebuffer is affected by the scissor test, we don't want that.
-                gl.Disable(ffi::SCISSOR_TEST);
-
-                let mut fbo = 0;
-                gl.GenFramebuffers(1, &mut fbo as *mut _);
-                gl.BindFramebuffer(ffi::DRAW_FRAMEBUFFER, fbo);
-
-                gl.FramebufferTexture2D(
-                    ffi::DRAW_FRAMEBUFFER,
-                    ffi::COLOR_ATTACHMENT0,
-                    ffi::TEXTURE_2D,
-                    framebuffer.tex_id(),
-                    0,
-                );
-
-                gl.BlitFramebuffer(
-                    dst.loc.x,
-                    dst.loc.y,
-                    dst.loc.x + dst.size.w,
-                    dst.loc.y + dst.size.h,
-                    0,
-                    0,
-                    size.w,
-                    size.h,
-                    ffi::COLOR_BUFFER_BIT,
-                    ffi::LINEAR,
-                );
-
-                // Restore state set by GlesFrame that we just modified.
-                gl.BindFramebuffer(ffi::DRAW_FRAMEBUFFER, current_fbo as u32);
-                gl.Enable(ffi::SCISSOR_TEST);
-
-                gl.DeleteFramebuffers(1, &mut fbo as *mut _);
-
-                if gl.GetError() != ffi::NO_ERROR {
-                    Err(GlesError::BlitError)
-                } else {
-                    Ok(())
-                }
-            })??;
+            capture::capture_framebuffer_region(frame, dst, &framebuffer)?;
 
             // If blur is off, use the unblurred texture.
             if self.blur_options.is_none() {
@@ -306,7 +261,7 @@ impl RenderElement<GlesRenderer> for FramebufferEffectElement {
             if let Some((blur, options)) = blur {
                 let mut guard = frame.renderer();
                 let renderer = guard.as_mut();
-                match blur.render(renderer, framebuffer, options) {
+                match blur.render(renderer, &framebuffer, options) {
                     Ok(blurred) => inner.intermediate = Some(blurred),
                     Err(err) => {
                         warn!("error rendering blur: {err:?}");
