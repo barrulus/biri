@@ -411,18 +411,49 @@ git commit -m "render: add global shader compile/set/replace + contract frag fil
 
 This task builds the render element that captures the composited framebuffer below it and re-draws it through the global program. It starts as a **passthrough**: `niri_prev` is bound to the freshly-captured screen and `niri_time`/`niri_cursor` are fixed zeros. Prev-frame ping-pong, real time, and cursor come in Task 4. Verified by build + manual TTY check.
 
+**Decision (governs over verbatim-copy wording below):** the `glBlitFramebuffer` capture logic must be **extracted into a shared helper** that both `FramebufferEffect` and `GlobalShaderElement` call — do NOT copy it verbatim into the new element. The extraction + refactor of `framebuffer_effect.rs` is Step 0 of this task.
+
 **Files:**
+- Create: `src/render_helpers/capture.rs` (shared blit-capture helper)
 - Create: `src/render_helpers/global_shader_element.rs`
-- Modify: `src/render_helpers/mod.rs` (module decl)
+- Modify: `src/render_helpers/framebuffer_effect.rs` (call the shared helper instead of its inline blit)
+- Modify: `src/render_helpers/mod.rs` (module decls: `capture`, `global_shader_element`)
 
 **Interfaces:**
-- Consumes: `Shaders::get_from_frame(frame).custom_global` / `Shaders::program(ProgramType::Global)`; the framebuffer-capture pattern from `src/render_helpers/framebuffer_effect.rs:156-319`; `ShaderRenderElement` uniform/texture mechanism (`src/render_helpers/shader_element.rs`).
+- Consumes: `Shaders::get_from_frame(frame).custom_global` / `Shaders::program(ProgramType::Global)`; the existing framebuffer-capture logic in `src/render_helpers/framebuffer_effect.rs:156-319` (being extracted); `ShaderRenderElement` uniform/texture mechanism (`src/render_helpers/shader_element.rs`).
 - Produces:
+  - `pub fn capture_framebuffer_region(frame: &mut GlesFrame<'_, '_>, dst: Rectangle<i32, Physical>, into: &GlesTexture) -> Result<(), GlesError>` in `render_helpers/capture.rs` — performs the `glBlitFramebuffer` of the current draw framebuffer's `dst` region into `into`.
   - `pub struct GlobalShaderElement` implementing `RenderElement<GlesRenderer>` and the TTY renderer (`TtyRenderer`) the codebase uses for output elements.
   - `pub fn GlobalShaderElement::new(id: Id, area: Rectangle<f64, Logical>, scale: f32, time: f32, cursor: (f32, f32), prev: Option<GlesTexture>) -> Self`
   - `pub fn GlobalShaderElement::into_texture(self) -> Option<GlesTexture>` returning the captured-result texture for ping-pong (populated after `draw`). For this task it may return `None`; Task 4 wires it.
 
-- [ ] **Step 1: Scaffold the module by copying `framebuffer_effect.rs`**
+- [ ] **Step 0: Extract the shared blit-capture helper**
+
+Create `src/render_helpers/capture.rs` containing a `pub fn capture_framebuffer_region` that holds the `glBlitFramebuffer` logic currently inline in `FramebufferEffect::capture_framebuffer` (`framebuffer_effect.rs:252-298`): bind a temporary FBO with `into.tex_id()` as `COLOR_ATTACHMENT0`, disable scissor, blit `dst` → `(0,0,size)`, restore state, delete the temp FBO, and error-check. Signature:
+
+```rust
+use smithay::backend::renderer::gles::{ffi, GlesError, GlesFrame, GlesTexture};
+use smithay::utils::{Physical, Rectangle};
+
+/// Blit the `dst` region of the frame's current DRAW framebuffer into `into`.
+pub fn capture_framebuffer_region(
+    frame: &mut GlesFrame<'_, '_>,
+    dst: Rectangle<i32, Physical>,
+    into: &GlesTexture,
+) -> Result<(), GlesError> {
+    let size = into.size();
+    frame.with_context(|gl| unsafe {
+        // ... exact body moved from framebuffer_effect.rs:252-298 ...
+    })?
+}
+```
+
+Then refactor `FramebufferEffect::capture_framebuffer` to call `capture::capture_framebuffer_region(frame, dst, framebuffer)` in place of its inline blit block, leaving its texture-caching/sizing logic intact. Register the module in `src/render_helpers/mod.rs` (`pub mod capture;`, alphabetically near `pub mod blur;`).
+
+Run: `cargo build 2>&1 | tail -20` and `cargo clippy 2>&1 | tail -20`
+Expected: builds clean; `framebuffer_effect.rs` behavior unchanged (no GLES unit tests exist — verified by build + clippy + the Task 7 manual blur check).
+
+- [ ] **Step 1: Scaffold the module by adapting `framebuffer_effect.rs`**
 
 `framebuffer_effect.rs` already implements exactly the hard part: a `RenderElement` that, in `draw()`, blits the framebuffer region below it into a `GlesTexture` and re-renders it through a program. Create `src/render_helpers/global_shader_element.rs` by adapting it:
 
@@ -476,9 +507,9 @@ Copy the exact method shapes from `framebuffer_effect.rs`'s `Element` impl; only
 
 - [ ] **Step 3: Implement `draw` (capture + passthrough)**
 
-Implement `RenderElement<GlesRenderer>::draw` by copying the capture machinery from `FramebufferEffectElement::capture_framebuffer` (`framebuffer_effect.rs:156-319`) — specifically:
-- The `GlesTexture` allocation block (`framebuffer_effect.rs:225-232`): `renderer.create_buffer(Fourcc::Abgr8888, size)?`, sized to the physical `dst` size.
-- The `glBlitFramebuffer` block verbatim (`framebuffer_effect.rs:252-298`) to copy the framebuffer below into that texture (`niri_screen`).
+Implement `RenderElement<GlesRenderer>::draw`:
+- Allocate the `niri_screen` `GlesTexture` the same way `FramebufferEffect` does (`framebuffer_effect.rs:225-232`): `renderer.create_buffer(Fourcc::Abgr8888, size)?`, sized to the physical `dst` size.
+- Capture the framebuffer below into that texture by calling the shared helper from Step 0: `capture::capture_framebuffer_region(frame, dst, &screen_tex)?`.
 
 Then render the captured texture through the global program, modeled on `FramebufferEffectElement::draw` (`framebuffer_effect.rs:391-409`) but using the global program and binding two textures + the extra uniforms:
 
@@ -576,7 +607,7 @@ Ensure `GlesTexture` is imported in `niri.rs` (it is used by other render paths;
 
 - [ ] **Step 2: Make the element output its captured result for ping-pong**
 
-In `src/render_helpers/global_shader_element.rs`, after the program pass in `draw`, capture the rendered result (the element's own output region) into a texture stored in interior state, and expose it via `into_texture`. Use the same `create_buffer` + `glBlitFramebuffer` capture used for `niri_screen`, but performed *after* the program draw, reading the now-updated framebuffer region. Store it in a `RefCell<Option<GlesTexture>>` field on the element so `draw` (which takes `&self`) can write it:
+In `src/render_helpers/global_shader_element.rs`, after the program pass in `draw`, capture the rendered result (the element's own output region) into a texture stored in interior state, and expose it via `into_texture`. Allocate a texture (`create_buffer`) and call the shared `capture::capture_framebuffer_region(frame, dst, &result_tex)?` *after* the program draw, reading the now-updated framebuffer region. Store it in a `RefCell<Option<GlesTexture>>` field on the element so `draw` (which takes `&self`) can write it:
 
 ```rust
     result: std::cell::RefCell<Option<GlesTexture>>,
