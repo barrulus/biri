@@ -34,6 +34,7 @@ pub mod binds;
 pub mod debug;
 pub mod error;
 pub mod gestures;
+pub mod global_shader;
 pub mod input;
 pub mod layer_rule;
 pub mod layout;
@@ -50,6 +51,7 @@ pub use crate::binds::*;
 pub use crate::debug::Debug;
 pub use crate::error::{ConfigIncludeError, ConfigParseResult};
 pub use crate::gestures::Gestures;
+pub use crate::global_shader::{GlobalShader, GlobalShaderPart};
 pub use crate::input::{Input, ModKey, ScrollMethod, TrackLayout, WarpMouseToFocusMode, Xkb};
 pub use crate::layer_rule::LayerRule;
 pub use crate::layout::*;
@@ -82,6 +84,7 @@ pub struct Config {
     pub animations: Animations,
     pub blur: Blur,
     pub gestures: Gestures,
+    pub global_shader: GlobalShader,
     pub overview: Overview,
     pub environment: Environment,
     pub xwayland_satellite: XwaylandSatellite,
@@ -199,6 +202,7 @@ where
                 "animations" => m_merge!(animations),
                 "blur" => m_merge!(blur),
                 "gestures" => m_merge!(gestures),
+                "global-shader" => m_merge!(global_shader),
                 "overview" => m_merge!(overview),
                 "xwayland-satellite" => m_merge!(xwayland_satellite),
                 "switch-events" => m_merge!(switch_events),
@@ -1661,6 +1665,13 @@ mod tests {
                     bottom_left: false,
                     bottom_right: false,
                 },
+            },
+            global_shader: GlobalShader {
+                enable: false,
+                source: None,
+                path: None,
+                mode: "niri",
+                reads_cursor: false,
             },
             overview: Overview {
                 zoom: 0.5,
