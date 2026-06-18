@@ -213,3 +213,11 @@ If the new shader fails to compile, the old shader (if any) continues running an
 | `global-shader` block present, `enable` absent | Zero |
 | `enable` set, valid shader | Full-frame redraw every frame; no direct scanout; overlay planes disabled |
 | `reads-cursor` additionally set | As above, plus software cursor (extra GPU cost) |
+
+---
+
+### Scope and Limitations
+
+- **TTY/DRM only.** The effect applies on the real (DRM/KMS) output. It is intentionally **not** applied on the nested winit backend (running niri in a window), nor to screenshots or screen recordings (screencast/screencopy) — those render without the effect.
+- **Output transform.** The effect is verified on outputs with the default (`normal`) transform. On outputs configured with a non-default `transform` (e.g. `90`, `270`, `flipped`), the shader's view of `niri_screen`/`niri_prev` may be mis-oriented. If you use a rotated or flipped output, verify your shader there before relying on it.
+- **Single shader.** One global shader applies to all outputs; per-output or per-window shaders are not supported.
