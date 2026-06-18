@@ -34,6 +34,7 @@
 * [Window Rules](./Configuration:-Window-Rules.md)
 * [Layer Rules](./Configuration:-Layer-Rules.md)
 * [Animations](./Configuration:-Animations.md)
+* [Global Shader](./Configuration:-Global-Shader.md)
 * [Gestures](./Configuration:-Gestures.md)
 * [Recent Windows](./Configuration:-Recent-Windows.md)
 * [Debug Options](./Configuration:-Debug-Options.md)
