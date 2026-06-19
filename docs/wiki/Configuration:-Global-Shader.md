@@ -8,12 +8,15 @@ Use it for effects such as colour grading, CRT scanlines, night-light tints, mot
 > It has no effect on the winit (nested/X11) backend.
 > Screenshots and screen recordings (screencopy / screencast) render **without** the shader; they always capture the unprocessed frame.
 
-While a global shader is active:
+> [!WARNING]
+> **Performance cost — read this before enabling.** While a global shader is active, the compositor cannot take any of its normal power-saving shortcuts for that output:
+> - **The entire output is redrawn every frame**, continuously, even when nothing on screen changed. There are no partial-damage savings — expect constant GPU load and **significantly higher battery drain** on a laptop.
+> - **Direct scanout and overlay-plane offload are disabled**, so full-screen video / games lose their zero-copy fast path while the shader is on.
+> - With `reads-cursor` set, the **hardware cursor is forced to software**, adding extra per-frame GPU cost (and it's worse on NVIDIA).
+>
+> This is inherent to a whole-screen post-process pass, not a tuning problem. Treat a global shader as an always-on GPU effect, and turn it off when you don't need it.
 
-- The entire output is redrawn every frame (no partial-damage power savings).
-- Direct scanout and overlay-plane offload are disabled for that output.
-
-When no `global-shader` block is present (or `enable` is not set), there is **zero overhead**.
+When no `global-shader` block is present (or `enable` is not set), there is **zero overhead** — the compositor renders exactly as it does without the feature.
 
 ---
 
