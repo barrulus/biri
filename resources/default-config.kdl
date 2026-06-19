@@ -304,6 +304,17 @@ animations {
     // slowdown 3.0
 }
 
+// Apply a full-screen post-process shader to everything on screen.
+// global-shader {
+//     enable
+//     // Either an inline GLSL string (niri mode: define `vec4 global_color(vec3 c)`)...
+//     source "vec4 global_color(vec3 c) { vec4 s = tex2D_screen(c.xy); return vec4(s.rgb * vec3(1.0, 0.9, 0.8), s.a); }"
+//     // ...or a path to a .frag file:
+//     // path "~/.config/niri/shaders/crt.frag"
+//     mode "niri"        // "niri" or "hyprland"
+//     // reads-cursor     // forces software cursor so the shader can read/transform the cursor
+// }
+
 // Window rules let you adjust behavior for individual windows.
 // Find more information on the wiki:
 // https://niri-wm.github.io/niri/Configuration:-Window-Rules

@@ -21,6 +21,7 @@ pub struct Shaders {
     pub custom_resize: RefCell<Option<ShaderProgram>>,
     pub custom_close: RefCell<Option<ShaderProgram>>,
     pub custom_open: RefCell<Option<ShaderProgram>>,
+    pub custom_global: RefCell<Option<ShaderProgram>>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -30,6 +31,7 @@ pub enum ProgramType {
     Resize,
     Close,
     Open,
+    Global,
 }
 
 impl Shaders {
@@ -159,6 +161,7 @@ impl Shaders {
             custom_resize: RefCell::new(None),
             custom_close: RefCell::new(None),
             custom_open: RefCell::new(None),
+            custom_global: RefCell::new(None),
         }
     }
 
@@ -196,6 +199,13 @@ impl Shaders {
         self.custom_open.replace(program)
     }
 
+    pub fn replace_custom_global_program(
+        &self,
+        program: Option<ShaderProgram>,
+    ) -> Option<ShaderProgram> {
+        self.custom_global.replace(program)
+    }
+
     pub fn program(&self, program: ProgramType) -> Option<ShaderProgram> {
         match program {
             ProgramType::Border => self.border.clone(),
@@ -207,6 +217,7 @@ impl Shaders {
                 .or_else(|| self.resize.clone()),
             ProgramType::Close => self.custom_close.borrow().clone(),
             ProgramType::Open => self.custom_open.borrow().clone(),
+            ProgramType::Global => self.custom_global.borrow().clone(),
         }
     }
 }
@@ -349,6 +360,52 @@ pub fn set_custom_open_program(renderer: &mut GlesRenderer, src: Option<&str>) {
     if let Some(prev) = Shaders::get(renderer).replace_custom_open_program(program) {
         if let Err(err) = prev.destroy(renderer) {
             warn!("error destroying previous custom open shader: {err:?}");
+        }
+    }
+}
+
+fn compile_global_program(
+    renderer: &mut GlesRenderer,
+    src: &str,
+    hyprland: bool,
+) -> Result<ShaderProgram, GlesError> {
+    let mut program = if hyprland {
+        include_str!("global_hypr_prelude.frag").to_string()
+    } else {
+        include_str!("global_prelude.frag").to_string()
+    };
+    program.push_str(src);
+    if !hyprland {
+        program.push_str(include_str!("global_epilogue.frag"));
+    }
+
+    ShaderProgram::compile(
+        renderer,
+        &program,
+        &[
+            UniformName::new("niri_time", UniformType::_1f),
+            UniformName::new("niri_cursor", UniformType::_2f),
+        ],
+        &["niri_screen", "niri_prev"],
+    )
+}
+
+pub fn set_custom_global_program(renderer: &mut GlesRenderer, src: Option<&str>, hyprland: bool) {
+    let program = if let Some(src) = src {
+        match compile_global_program(renderer, src, hyprland) {
+            Ok(program) => Some(program),
+            Err(err) => {
+                warn!("error compiling custom global shader: {err:?}");
+                return;
+            }
+        }
+    } else {
+        None
+    };
+
+    if let Some(prev) = Shaders::get(renderer).replace_custom_global_program(program) {
+        if let Err(err) = prev.destroy(renderer) {
+            warn!("error destroying previous custom global shader: {err:?}");
         }
     }
 }
