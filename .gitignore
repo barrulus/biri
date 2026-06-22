@@ -2,3 +2,7 @@
 /result
 
 .idea
+
+# direnv
+/.direnv/
+/.envrc
