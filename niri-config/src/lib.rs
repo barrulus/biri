@@ -1684,6 +1684,8 @@ mod tests {
                 path: None,
                 mode: "niri",
                 reads_cursor: false,
+                cursor_radius: None,
+                redraw: "auto",
             },
             overview: Overview {
                 zoom: 0.5,

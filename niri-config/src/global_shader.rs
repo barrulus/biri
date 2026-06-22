@@ -74,6 +74,10 @@ pub struct GlobalShader {
     pub path: Option<String>,
     pub mode: String,
     pub reads_cursor: bool,
+    /// Effect footprint radius in logical px for cursor-local shaders; `None` = whole output.
+    pub cursor_radius: Option<u32>,
+    /// Redraw scheduling: "auto" | "on-damage" | "continuous". Parsed via `RedrawMode::parse`.
+    pub redraw: String,
 }
 
 impl Default for GlobalShader {
@@ -84,6 +88,8 @@ impl Default for GlobalShader {
             path: None,
             mode: String::from("niri"),
             reads_cursor: false,
+            cursor_radius: None,
+            redraw: String::from("auto"),
         }
     }
 }
@@ -100,13 +106,17 @@ pub struct GlobalShaderPart {
     pub mode: Option<String>,
     #[knuffel(child)]
     pub reads_cursor: Option<Flag>,
+    #[knuffel(child, unwrap(argument))]
+    pub cursor_radius: Option<u32>,
+    #[knuffel(child, unwrap(argument))]
+    pub redraw: Option<String>,
 }
 
 impl MergeWith<GlobalShaderPart> for GlobalShader {
     fn merge_with(&mut self, part: &GlobalShaderPart) {
         merge!((self, part), enable, reads_cursor);
-        merge_clone_opt!((self, part), source, path);
-        merge_clone!((self, part), mode);
+        merge_clone_opt!((self, part), source, path, cursor_radius);
+        merge_clone!((self, part), mode, redraw);
     }
 }
 
@@ -202,6 +212,30 @@ mod tests {
             config.global_shader.source.as_deref(),
             Some("vec4 global_color(vec3 c) { return tex2D_screen(c.xy); }")
         );
+    }
+
+    #[test]
+    fn global_shader_redraw_and_cursor_radius() {
+        let config = Config::parse_mem(
+            r##"
+            global-shader {
+                enable
+                source "vec4 global_color(vec3 c) { return tex2D_screen(c.xy); }"
+                cursor-radius 200
+                redraw "continuous"
+            }
+            "##,
+        )
+        .unwrap();
+        assert_eq!(config.global_shader.cursor_radius, Some(200));
+        assert_eq!(config.global_shader.redraw, "continuous");
+    }
+
+    #[test]
+    fn global_shader_redraw_defaults_to_auto() {
+        let config = Config::parse_mem("").unwrap();
+        assert_eq!(config.global_shader.redraw, "auto");
+        assert_eq!(config.global_shader.cursor_radius, None);
     }
 
     #[test]

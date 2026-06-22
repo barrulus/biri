@@ -38,6 +38,13 @@ global-shader {
 
     // Composite the cursor into niri_screen (forces a software cursor).
     // reads-cursor
+
+    // Redraw scheduling: "auto" (default), "on-damage", or "continuous".
+    redraw "auto"
+
+    // For cursor-local effects: reshade/damage only a box of this radius (logical px)
+    // around the cursor, leaving the rest of the output scanout-eligible.
+    // cursor-radius 200
 }
 ```
 
@@ -50,6 +57,8 @@ Fields:
 | `path` | string | — | Path to a `.frag` file, re-read whenever the config is reloaded. Editing the `.frag` file alone does **not** trigger a reload — you must also reload the config (e.g. re-save `config.kdl`). Mutually exclusive with `source`. |
 | `mode` | string | `"niri"` | API flavour: `"niri"` or `"hyprland"`. |
 | `reads-cursor` | flag | off | Include cursor pixels in `niri_screen`. See [reads-cursor](#reads-cursor) below. |
+| `redraw` | string | `"auto"` | Redraw scheduling. `"auto"`: animate every frame only if the shader uses `niri_time` or the feedback buffer (`niri_prev`/`tex2D_prev`); otherwise redraw only on real damage. `"on-damage"`: never force idle redraws. `"continuous"`: always redraw every frame. See [Redraw scheduling](#redraw-scheduling) below. |
+| `cursor-radius` | integer (px) | — | For cursor-local shaders: reshade and damage only a box of this radius (logical px) around the cursor, preserving direct scanout elsewhere. Omit for a whole-output effect. See [cursor-radius](#cursor-radius-region-mode) below. |
 
 If both `source` and `path` are set, or if neither is set while `enable` is present, biri logs a warning and disables the effect — the compositor never crashes.
 
@@ -205,6 +214,42 @@ global-shader {
 
 Any change to the `global-shader` block takes effect the next time niri reloads its config. When using `path`, the file is re-read on config reload only — editing the `.frag` file by itself does not trigger a reload, so re-save your `config.kdl` (or otherwise reload the config) to pick up shader-file edits.
 If the new shader fails to compile, the old shader (if any) continues running and a warning is logged — the compositor never crashes.
+
+---
+
+### Redraw scheduling
+
+By default (`redraw "auto"`) biri scans your shader source to decide how often to redraw:
+
+- If it references `niri_time` or the feedback buffer (`niri_prev` / `tex2D_prev`), the effect is **animated**, so biri redraws every frame — it keeps animating even when the desktop is completely idle.
+- Otherwise the effect is a pure function of the screen below, so biri redraws **only when something actually changes** (no wasted GPU when idle).
+
+Override this with `redraw`:
+
+| Value | Behaviour |
+|---|---|
+| `"auto"` (default) | Animate every frame iff the shader uses `niri_time`/`niri_prev`/`tex2D_prev`. |
+| `"on-damage"` | Never force idle redraws — animate only when other on-screen activity triggers a frame. |
+| `"continuous"` | Always redraw every frame, even for a static shader. |
+
+The scan is a literal text match, so it errs on the side of *more* redraws (e.g. an identifier like `lifetime` in a `hyprland`-mode shader counts as using `time`). Use `redraw "on-damage"` to opt out if that happens.
+
+```kdl
+global-shader {
+    enable
+    source "vec4 global_color(vec3 c) { return tex2D_screen(c.xy); }"
+    cursor-radius 200
+    redraw "auto"
+}
+```
+
+---
+
+### cursor-radius (region mode)
+
+For effects that only touch the area around the cursor (a ring, spotlight, magnifier), set `cursor-radius` to the effect's radius in logical pixels. Biri then reshades and damages only a box of that size around the cursor instead of the whole output, so the rest of the screen keeps direct scanout / overlay-plane offload and the GPU cost drops sharply.
+
+Region mode applies only when the shader uses `niri_cursor` and is **not** animated (no `niri_time` / feedback) — an animated whole-screen effect still reshades the whole output. The coordinate contract for region-mode shaders is documented under [niri Mode](#niri-mode-default).
 
 ---
 
