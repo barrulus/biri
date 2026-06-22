@@ -186,6 +186,9 @@ impl RenderElement<GlesRenderer> for GlobalShaderElement {
             .program(ProgramType::GlobalBuffer)
             .is_some()
         {
+            // First frame (or after reload) there is no prior buffer; fall back to the previous
+            // screen. This briefly seeds the buffer with screen content, but it is overwritten the
+            // next frame and is purely cosmetic for one frame.
             let buf_prev = self
                 .buffer_prev
                 .clone()
@@ -217,8 +220,11 @@ impl RenderElement<GlesRenderer> for GlobalShaderElement {
                 Ok((off_elem, _sync, _data)) => {
                     let next = off_elem.texture().clone();
                     drop(guard);
-                    // Hold a clone so OffscreenBuffer allocates a fresh texture next frame, and so
-                    // the owner can move it into global_shader_buffer_prev after submit.
+                    // DO NOT remove this retained clone. It is what forces OffscreenBuffer to
+                    // allocate a *distinct* write texture next frame (its `is_unique_reference`
+                    // check): without an external clone alive, next frame's buffer pass would read
+                    // and write the same texture and corrupt the feedback. The clone also lets the
+                    // owner move this texture into global_shader_buffer_prev after submit.
                     *self.buffer_result.borrow_mut() = Some(next.clone());
                     next
                 }
