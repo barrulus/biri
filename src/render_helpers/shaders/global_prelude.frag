@@ -4,7 +4,7 @@ precision highp float;
 uniform float niri_tint;
 #endif
 
-varying vec2 niri_v_coords;   // 0..1 across the output
+varying vec2 niri_v_coords;   // 0..1 across this element (remapped to output coords via niri_region)
 uniform vec2 niri_size;       // output size in physical px
 uniform float niri_scale;
 uniform float niri_alpha;

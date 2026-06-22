@@ -4353,13 +4353,20 @@ impl Niri {
                         )
                             .into(),
                     );
-                    let region_norm = [
-                        ((box_rect.loc.x - full.loc.x) / full.size.w) as f32,
-                        ((box_rect.loc.y - full.loc.y) / full.size.h) as f32,
-                        (box_rect.size.w / full.size.w) as f32,
-                        (box_rect.size.h / full.size.h) as f32,
-                    ];
-                    (box_rect, region_norm)
+                    if box_rect.size.w <= 0.0 || box_rect.size.h <= 0.0 {
+                        // Cursor is off this output (e.g. on another monitor) so the clamped box
+                        // is empty: render whole-output here. A zero-size region would otherwise
+                        // divide by zero in the shader's tex2D_* remap.
+                        (full, [0.0, 0.0, 1.0, 1.0])
+                    } else {
+                        let region_norm = [
+                            ((box_rect.loc.x - full.loc.x) / full.size.w) as f32,
+                            ((box_rect.loc.y - full.loc.y) / full.size.h) as f32,
+                            (box_rect.size.w / full.size.w) as f32,
+                            (box_rect.size.h / full.size.h) as f32,
+                        ];
+                        (box_rect, region_norm)
+                    }
                 }
                 _ => (area, [0.0, 0.0, 1.0, 1.0]),
             };

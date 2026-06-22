@@ -81,7 +81,7 @@ Biri wraps it with a `main()` that passes `coord.xy` (normalised 0..1 UV coordin
 | Name | Type | Description |
 |---|---|---|
 | `niri_time` | `float` | Seconds elapsed since the shader was activated. |
-| `niri_size` | `vec2` | Output dimensions in physical pixels. |
+| `niri_size` | `vec2` | Element dimensions in physical pixels. **In [region mode](#cursor-radius-region-mode) this is the box size, not the full output** — use `niri_output_size` for absolute-pixel math. |
 | `niri_scale` | `float` | Output scale factor. |
 | `niri_cursor` | `vec2` | Cursor position in output-local physical pixels. |
 | `niri_screen` | `sampler2D` | The composited frame below the effect. |
@@ -258,7 +258,7 @@ global-shader {
 
 For effects that only touch the area around the cursor (a ring, spotlight, magnifier), set `cursor-radius` to the effect's radius in logical pixels. Biri then reshades and damages only a box of that size around the cursor instead of the whole output, so the rest of the screen keeps direct scanout / overlay-plane offload and the GPU cost drops sharply.
 
-Region mode applies only when the shader uses `niri_cursor` and is **not** animated (no `niri_time` / feedback) — an animated whole-screen effect still reshades the whole output. The coordinate contract for region-mode shaders is documented under [niri Mode](#niri-mode-default).
+Region mode applies only when the shader uses `niri_cursor` and is **not** animated (no `niri_time` / feedback) — an animated whole-screen effect still reshades the whole output. Because it keys off `niri_cursor`, region mode is **`niri` mode only**; `hyprland`-mode shaders (which have no cursor uniform) always render whole-output and `cursor-radius` is ignored for them. The coordinate contract for region-mode shaders is documented under [niri Mode](#niri-mode-default).
 
 ---
 
