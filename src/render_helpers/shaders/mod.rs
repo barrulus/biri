@@ -385,6 +385,8 @@ fn compile_global_program(
         &[
             UniformName::new("niri_time", UniformType::_1f),
             UniformName::new("niri_cursor", UniformType::_2f),
+            UniformName::new("niri_region", UniformType::_4f),
+            UniformName::new("niri_output_size", UniformType::_2f),
         ],
         &["niri_screen", "niri_prev"],
     )

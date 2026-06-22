@@ -30,6 +30,11 @@ pub struct GlobalShaderElement {
     scale: f32,
     time: f32,
     cursor: (f32, f32),
+    /// Region this element covers in output-normalised coords: [origin.x, origin.y, w, h].
+    /// `[0.0, 0.0, 1.0, 1.0]` = whole output.
+    region_norm: [f32; 4],
+    /// True full-output size in physical px (for the `niri_output_size` uniform).
+    output_size_phys: (f32, f32),
     prev: Option<GlesTexture>,
     /// Shared sink for the captured result of this element's draw pass, used for prev-frame
     /// ping-pong. After the frame is submitted, the owner takes the texture out of this handle and
@@ -44,6 +49,8 @@ impl GlobalShaderElement {
         scale: f32,
         time: f32,
         cursor: (f32, f32),
+        region_norm: [f32; 4],
+        output_size_phys: (f32, f32),
         prev: Option<GlesTexture>,
         result: Rc<RefCell<Option<GlesTexture>>>,
     ) -> Self {
@@ -54,6 +61,8 @@ impl GlobalShaderElement {
             scale,
             time,
             cursor,
+            region_norm,
+            output_size_phys,
             prev,
             result,
         }
@@ -128,6 +137,19 @@ impl RenderElement<GlesRenderer> for GlobalShaderElement {
         let uniforms: Rc<[Uniform<'static>]> = Rc::new([
             Uniform::new("niri_time", self.time),
             Uniform::new("niri_cursor", (self.cursor.0, self.cursor.1)),
+            Uniform::new(
+                "niri_region",
+                (
+                    self.region_norm[0],
+                    self.region_norm[1],
+                    self.region_norm[2],
+                    self.region_norm[3],
+                ),
+            ),
+            Uniform::new(
+                "niri_output_size",
+                (self.output_size_phys.0, self.output_size_phys.1),
+            ),
         ]);
 
         let mut textures = HashMap::new();

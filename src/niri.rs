@@ -4323,12 +4323,55 @@ impl Niri {
                 (pointer_local.y * scale as f64) as f32,
             );
 
+            let output_size_phys = (
+                (area.size.w * scale as f64) as f32,
+                (area.size.h * scale as f64) as f32,
+            );
+
+            // Region-local rendering: when cursor-radius is set on a cursor-only (non-animating)
+            // shader, shrink the element to a box around the cursor so damage + scanout are
+            // limited to that box. Otherwise cover the whole output.
+            let caps = self.global_shader_caps();
+            let cursor_radius = self.config.borrow().global_shader.cursor_radius;
+            let (area, region_norm) = match cursor_radius {
+                Some(r) if caps.uses_cursor && !caps.is_animating() && r > 0 => {
+                    let r = r as f64; // logical px
+                    let full = area;
+                    let box_loc = (
+                        (pointer_local.x - r).max(full.loc.x),
+                        (pointer_local.y - r).max(full.loc.y),
+                    );
+                    let box_end = (
+                        (pointer_local.x + r).min(full.loc.x + full.size.w),
+                        (pointer_local.y + r).min(full.loc.y + full.size.h),
+                    );
+                    let box_rect = Rectangle::new(
+                        (box_loc.0, box_loc.1).into(),
+                        (
+                            (box_end.0 - box_loc.0).max(0.0),
+                            (box_end.1 - box_loc.1).max(0.0),
+                        )
+                            .into(),
+                    );
+                    let region_norm = [
+                        ((box_rect.loc.x - full.loc.x) / full.size.w) as f32,
+                        ((box_rect.loc.y - full.loc.y) / full.size.h) as f32,
+                        (box_rect.size.w / full.size.w) as f32,
+                        (box_rect.size.h / full.size.h) as f32,
+                    ];
+                    (box_rect, region_norm)
+                }
+                _ => (area, [0.0, 0.0, 1.0, 1.0]),
+            };
+
             Some(GlobalShaderElement::new(
                 Id::new(),
                 area,
                 scale,
                 time,
                 cursor,
+                region_norm,
+                output_size_phys,
                 state.global_shader_prev.clone(),
                 state.global_shader_result.clone(),
             ))

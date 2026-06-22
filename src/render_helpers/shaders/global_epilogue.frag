@@ -1,6 +1,6 @@
 
 void main() {
-    vec3 coord = vec3(niri_v_coords, 1.0);
+    vec3 coord = vec3(niri_region.xy + niri_v_coords * niri_region.zw, 1.0);
     vec4 color = global_color(coord);
 
     color = color * niri_alpha;
