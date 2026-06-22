@@ -501,6 +501,11 @@ pub struct OutputState {
     /// Shared sink written by `GlobalShaderElement::draw`; after the frame is submitted, its
     /// texture is moved into `global_shader_prev` for the next frame's `niri_prev`.
     pub global_shader_result: Rc<RefCell<Option<GlesTexture>>>,
+    /// Previous frame's `niri_screen` capture (screen only), exposed as `niri_screen_prev`.
+    pub global_shader_screen_prev: Option<GlesTexture>,
+    /// Sink written by `GlobalShaderElement::draw` with this frame's screen capture; moved into
+    /// `global_shader_screen_prev` after submit.
+    pub global_shader_screen_result: Rc<RefCell<Option<GlesTexture>>>,
     /// Damage tracker used for the debug damage visualization.
     pub debug_damage_tracker: OutputDamageTracker,
 }
@@ -1611,6 +1616,8 @@ impl State {
                 state.global_shader_start.set(None);
                 state.global_shader_prev = None;
                 *state.global_shader_result.borrow_mut() = None;
+                state.global_shader_screen_prev = None;
+                *state.global_shader_screen_result.borrow_mut() = None;
             }
             // Recompute capability flags on next use.
             self.niri.global_shader_caps.set(None);
@@ -2947,6 +2954,8 @@ impl Niri {
             global_shader_prev: None,
             global_shader_start: Cell::new(None),
             global_shader_result: Rc::new(RefCell::new(None)),
+            global_shader_screen_prev: None,
+            global_shader_screen_result: Rc::new(RefCell::new(None)),
             debug_damage_tracker: OutputDamageTracker::from_output(&output),
         };
         let rv = self.output_state.insert(output.clone(), state);
@@ -4385,6 +4394,8 @@ impl Niri {
                 region_norm,
                 output_size_phys,
                 state.global_shader_prev.clone(),
+                state.global_shader_screen_prev.clone(),
+                state.global_shader_screen_result.clone(),
                 state.global_shader_result.clone(),
             ))
         } else {

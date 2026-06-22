@@ -36,6 +36,10 @@ pub struct GlobalShaderElement {
     /// True full-output size in physical px (for the `niri_output_size` uniform).
     output_size_phys: (f32, f32),
     prev: Option<GlesTexture>,
+    /// Previous frame's screen capture, bound as `niri_screen_prev`.
+    screen_prev: Option<GlesTexture>,
+    /// Sink for this frame's screen capture (clone of `screen_tex`), ping-ponged like `result`.
+    screen_result: Rc<RefCell<Option<GlesTexture>>>,
     /// Shared sink for the captured result of this element's draw pass, used for prev-frame
     /// ping-pong. After the frame is submitted, the owner takes the texture out of this handle and
     /// moves it into `global_shader_prev`.
@@ -52,6 +56,8 @@ impl GlobalShaderElement {
         region_norm: [f32; 4],
         output_size_phys: (f32, f32),
         prev: Option<GlesTexture>,
+        screen_prev: Option<GlesTexture>,
+        screen_result: Rc<RefCell<Option<GlesTexture>>>,
         result: Rc<RefCell<Option<GlesTexture>>>,
     ) -> Self {
         Self {
@@ -64,6 +70,8 @@ impl GlobalShaderElement {
             region_norm,
             output_size_phys,
             prev,
+            screen_prev,
+            screen_result,
             result,
         }
     }
@@ -115,6 +123,9 @@ impl RenderElement<GlesRenderer> for GlobalShaderElement {
 
         capture::capture_framebuffer_region(frame, dst, &screen_tex)?;
 
+        // Stash this frame's screen capture for next frame's niri_screen_prev.
+        *self.screen_result.borrow_mut() = Some(screen_tex.clone());
+
         let program = Shaders::get_from_frame(frame).program(ProgramType::Global);
         let Some(_program) = program else {
             // No global program: draw the captured screen unchanged.
@@ -133,6 +144,8 @@ impl RenderElement<GlesRenderer> for GlobalShaderElement {
 
         // Passthrough for this task: bind the freshly captured screen as prev too.
         let prev_tex = self.prev.clone().unwrap_or_else(|| screen_tex.clone());
+        // Previous frame's screen; falls back to this frame's screen on the first frame.
+        let screen_prev_tex = self.screen_prev.clone().unwrap_or_else(|| screen_tex.clone());
 
         let uniforms: Rc<[Uniform<'static>]> = Rc::new([
             Uniform::new("niri_time", self.time),
@@ -155,6 +168,7 @@ impl RenderElement<GlesRenderer> for GlobalShaderElement {
         let mut textures = HashMap::new();
         textures.insert("niri_screen".to_string(), screen_tex);
         textures.insert("niri_prev".to_string(), prev_tex);
+        textures.insert("niri_screen_prev".to_string(), screen_prev_tex);
 
         // Delegate the actual program pass (named samplers + custom uniforms) to
         // ShaderRenderElement, which already implements the GL uniform/texture binding.

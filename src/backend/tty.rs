@@ -1947,6 +1947,13 @@ impl Tty {
                     if result.is_some() {
                         output_state.global_shader_prev = result;
                     }
+                    let screen_result = output_state
+                        .global_shader_screen_result
+                        .borrow_mut()
+                        .take();
+                    if screen_result.is_some() {
+                        output_state.global_shader_screen_prev = screen_result;
+                    }
                 }
 
                 let needs_sync = res.needs_sync()

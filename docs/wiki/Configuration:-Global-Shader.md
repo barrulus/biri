@@ -85,7 +85,8 @@ Biri wraps it with a `main()` that passes `coord.xy` (normalised 0..1 UV coordin
 | `niri_scale` | `float` | Output scale factor. |
 | `niri_cursor` | `vec2` | Cursor position in output-local physical pixels. |
 | `niri_screen` | `sampler2D` | The composited frame below the effect. |
-| `niri_prev` | `sampler2D` | The previous frame's shader output (for feedback/trails). |
+| `niri_prev` | `sampler2D` | The previous frame's shader output (effect + screen), via `tex2D_prev(uv)`. |
+| `niri_screen_prev` | `sampler2D` | The **previous** frame's screen (no effect), via `tex2D_screen_prev(uv)`. Use `prev − tex2D_screen_prev` to recover a feedback trail without scroll-smear. |
 | `niri_region` | `vec4` | The region this element covers in output-normalised coords `(origin.xy, size.xy)`. `(0,0,1,1)` for a whole-output shader; a sub-box in [region mode](#cursor-radius-region-mode). |
 | `niri_output_size` | `vec2` | True full-output size in physical pixels. Equals `niri_size` for a whole-output shader, but **differs in region mode** (where `niri_size` is the box). |
 
