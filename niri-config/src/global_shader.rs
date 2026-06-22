@@ -1,5 +1,72 @@
 use crate::utils::{Flag, MergeWith};
 
+/// Which animation/feedback inputs a compiled global shader references, derived by scanning
+/// the resolved source. A substring match: it may over-report (token in a comment) — which
+/// only costs extra redraws — but cannot under-report, because in GLSL a uniform must appear
+/// by its literal name to be used.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct GlobalShaderCaps {
+    pub uses_time: bool,
+    pub uses_cursor: bool,
+    pub uses_prev: bool,
+}
+
+impl GlobalShaderCaps {
+    pub fn scan(src: &str, hyprland: bool) -> Self {
+        if hyprland {
+            // Hyprland dialect aliases niri_time as `time`; it has no cursor or prev uniforms.
+            GlobalShaderCaps {
+                uses_time: src.contains("time"),
+                uses_cursor: false,
+                uses_prev: false,
+            }
+        } else {
+            // `niri_prev` is the raw sampler; `tex2D_prev` is the helper most shaders actually
+            // call. Either reference means the shader depends on the feedback buffer.
+            GlobalShaderCaps {
+                uses_time: src.contains("niri_time"),
+                uses_cursor: src.contains("niri_cursor"),
+                uses_prev: src.contains("niri_prev") || src.contains("tex2D_prev"),
+            }
+        }
+    }
+
+    /// Animating shaders depend on time or the feedback buffer, so they must redraw every frame
+    /// to progress even when the desktop is idle.
+    pub fn is_animating(&self) -> bool {
+        self.uses_time || self.uses_prev
+    }
+}
+
+/// Redraw scheduling for the global shader. `Auto` derives the decision from [`GlobalShaderCaps`];
+/// the others force it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum RedrawMode {
+    #[default]
+    Auto,
+    OnDamage,
+    Continuous,
+}
+
+impl RedrawMode {
+    pub fn parse(s: &str) -> Self {
+        match s {
+            "on-damage" => RedrawMode::OnDamage,
+            "continuous" => RedrawMode::Continuous,
+            _ => RedrawMode::Auto,
+        }
+    }
+
+    /// Whether to schedule a redraw every frame (animate while idle).
+    pub fn wants_continuous_redraw(self, caps: GlobalShaderCaps) -> bool {
+        match self {
+            RedrawMode::Continuous => true,
+            RedrawMode::OnDamage => false,
+            RedrawMode::Auto => caps.is_animating(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GlobalShader {
     pub enable: bool,
@@ -45,7 +112,66 @@ impl MergeWith<GlobalShaderPart> for GlobalShader {
 
 #[cfg(test)]
 mod tests {
+    use super::{GlobalShaderCaps, RedrawMode};
     use crate::Config;
+
+    #[test]
+    fn caps_scan_niri_dialect() {
+        let c = GlobalShaderCaps::scan(
+            "vec4 global_color(vec3 c){ return tex2D_prev(c.xy)*niri_time + niri_cursor.x; }",
+            false,
+        );
+        assert_eq!(
+            c,
+            GlobalShaderCaps {
+                uses_time: true,
+                uses_cursor: true,
+                uses_prev: true
+            }
+        );
+    }
+
+    #[test]
+    fn caps_scan_static_filter() {
+        let c =
+            GlobalShaderCaps::scan("vec4 global_color(vec3 c){ return tex2D_screen(c.xy); }", false);
+        assert_eq!(c, GlobalShaderCaps::default());
+        assert!(!c.is_animating());
+    }
+
+    #[test]
+    fn caps_scan_time_only_is_animating() {
+        let c =
+            GlobalShaderCaps::scan("vec4 global_color(vec3 c){ return vec4(niri_time); }", false);
+        assert!(c.uses_time && !c.uses_cursor && !c.uses_prev);
+        assert!(c.is_animating());
+    }
+
+    #[test]
+    fn caps_scan_hyprland_dialect() {
+        // Hyprland aliases time as `time`; no cursor/prev uniforms exist.
+        let with = GlobalShaderCaps::scan("void main(){ gl_FragColor = vec4(time); }", true);
+        assert!(with.uses_time && !with.uses_cursor && !with.uses_prev);
+        let without = GlobalShaderCaps::scan(
+            "void main(){ gl_FragColor = texture2D(tex, v_texcoord); }",
+            true,
+        );
+        assert!(!without.is_animating());
+    }
+
+    #[test]
+    fn redraw_mode_parse_and_decision() {
+        let animating = GlobalShaderCaps {
+            uses_time: true,
+            ..Default::default()
+        };
+        let static_ = GlobalShaderCaps::default();
+        assert!(RedrawMode::parse("auto").wants_continuous_redraw(animating));
+        assert!(!RedrawMode::parse("auto").wants_continuous_redraw(static_));
+        assert!(!RedrawMode::parse("on-damage").wants_continuous_redraw(animating));
+        assert!(RedrawMode::parse("continuous").wants_continuous_redraw(static_));
+        assert_eq!(RedrawMode::parse("bogus"), RedrawMode::Auto);
+    }
 
     #[test]
     fn global_shader_defaults_disabled() {

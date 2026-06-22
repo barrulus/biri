@@ -128,10 +128,12 @@ impl GlobalShaderCaps {
                 uses_prev: false,
             }
         } else {
+            // `niri_prev` is the raw sampler; `tex2D_prev` is the helper most shaders actually
+            // call. Either reference means the shader depends on the feedback buffer.
             GlobalShaderCaps {
                 uses_time: src.contains("niri_time"),
                 uses_cursor: src.contains("niri_cursor"),
-                uses_prev: src.contains("niri_prev"),
+                uses_prev: src.contains("niri_prev") || src.contains("tex2D_prev"),
             }
         }
     }
