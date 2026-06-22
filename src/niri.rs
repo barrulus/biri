@@ -4371,6 +4371,11 @@ impl Niri {
                 _ => (area, [0.0, 0.0, 1.0, 1.0]),
             };
 
+            // A fresh Id every frame makes smithay damage both the new box and the vacated old
+            // box (the removed element's last geometry), which is what gives region mode its
+            // correct box(cursor) ∪ box(prev_cursor) damage. If this is ever changed to a stable
+            // per-output Id for a damage optimization, region mode must damage the vacated box
+            // explicitly or moving-cursor effects will leave trails.
             Some(GlobalShaderElement::new(
                 Id::new(),
                 area,
