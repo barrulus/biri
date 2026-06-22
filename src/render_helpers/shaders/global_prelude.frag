@@ -5,7 +5,7 @@ uniform float niri_tint;
 #endif
 
 varying vec2 niri_v_coords;   // 0..1 across this element (remapped to output coords via niri_region)
-uniform vec2 niri_size;       // output size in physical px
+uniform vec2 niri_size;       // element size in physical px (box size in region mode; see niri_output_size)
 uniform float niri_scale;
 uniform float niri_alpha;
 
