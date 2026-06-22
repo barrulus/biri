@@ -86,13 +86,22 @@ Biri wraps it with a `main()` that passes `coord.xy` (normalised 0..1 UV coordin
 | `niri_cursor` | `vec2` | Cursor position in output-local physical pixels. |
 | `niri_screen` | `sampler2D` | The composited frame below the effect. |
 | `niri_prev` | `sampler2D` | The previous frame's shader output (for feedback/trails). |
+| `niri_region` | `vec4` | The region this element covers in output-normalised coords `(origin.xy, size.xy)`. `(0,0,1,1)` for a whole-output shader; a sub-box in [region mode](#cursor-radius-region-mode). |
+| `niri_output_size` | `vec2` | True full-output size in physical pixels. Equals `niri_size` for a whole-output shader, but **differs in region mode** (where `niri_size` is the box). |
 
 Convenience helpers (already defined in the prelude):
 
 ```glsl
-vec4 tex2D_screen(vec2 uv);  // texture2D(niri_screen, uv)
-vec4 tex2D_prev(vec2 uv);    // texture2D(niri_prev, uv)
+vec4 tex2D_screen(vec2 uv);  // samples the screen below at output-normalised uv
+vec4 tex2D_prev(vec2 uv);    // samples the previous frame at output-normalised uv
 ```
+
+`coord.xy` (passed to `global_color`) and the `uv` arguments to `tex2D_screen`/`tex2D_prev` are always **output-normalised** (0..1 across the whole output), regardless of region mode.
+
+**Region-mode contract (`cursor-radius` set):**
+- Use `niri_output_size` — not `niri_size` — for absolute-pixel math (e.g. `coord.xy * niri_output_size` to get physical px). `niri_cursor` is already in absolute output px.
+- You may only sample `tex2D_screen`/`tex2D_prev` **within** the region (near the cursor); samples outside the box clamp to a transparent border.
+- These uniforms exist in `niri` mode only.
 
 The GLSL dialect is **GLES2 (`#version 100`)**.
 Use `texture2D()`, not `texture()`.
