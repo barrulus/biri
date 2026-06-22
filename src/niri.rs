@@ -196,6 +196,10 @@ const FRAME_CALLBACK_THROTTLE: Option<Duration> = Some(Duration::from_millis(995
 pub struct Niri {
     pub config: Rc<RefCell<Config>>,
 
+    /// Cached capability scan of the active global shader, invalidated on config reload.
+    /// `None` = not yet computed this load.
+    pub global_shader_caps: Cell<Option<niri_config::GlobalShaderCaps>>,
+
     /// Output config from the config file.
     ///
     /// This does not include transient output config changes done via IPC. It is only used when
@@ -1594,6 +1598,8 @@ impl State {
             || config.global_shader.source != old_config.global_shader.source
             || config.global_shader.path != old_config.global_shader.path
             || config.global_shader.mode != old_config.global_shader.mode
+            || config.global_shader.redraw != old_config.global_shader.redraw
+            || config.global_shader.cursor_radius != old_config.global_shader.cursor_radius
         {
             let src = global_shader_source(&config.global_shader);
             let hyprland = config.global_shader.mode == "hyprland";
@@ -1606,6 +1612,8 @@ impl State {
                 state.global_shader_prev = None;
                 *state.global_shader_result.borrow_mut() = None;
             }
+            // Recompute capability flags on next use.
+            self.niri.global_shader_caps.set(None);
             shaders_changed = true;
         }
 
@@ -2262,6 +2270,25 @@ impl State {
 }
 
 impl Niri {
+    /// Capability flags for the active global shader, computed once per config load and cached.
+    /// On a cache miss this resolves the source (reading the `path` file if used), so callers
+    /// may hit one filesystem read after a reload; subsequent calls are free.
+    pub fn global_shader_caps(&self) -> niri_config::GlobalShaderCaps {
+        if let Some(caps) = self.global_shader_caps.get() {
+            return caps;
+        }
+        let caps = {
+            let cfg = self.config.borrow();
+            let hyprland = cfg.global_shader.mode == "hyprland";
+            match global_shader_source(&cfg.global_shader) {
+                Some(src) => niri_config::GlobalShaderCaps::scan(&src, hyprland),
+                None => niri_config::GlobalShaderCaps::default(),
+            }
+        };
+        self.global_shader_caps.set(Some(caps));
+        caps
+    }
+
     pub fn new(
         config: Rc<RefCell<Config>>,
         event_loop: LoopHandle<'static, State>,
@@ -2523,6 +2550,7 @@ impl Niri {
         drop(config_);
         let mut niri = Self {
             config,
+            global_shader_caps: Cell::new(None),
             config_file_output_config,
             config_file_watcher: None,
 
@@ -4710,6 +4738,16 @@ impl Niri {
 
         let mut res = RenderResult::Skipped;
         if self.monitors_active {
+            // Decide whether a time/feedback-driven global shader needs continuous redraws.
+            // Computed before the `&mut state` borrow below, since this reads `&self`.
+            let global_shader_animate = {
+                let cfg = self.config.borrow();
+                let enabled = cfg.global_shader.enable;
+                let mode = niri_config::RedrawMode::parse(&cfg.global_shader.redraw);
+                drop(cfg);
+                enabled && mode.wants_continuous_redraw(self.global_shader_caps())
+            };
+
             let state = self.output_state.get_mut(output).unwrap();
             state.unfinished_animations_remain = self.layout.are_animations_ongoing(Some(output));
             state.unfinished_animations_remain |=
@@ -4731,6 +4769,9 @@ impl Niri {
                     .filter_map(|surface| self.mapped_layer_surfaces.get(surface))
                     .any(|mapped| mapped.are_animations_ongoing());
             }
+
+            // Time/feedback-driven global shaders must keep redrawing to animate when idle.
+            state.unfinished_animations_remain |= global_shader_animate;
 
             // Render.
             res = backend.render(self, output, target_presentation_time);
