@@ -88,6 +88,7 @@ pub struct GlobalShader {
     pub cursor_radius: Option<u32>,
     /// Redraw scheduling: "auto" | "on-damage" | "continuous". Parsed via `RedrawMode::parse`.
     pub redraw: String,
+    pub passes: Vec<GlobalShaderPass>,
 }
 
 impl Default for GlobalShader {
@@ -100,8 +101,27 @@ impl Default for GlobalShader {
             reads_cursor: false,
             cursor_radius: None,
             redraw: String::from("auto"),
+            passes: Vec::new(),
         }
     }
+}
+
+/// One pass in a multi-pass chain. Resolved form of [`GlobalShaderPassPart`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GlobalShaderPass {
+    pub source: Option<String>,
+    pub path: Option<String>,
+    pub mode: String,
+}
+
+#[derive(knuffel::Decode, Debug, Default, Clone, PartialEq, Eq)]
+pub struct GlobalShaderPassPart {
+    #[knuffel(child, unwrap(argument))]
+    pub source: Option<String>,
+    #[knuffel(child, unwrap(argument))]
+    pub path: Option<String>,
+    #[knuffel(child, unwrap(argument))]
+    pub mode: Option<String>,
 }
 
 #[derive(knuffel::Decode, Debug, Default, Clone, PartialEq, Eq)]
@@ -120,6 +140,8 @@ pub struct GlobalShaderPart {
     pub cursor_radius: Option<u32>,
     #[knuffel(child, unwrap(argument))]
     pub redraw: Option<String>,
+    #[knuffel(children(name = "pass"))]
+    pub passes: Vec<GlobalShaderPassPart>,
 }
 
 impl MergeWith<GlobalShaderPart> for GlobalShader {
@@ -127,6 +149,18 @@ impl MergeWith<GlobalShaderPart> for GlobalShader {
         merge!((self, part), enable, reads_cursor);
         merge_clone_opt!((self, part), source, path, cursor_radius);
         merge_clone!((self, part), mode, redraw);
+        if !part.passes.is_empty() {
+            self.passes = part
+                .passes
+                .iter()
+                .map(|p| GlobalShaderPass {
+                    source: p.source.clone(),
+                    path: p.path.clone(),
+                    // Per-pass mode defaults to the chain-level mode.
+                    mode: p.mode.clone().unwrap_or_else(|| self.mode.clone()),
+                })
+                .collect();
+        }
     }
 }
 
@@ -291,5 +325,52 @@ mod tests {
         .unwrap();
         assert_eq!(config.global_shader.path.as_deref(), Some("/tmp/crt.frag"));
         assert_eq!(config.global_shader.mode, "hyprland");
+    }
+
+    #[test]
+    fn global_shader_pass_list_parses() {
+        let config = Config::parse_mem(
+            r##"
+            global-shader {
+                enable
+                pass {
+                    path "blur.frag"
+                }
+                pass {
+                    source "vec4 global_color(vec3 c){ return tex2D_screen(c.xy); }"
+                    mode "niri"
+                }
+                pass {
+                    path "crt.frag"
+                    mode "hyprland"
+                }
+            }
+            "##,
+        )
+        .unwrap();
+        assert!(config.global_shader.enable);
+        assert_eq!(config.global_shader.passes.len(), 3);
+        assert_eq!(config.global_shader.passes[0].path.as_deref(), Some("blur.frag"));
+        assert_eq!(
+            config.global_shader.passes[1].source.as_deref(),
+            Some("vec4 global_color(vec3 c){ return tex2D_screen(c.xy); }")
+        );
+        assert_eq!(config.global_shader.passes[1].mode, "niri");
+        assert_eq!(config.global_shader.passes[2].mode, "hyprland");
+    }
+
+    #[test]
+    fn global_shader_no_passes_back_compat() {
+        let config = Config::parse_mem(
+            r##"
+            global-shader {
+                enable
+                source "vec4 global_color(vec3 c){ return tex2D_screen(c.xy); }"
+            }
+            "##,
+        )
+        .unwrap();
+        assert!(config.global_shader.passes.is_empty());
+        assert!(config.global_shader.source.is_some());
     }
 }
