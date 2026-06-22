@@ -87,6 +87,7 @@ Biri wraps it with a `main()` that passes `coord.xy` (normalised 0..1 UV coordin
 | `niri_screen` | `sampler2D` | The composited frame below the effect. |
 | `niri_prev` | `sampler2D` | The previous frame's shader output (effect + screen), via `tex2D_prev(uv)`. |
 | `niri_screen_prev` | `sampler2D` | The **previous** frame's screen (no effect), via `tex2D_screen_prev(uv)`. Use `prev − tex2D_screen_prev` to recover a feedback trail without scroll-smear. |
+| `niri_buffer` | `sampler2D` | The dedicated feedback buffer (last frame), via `tex2D_buffer(uv)`. Equals `niri_prev` unless you define `global_buffer` (see below). |
 | `niri_region` | `vec4` | The region this element covers in output-normalised coords `(origin.xy, size.xy)`. `(0,0,1,1)` for a whole-output shader; a sub-box in [region mode](#cursor-radius-region-mode). |
 | `niri_output_size` | `vec2` | True full-output size in physical pixels. Equals `niri_size` for a whole-output shader, but **differs in region mode** (where `niri_size` is the box). |
 
@@ -96,6 +97,7 @@ Convenience helpers (already defined in the prelude):
 vec4 tex2D_screen(vec2 uv);      // samples the screen below at output-normalised uv
 vec4 tex2D_prev(vec2 uv);        // samples the previous frame's output at output-normalised uv
 vec4 tex2D_screen_prev(vec2 uv); // samples the previous frame's screen (no effect)
+vec4 tex2D_buffer(vec2 uv);      // samples the dedicated feedback buffer (last frame)
 ```
 
 `coord.xy` (passed to `global_color`) and the `uv` arguments to `tex2D_screen`/`tex2D_prev` are always **output-normalised** (0..1 across the whole output), regardless of region mode.
@@ -152,6 +154,45 @@ global-shader {
     }"
 }
 ```
+
+---
+
+### Dedicated feedback buffer (`global_buffer`)
+
+`niri_prev` is the previous *output* — your effect **and** the screen mixed together — so a trail
+recovered from it picks up scrolling/video motion and smears. To avoid that, define an optional
+second function that writes a **screen-independent** feedback buffer:
+
+```glsl
+vec4 global_buffer(vec3 coord);  // returns what to store in niri_buffer this frame
+```
+
+When present, biri renders `global_buffer` into a clean offscreen texture each frame (reading
+last frame's buffer via `tex2D_buffer`), then your `global_color` reads **this frame's** buffer
+via `tex2D_buffer` to composite it over the screen. Because the buffer never contains the screen,
+trails don't smear when content scrolls underneath.
+
+```kdl
+global-shader {
+    enable
+    source "
+    vec4 global_buffer(vec3 c){
+        vec3 prev = tex2D_buffer(c.xy).rgb;            // pure trail, no screen
+        float d = length(c.xy*niri_output_size - niri_cursor);
+        float fresh = smoothstep(18.0, 0.0, d);
+        return vec4(max(prev*0.90, vec3(0.2,0.8,1.0)*fresh), 1.0);
+    }
+    vec4 global_color(vec3 c){
+        vec3 s = tex2D_screen(c.xy).rgb;
+        vec4 b = tex2D_buffer(c.xy);                   // this frame's trail
+        return vec4(mix(s, b.rgb, length(b.rgb)*0.6), 1.0);
+    }"
+}
+```
+
+Notes: a `global_buffer` shader is always treated as animated (redraws every frame, whole-output —
+no region mode). If you omit `global_buffer`, `niri_buffer` simply aliases `niri_prev`. niri mode
+only.
 
 ---
 

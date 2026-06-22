@@ -1954,6 +1954,13 @@ impl Tty {
                     if screen_result.is_some() {
                         output_state.global_shader_screen_prev = screen_result;
                     }
+                    let buffer_result = output_state
+                        .global_shader_buffer_result
+                        .borrow_mut()
+                        .take();
+                    if buffer_result.is_some() {
+                        output_state.global_shader_buffer_prev = buffer_result;
+                    }
                 }
 
                 let needs_sync = res.needs_sync()

@@ -40,6 +40,12 @@ pub struct GlobalShaderElement {
     screen_prev: Option<GlesTexture>,
     /// Sink for this frame's screen capture (clone of `screen_tex`), ping-ponged like `result`.
     screen_result: Rc<RefCell<Option<GlesTexture>>>,
+    /// Offscreen target for the buffer pass (shared with OutputState; interior-mutable).
+    buffer: Rc<crate::render_helpers::offscreen::OffscreenBuffer>,
+    /// Last frame's feedback buffer, bound as `niri_buffer`.
+    buffer_prev: Option<GlesTexture>,
+    /// Sink for this frame's buffer texture, ping-ponged.
+    buffer_result: Rc<RefCell<Option<GlesTexture>>>,
     /// Shared sink for the captured result of this element's draw pass, used for prev-frame
     /// ping-pong. After the frame is submitted, the owner takes the texture out of this handle and
     /// moves it into `global_shader_prev`.
@@ -58,6 +64,9 @@ impl GlobalShaderElement {
         prev: Option<GlesTexture>,
         screen_prev: Option<GlesTexture>,
         screen_result: Rc<RefCell<Option<GlesTexture>>>,
+        buffer: Rc<crate::render_helpers::offscreen::OffscreenBuffer>,
+        buffer_prev: Option<GlesTexture>,
+        buffer_result: Rc<RefCell<Option<GlesTexture>>>,
         result: Rc<RefCell<Option<GlesTexture>>>,
     ) -> Self {
         Self {
@@ -72,6 +81,9 @@ impl GlobalShaderElement {
             prev,
             screen_prev,
             screen_result,
+            buffer,
+            buffer_prev,
+            buffer_result,
             result,
         }
     }
@@ -165,13 +177,66 @@ impl RenderElement<GlesRenderer> for GlobalShaderElement {
             ),
         ]);
 
+        // --- Dedicated feedback buffer pass ---
+        // If the source defines global_buffer, render it into a clean offscreen texture (reading
+        // last frame's buffer) and feed THAT as niri_buffer. Otherwise niri_buffer == niri_prev.
+        // OffscreenBuffer recreates its texture when we hold a clone of the previous one, which
+        // gives ping-pong for free (read buffer_prev, write a fresh texture).
+        let buffer_tex = if Shaders::get_from_frame(frame)
+            .program(ProgramType::GlobalBuffer)
+            .is_some()
+        {
+            let buf_prev = self
+                .buffer_prev
+                .clone()
+                .unwrap_or_else(|| screen_prev_tex.clone());
+
+            let mut buf_textures = HashMap::new();
+            buf_textures.insert("niri_screen".to_string(), screen_tex.clone());
+            buf_textures.insert("niri_prev".to_string(), prev_tex.clone());
+            buf_textures.insert("niri_screen_prev".to_string(), screen_prev_tex.clone());
+            buf_textures.insert("niri_buffer".to_string(), buf_prev);
+
+            let buf_element = ShaderRenderElement::new(
+                ProgramType::GlobalBuffer,
+                self.area.size,
+                None,
+                self.scale,
+                1.,
+                uniforms.clone(),
+                buf_textures,
+                Kind::Unspecified,
+            );
+
+            let mut guard = frame.renderer();
+            let renderer = guard.as_mut();
+            match self
+                .buffer
+                .render(renderer, Scale::from(self.scale as f64), &[buf_element])
+            {
+                Ok((off_elem, _sync, _data)) => {
+                    let next = off_elem.texture().clone();
+                    drop(guard);
+                    // Hold a clone so OffscreenBuffer allocates a fresh texture next frame, and so
+                    // the owner can move it into global_shader_buffer_prev after submit.
+                    *self.buffer_result.borrow_mut() = Some(next.clone());
+                    next
+                }
+                Err(err) => {
+                    drop(guard);
+                    warn!("global_buffer pass failed: {err:?}");
+                    prev_tex.clone()
+                }
+            }
+        } else {
+            prev_tex.clone()
+        };
+
         let mut textures = HashMap::new();
         textures.insert("niri_screen".to_string(), screen_tex);
         textures.insert("niri_prev".to_string(), prev_tex.clone());
         textures.insert("niri_screen_prev".to_string(), screen_prev_tex);
-        // niri_buffer defaults to the previous output (== niri_prev) until the buffer pass
-        // (Task 4) overrides it. prev_tex already resolves self.prev-or-screen.
-        textures.insert("niri_buffer".to_string(), prev_tex.clone());
+        textures.insert("niri_buffer".to_string(), buffer_tex);
 
         // Delegate the actual program pass (named samplers + custom uniforms) to
         // ShaderRenderElement, which already implements the GL uniform/texture binding.
