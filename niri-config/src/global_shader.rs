@@ -9,6 +9,7 @@ pub struct GlobalShaderCaps {
     pub uses_time: bool,
     pub uses_cursor: bool,
     pub uses_prev: bool,
+    pub uses_buffer: bool,
 }
 
 impl GlobalShaderCaps {
@@ -19,6 +20,7 @@ impl GlobalShaderCaps {
                 uses_time: src.contains("time"),
                 uses_cursor: false,
                 uses_prev: false,
+                uses_buffer: false,
             }
         } else {
             // `niri_prev` is the raw sampler; `tex2D_prev` is the helper most shaders actually
@@ -26,7 +28,15 @@ impl GlobalShaderCaps {
             GlobalShaderCaps {
                 uses_time: src.contains("niri_time"),
                 uses_cursor: src.contains("niri_cursor"),
-                uses_prev: src.contains("niri_prev") || src.contains("tex2D_prev"),
+                // Feedback: previous output, previous screen, or the dedicated buffer all evolve
+                // frame-to-frame, so any of them counts as feedback.
+                uses_prev: src.contains("niri_prev")
+                    || src.contains("tex2D_prev")
+                    || src.contains("niri_screen_prev")
+                    || src.contains("tex2D_screen_prev"),
+                uses_buffer: src.contains("global_buffer")
+                    || src.contains("niri_buffer")
+                    || src.contains("tex2D_buffer"),
             }
         }
     }
@@ -34,7 +44,7 @@ impl GlobalShaderCaps {
     /// Animating shaders depend on time or the feedback buffer, so they must redraw every frame
     /// to progress even when the desktop is idle.
     pub fn is_animating(&self) -> bool {
-        self.uses_time || self.uses_prev
+        self.uses_time || self.uses_prev || self.uses_buffer
     }
 }
 
@@ -136,7 +146,8 @@ mod tests {
             GlobalShaderCaps {
                 uses_time: true,
                 uses_cursor: true,
-                uses_prev: true
+                uses_prev: true,
+                uses_buffer: false
             }
         );
     }
@@ -167,6 +178,34 @@ mod tests {
             true,
         );
         assert!(!without.is_animating());
+    }
+
+    #[test]
+    fn caps_scan_buffer_function() {
+        let c = GlobalShaderCaps::scan(
+            "vec4 global_buffer(vec3 c){ return tex2D_buffer(c.xy); } vec4 global_color(vec3 c){ return tex2D_screen(c.xy); }",
+            false,
+        );
+        assert!(c.uses_buffer);
+        assert!(c.is_animating());
+    }
+
+    #[test]
+    fn caps_scan_screen_prev_is_feedback() {
+        let c = GlobalShaderCaps::scan(
+            "vec4 global_color(vec3 c){ return tex2D_screen(c.xy) - tex2D_screen_prev(c.xy); }",
+            false,
+        );
+        assert!(c.uses_prev); // screen_prev folds into the feedback/animating set
+        assert!(c.is_animating());
+    }
+
+    #[test]
+    fn caps_scan_plain_filter_not_buffer() {
+        let c =
+            GlobalShaderCaps::scan("vec4 global_color(vec3 c){ return tex2D_screen(c.xy); }", false);
+        assert!(!c.uses_buffer);
+        assert!(!c.is_animating());
     }
 
     #[test]
