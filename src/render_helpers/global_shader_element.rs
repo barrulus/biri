@@ -167,16 +167,11 @@ impl RenderElement<GlesRenderer> for GlobalShaderElement {
 
         let mut textures = HashMap::new();
         textures.insert("niri_screen".to_string(), screen_tex);
-        textures.insert("niri_prev".to_string(), prev_tex);
+        textures.insert("niri_prev".to_string(), prev_tex.clone());
         textures.insert("niri_screen_prev".to_string(), screen_prev_tex);
-        // niri_buffer defaults to the previous output until the buffer pass (Task 4) overrides it.
-        let buffer_tex = self.prev.clone().unwrap_or_else(|| {
-            textures
-                .get("niri_screen")
-                .cloned()
-                .expect("niri_screen inserted above")
-        });
-        textures.insert("niri_buffer".to_string(), buffer_tex);
+        // niri_buffer defaults to the previous output (== niri_prev) until the buffer pass
+        // (Task 4) overrides it. prev_tex already resolves self.prev-or-screen.
+        textures.insert("niri_buffer".to_string(), prev_tex.clone());
 
         // Delegate the actual program pass (named samplers + custom uniforms) to
         // ShaderRenderElement, which already implements the GL uniform/texture binding.
