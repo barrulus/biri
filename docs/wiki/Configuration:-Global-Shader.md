@@ -93,8 +93,9 @@ Biri wraps it with a `main()` that passes `coord.xy` (normalised 0..1 UV coordin
 Convenience helpers (already defined in the prelude):
 
 ```glsl
-vec4 tex2D_screen(vec2 uv);  // samples the screen below at output-normalised uv
-vec4 tex2D_prev(vec2 uv);    // samples the previous frame at output-normalised uv
+vec4 tex2D_screen(vec2 uv);      // samples the screen below at output-normalised uv
+vec4 tex2D_prev(vec2 uv);        // samples the previous frame's output at output-normalised uv
+vec4 tex2D_screen_prev(vec2 uv); // samples the previous frame's screen (no effect)
 ```
 
 `coord.xy` (passed to `global_color`) and the `uv` arguments to `tex2D_screen`/`tex2D_prev` are always **output-normalised** (0..1 across the whole output), regardless of region mode.
