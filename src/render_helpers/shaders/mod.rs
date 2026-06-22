@@ -22,6 +22,7 @@ pub struct Shaders {
     pub custom_close: RefCell<Option<ShaderProgram>>,
     pub custom_open: RefCell<Option<ShaderProgram>>,
     pub custom_global: RefCell<Option<ShaderProgram>>,
+    pub custom_global_buffer: RefCell<Option<ShaderProgram>>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -32,6 +33,7 @@ pub enum ProgramType {
     Close,
     Open,
     Global,
+    GlobalBuffer,
 }
 
 impl Shaders {
@@ -162,6 +164,7 @@ impl Shaders {
             custom_close: RefCell::new(None),
             custom_open: RefCell::new(None),
             custom_global: RefCell::new(None),
+            custom_global_buffer: RefCell::new(None),
         }
     }
 
@@ -206,6 +209,13 @@ impl Shaders {
         self.custom_global.replace(program)
     }
 
+    pub fn replace_custom_global_buffer_program(
+        &self,
+        program: Option<ShaderProgram>,
+    ) -> Option<ShaderProgram> {
+        self.custom_global_buffer.replace(program)
+    }
+
     pub fn program(&self, program: ProgramType) -> Option<ShaderProgram> {
         match program {
             ProgramType::Border => self.border.clone(),
@@ -218,6 +228,7 @@ impl Shaders {
             ProgramType::Close => self.custom_close.borrow().clone(),
             ProgramType::Open => self.custom_open.borrow().clone(),
             ProgramType::Global => self.custom_global.borrow().clone(),
+            ProgramType::GlobalBuffer => self.custom_global_buffer.borrow().clone(),
         }
     }
 }
@@ -388,7 +399,28 @@ fn compile_global_program(
             UniformName::new("niri_region", UniformType::_4f),
             UniformName::new("niri_output_size", UniformType::_2f),
         ],
-        &["niri_screen", "niri_prev", "niri_screen_prev"],
+        &["niri_screen", "niri_prev", "niri_screen_prev", "niri_buffer"],
+    )
+}
+
+fn compile_global_buffer_program(
+    renderer: &mut GlesRenderer,
+    src: &str,
+) -> Result<ShaderProgram, GlesError> {
+    let mut program = include_str!("global_prelude.frag").to_string();
+    program.push_str(src);
+    program.push_str(include_str!("global_buffer_epilogue.frag"));
+
+    ShaderProgram::compile(
+        renderer,
+        &program,
+        &[
+            UniformName::new("niri_time", UniformType::_1f),
+            UniformName::new("niri_cursor", UniformType::_2f),
+            UniformName::new("niri_region", UniformType::_4f),
+            UniformName::new("niri_output_size", UniformType::_2f),
+        ],
+        &["niri_screen", "niri_prev", "niri_screen_prev", "niri_buffer"],
     )
 }
 
@@ -408,6 +440,27 @@ pub fn set_custom_global_program(renderer: &mut GlesRenderer, src: Option<&str>,
     if let Some(prev) = Shaders::get(renderer).replace_custom_global_program(program) {
         if let Err(err) = prev.destroy(renderer) {
             warn!("error destroying previous custom global shader: {err:?}");
+        }
+    }
+
+    // Dedicated feedback buffer: compile a second program only when the source defines
+    // `global_buffer` (niri mode only; hyprland has no such function). When absent, install None
+    // so switching away from a buffer shader clears the old buffer program.
+    let buffer_program = match (src, hyprland) {
+        (Some(src), false) if src.contains("global_buffer") => {
+            match compile_global_buffer_program(renderer, src) {
+                Ok(p) => Some(p),
+                Err(err) => {
+                    warn!("error compiling global_buffer shader: {err:?}");
+                    None
+                }
+            }
+        }
+        _ => None,
+    };
+    if let Some(prev) = Shaders::get(renderer).replace_custom_global_buffer_program(buffer_program) {
+        if let Err(err) = prev.destroy(renderer) {
+            warn!("error destroying previous global_buffer shader: {err:?}");
         }
     }
 }

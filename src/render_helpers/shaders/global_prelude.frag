@@ -27,4 +27,8 @@ vec4 tex2D_screen(vec2 uv) { return texture2D(niri_screen, (uv - niri_region.xy)
 vec4 tex2D_prev(vec2 uv) { return texture2D(niri_prev, (uv - niri_region.xy) / niri_region.zw); }
 vec4 tex2D_screen_prev(vec2 uv) { return texture2D(niri_screen_prev, (uv - niri_region.xy) / niri_region.zw); }
 
+uniform sampler2D niri_buffer; // dedicated feedback buffer (last frame); == niri_prev if no global_buffer
+vec4 tex2D_buffer(vec2 uv) { return texture2D(niri_buffer, (uv - niri_region.xy) / niri_region.zw); }
+
 // User defines: vec4 global_color(vec3 coord);
+// User MAY define: vec4 global_buffer(vec3 coord);  // returns what to store in niri_buffer
