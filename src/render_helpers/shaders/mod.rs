@@ -532,7 +532,10 @@ pub fn set_scoped_programs(renderer: &mut GlesRenderer, chains: &[Vec<(String, b
             .copied()
             .filter(|k| !wanted.contains(k))
             .collect();
-        stale.into_iter().filter_map(|k| scoped.remove(&k)).collect()
+        stale
+            .into_iter()
+            .filter_map(|k| scoped.remove(&k))
+            .collect()
     };
     for chain in stale_chains {
         for p in chain {
@@ -564,7 +567,10 @@ pub fn set_scoped_programs(renderer: &mut GlesRenderer, chains: &[Vec<(String, b
             }
         }
         if ok {
-            Shaders::get(renderer).scoped.borrow_mut().insert(key, compiled);
+            Shaders::get(renderer)
+                .scoped
+                .borrow_mut()
+                .insert(key, compiled);
         } else {
             for p in compiled {
                 let _ = p.destroy(renderer);

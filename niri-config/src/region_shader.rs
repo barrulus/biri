@@ -33,7 +33,8 @@ impl<S: knuffel::traits::ErrorSpan> knuffel::DecodeScalar<S> for CoordF64 {
                     Ok(CoordF64::default())
                 }
             },
-            knuffel::ast::Literal::Decimal(ref value) => match <f64 as TryFrom<_>>::try_from(value) {
+            knuffel::ast::Literal::Decimal(ref value) => match <f64 as TryFrom<_>>::try_from(value)
+            {
                 Ok(v) => Ok(CoordF64(v)),
                 Err(e) => {
                     ctx.emit_error(DecodeError::conversion(val, e));
@@ -114,13 +115,12 @@ impl RegionShader {
     /// => the top-level `source`/`path` becomes a length-1 chain. Any pass that cannot be resolved
     /// => empty (the whole region is disabled). `expand` maps a `path` to its file contents.
     pub fn pass_sources(&self, expand: impl Fn(&str) -> Option<String>) -> Vec<(String, bool)> {
-        let resolve_one = |source: &Option<String>, path: &Option<String>, mode: &str| {
-            match (source, path) {
+        let resolve_one =
+            |source: &Option<String>, path: &Option<String>, mode: &str| match (source, path) {
                 (Some(s), None) if !s.trim().is_empty() => Some((s.clone(), mode == "hyprland")),
                 (None, Some(p)) => expand(p).map(|s| (s, mode == "hyprland")),
                 _ => None,
-            }
-        };
+            };
         if self.passes.is_empty() {
             return match resolve_one(&self.source, &self.path, &self.mode) {
                 Some(pair) => vec![pair],
