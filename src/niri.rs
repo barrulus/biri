@@ -4526,14 +4526,7 @@ impl Niri {
                     .iter()
                     .filter(|r| r.output.as_deref().map_or(true, |want| out_name == want))
                     .map(|r| {
-                        let chain = r.pass_sources(|p| {
-                            let path = match expand_home(std::path::Path::new(p)) {
-                                Ok(Some(e)) => e,
-                                Ok(None) => std::path::PathBuf::from(p),
-                                Err(_) => return None,
-                            };
-                            std::fs::read_to_string(&path).ok()
-                        });
+                        let chain = r.pass_sources(read_scoped_shader_path);
                         (r.geometry.clone(), chain)
                     })
                     .collect()
@@ -4988,14 +4981,7 @@ impl Niri {
                     if r.output.as_deref().map_or(false, |want| out_name != want) {
                         return false;
                     }
-                    let chain = r.pass_sources(|p| {
-                        let path = match expand_home(std::path::Path::new(p)) {
-                            Ok(Some(e)) => e,
-                            Ok(None) => std::path::PathBuf::from(p),
-                            Err(_) => return None,
-                        };
-                        std::fs::read_to_string(&path).ok()
-                    });
+                    let chain = r.pass_sources(read_scoped_shader_path);
                     niri_config::GlobalShaderCaps::scan_chain(&chain).is_animating()
                 })
             };
@@ -6938,20 +6924,24 @@ pub(crate) fn global_shader_source(cfg: &niri_config::GlobalShader) -> Option<St
 
 /// Resolve every configured region shader into its `(source, hyprland)` pass list, reading any
 /// `path` files. Index-aligned with `config.region_shaders`.
+/// Read a scoped/region shader `path` to its file contents (expanding `~`). Returns `None` if the
+/// path cannot be expanded or read. This is the single source of truth for resolving a scoped
+/// shader path: the `scoped_key` computed at compile time (`region_shader_chains`) must match the
+/// one looked up at render time, so all `pass_sources` call sites resolve paths through this fn.
+pub(crate) fn read_scoped_shader_path(p: &str) -> Option<String> {
+    let path = match expand_home(std::path::Path::new(p)) {
+        Ok(Some(e)) => e,
+        Ok(None) => std::path::PathBuf::from(p),
+        Err(_) => return None,
+    };
+    std::fs::read_to_string(&path).ok()
+}
+
 pub(crate) fn region_shader_chains(config: &niri_config::Config) -> Vec<Vec<(String, bool)>> {
     config
         .region_shaders
         .iter()
-        .map(|r| {
-            r.pass_sources(|p| {
-                let path = match expand_home(std::path::Path::new(p)) {
-                    Ok(Some(e)) => e,
-                    Ok(None) => std::path::PathBuf::from(p),
-                    Err(_) => return None,
-                };
-                std::fs::read_to_string(&path).ok()
-            })
-        })
+        .map(|r| r.pass_sources(read_scoped_shader_path))
         .collect()
 }
 
