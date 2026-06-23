@@ -399,7 +399,7 @@ fn compile_global_program(
             UniformName::new("niri_region", UniformType::_4f),
             UniformName::new("niri_output_size", UniformType::_2f),
         ],
-        &["niri_screen", "niri_prev", "niri_screen_prev", "niri_buffer"],
+        &["niri_screen", "niri_prev", "niri_screen_prev", "niri_buffer", "niri_source"],
     )
 }
 
@@ -420,7 +420,7 @@ fn compile_global_buffer_program(
             UniformName::new("niri_region", UniformType::_4f),
             UniformName::new("niri_output_size", UniformType::_2f),
         ],
-        &["niri_screen", "niri_prev", "niri_screen_prev", "niri_buffer"],
+        &["niri_screen", "niri_prev", "niri_screen_prev", "niri_buffer", "niri_source"],
     )
 }
 

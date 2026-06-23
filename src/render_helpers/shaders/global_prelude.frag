@@ -20,12 +20,14 @@ uniform vec2 niri_output_size; // true full-output size in physical px
 uniform sampler2D niri_screen; // composited frame below this element (covers niri_region)
 uniform sampler2D niri_prev;   // previous frame's output
 uniform sampler2D niri_screen_prev; // previous frame's niri_screen capture (screen only, no effect)
+uniform sampler2D niri_source; // original composited screen, unfiltered (== niri_screen for pass 0)
 
 // uv is output-normalised (0..1 across the whole output); convert to this element's local
 // texture coords. Samples outside the captured region clamp to the (transparent) border.
 vec4 tex2D_screen(vec2 uv) { return texture2D(niri_screen, (uv - niri_region.xy) / niri_region.zw); }
 vec4 tex2D_prev(vec2 uv) { return texture2D(niri_prev, (uv - niri_region.xy) / niri_region.zw); }
 vec4 tex2D_screen_prev(vec2 uv) { return texture2D(niri_screen_prev, (uv - niri_region.xy) / niri_region.zw); }
+vec4 tex2D_source(vec2 uv) { return texture2D(niri_source, (uv - niri_region.xy) / niri_region.zw); }
 
 uniform sampler2D niri_buffer; // dedicated feedback buffer (last frame); == niri_prev if no global_buffer
 vec4 tex2D_buffer(vec2 uv) { return texture2D(niri_buffer, (uv - niri_region.xy) / niri_region.zw); }
