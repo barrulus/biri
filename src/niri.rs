@@ -4509,10 +4509,14 @@ impl Niri {
                 (pointer_local.x * scale as f64) as f32,
                 (pointer_local.y * scale as f64) as f32,
             );
-            let time = state
-                .global_shader_start
-                .get()
-                .map_or(0.0, |s| s.elapsed().as_secs_f32());
+            let time = {
+                let start = state.global_shader_start.get().unwrap_or_else(|| {
+                    let now = std::time::Instant::now();
+                    state.global_shader_start.set(Some(now));
+                    now
+                });
+                start.elapsed().as_secs_f32()
+            };
 
             // Clone region data out before any mutable borrows.
             let regions: Vec<_> = {
