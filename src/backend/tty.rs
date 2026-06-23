@@ -847,6 +847,10 @@ impl Tty {
                 let passes = global_shader_pass_sources(&config.global_shader);
                 shaders::set_custom_global_passes(gles_renderer, &passes);
             }
+            {
+                let chains = crate::niri::region_shader_chains(&config);
+                shaders::set_scoped_programs(gles_renderer, &chains);
+            }
             drop(config);
 
             niri.update_shaders();
