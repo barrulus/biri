@@ -16,12 +16,31 @@ use crate::render_helpers::renderer::AsGlesFrame as _;
 use crate::render_helpers::shader_element::ShaderRenderElement;
 use crate::render_helpers::shaders::{ProgramType, Shaders};
 
-/// A render element that captures the composited framebuffer below it and re-draws it through the
-/// global post-process program.
+/// Per-pass feedback + offscreen handles cloned from `OutputState` for one frame.
+#[derive(Debug, Clone)]
+pub struct GlobalPassState {
+    /// This pass's output last frame (its `niri_prev`).
+    pub prev: Option<GlesTexture>,
+    /// Sink for this pass's output this frame.
+    pub result: Rc<RefCell<Option<GlesTexture>>>,
+    /// Display offscreen (intermediate passes render here; unused for the last pass).
+    pub pass_offscreen: Rc<crate::render_helpers::offscreen::OffscreenBuffer>,
+    /// Dedicated `global_buffer` offscreen.
+    pub buffer: Rc<crate::render_helpers::offscreen::OffscreenBuffer>,
+    /// This pass's dedicated buffer last frame (its `niri_buffer` when it has a buffer program).
+    pub buffer_prev: Option<GlesTexture>,
+    /// Sink for this pass's dedicated buffer this frame.
+    pub buffer_result: Rc<RefCell<Option<GlesTexture>>>,
+}
+
+/// A render element that captures the composited framebuffer below it and re-draws it through a
+/// chain of global post-process programs (one or more passes).
 ///
-/// After `draw()` completes, the rendered result is written into the shared `result` handle so the
-/// caller (`OutputState`) can pick it up after the frame is submitted, for prev-frame ping-pong.
-/// The handle is an `Rc<RefCell<..>>` shared with `OutputState.global_shader_result`.
+/// Each pass reads the prior pass's output as `niri_screen` (pass 0 reads the real composited
+/// screen) and the original unfiltered screen as `niri_source`. Intermediate passes render into an
+/// offscreen texture that feeds the next pass; the last pass composites into the output. After
+/// `draw()`, each pass's rendered texture is written into its shared `result` handle so the caller
+/// (`OutputState`) can ping-pong it into that pass's `niri_prev` for the next frame.
 #[derive(Debug, Clone)]
 pub struct GlobalShaderElement {
     id: Id,
@@ -35,24 +54,16 @@ pub struct GlobalShaderElement {
     region_norm: [f32; 4],
     /// True full-output size in physical px (for the `niri_output_size` uniform).
     output_size_phys: (f32, f32),
-    prev: Option<GlesTexture>,
-    /// Previous frame's screen capture, bound as `niri_screen_prev`.
+    /// Previous frame's screen capture, bound as `niri_screen_prev` (frame-level, all passes).
     screen_prev: Option<GlesTexture>,
-    /// Sink for this frame's screen capture (clone of `screen_tex`), ping-ponged like `result`.
+    /// Sink for this frame's screen capture, ping-ponged like a pass result.
     screen_result: Rc<RefCell<Option<GlesTexture>>>,
-    /// Offscreen target for the buffer pass (shared with OutputState; interior-mutable).
-    buffer: Rc<crate::render_helpers::offscreen::OffscreenBuffer>,
-    /// Last frame's feedback buffer, bound as `niri_buffer`.
-    buffer_prev: Option<GlesTexture>,
-    /// Sink for this frame's buffer texture, ping-ponged.
-    buffer_result: Rc<RefCell<Option<GlesTexture>>>,
-    /// Shared sink for the captured result of this element's draw pass, used for prev-frame
-    /// ping-pong. After the frame is submitted, the owner takes the texture out of this handle and
-    /// moves it into `global_shader_prev`.
-    result: Rc<RefCell<Option<GlesTexture>>>,
+    /// One entry per pass, in execution order.
+    passes: Vec<GlobalPassState>,
 }
 
 impl GlobalShaderElement {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         id: Id,
         area: Rectangle<f64, Logical>,
@@ -61,13 +72,9 @@ impl GlobalShaderElement {
         cursor: (f32, f32),
         region_norm: [f32; 4],
         output_size_phys: (f32, f32),
-        prev: Option<GlesTexture>,
         screen_prev: Option<GlesTexture>,
         screen_result: Rc<RefCell<Option<GlesTexture>>>,
-        buffer: Rc<crate::render_helpers::offscreen::OffscreenBuffer>,
-        buffer_prev: Option<GlesTexture>,
-        buffer_result: Rc<RefCell<Option<GlesTexture>>>,
-        result: Rc<RefCell<Option<GlesTexture>>>,
+        passes: Vec<GlobalPassState>,
     ) -> Self {
         Self {
             id,
@@ -78,13 +85,9 @@ impl GlobalShaderElement {
             cursor,
             region_norm,
             output_size_phys,
-            prev,
             screen_prev,
             screen_result,
-            buffer,
-            buffer_prev,
-            buffer_result,
-            result,
+            passes,
         }
     }
 }
@@ -123,27 +126,32 @@ impl RenderElement<GlesRenderer> for GlobalShaderElement {
     ) -> Result<(), GlesError> {
         let _span = tracy_client::span!("GlobalShaderElement::draw");
 
-        // Allocate the niri_screen texture sized to the physical dst region, then capture the
-        // framebuffer below into it.
         let buffer_size = dst.size.to_logical(1).to_buffer(1, Transform::Normal);
-        let screen_tex = {
+
+        // Capture the composited screen below: niri_source for all passes, niri_screen for pass 0.
+        let source_tex = {
             let mut guard = frame.renderer();
-            let renderer = guard.as_mut();
-            renderer.create_buffer(Fourcc::Abgr8888, buffer_size)?
+            guard
+                .as_mut()
+                .create_buffer(Fourcc::Abgr8888, buffer_size)?
             // guard dropped here so the GlesFrame binding is restored before the blit.
         };
-
-        capture::capture_framebuffer_region(frame, dst, &screen_tex)?;
-
+        capture::capture_framebuffer_region(frame, dst, &source_tex)?;
         // Stash this frame's screen capture for next frame's niri_screen_prev.
-        *self.screen_result.borrow_mut() = Some(screen_tex.clone());
+        *self.screen_result.borrow_mut() = Some(source_tex.clone());
 
-        let program = Shaders::get_from_frame(frame).program(ProgramType::Global);
-        let Some(_program) = program else {
-            // No global program: draw the captured screen unchanged.
+        let n = self.passes.len();
+        // No chain, or any pass program missing => passthrough the captured screen unchanged.
+        let chain_ready = n > 0
+            && (0..n).all(|i| {
+                Shaders::get_from_frame(frame)
+                    .program(ProgramType::GlobalPass(i))
+                    .is_some()
+            });
+        if !chain_ready {
             return frame.render_texture_from_to(
-                &screen_tex,
-                Rectangle::from_size(screen_tex.size().to_f64()),
+                &source_tex,
+                Rectangle::from_size(source_tex.size().to_f64()),
                 dst,
                 damage,
                 &[],
@@ -152,12 +160,13 @@ impl RenderElement<GlesRenderer> for GlobalShaderElement {
                 None,
                 &[],
             );
-        };
+        }
 
-        // Passthrough for this task: bind the freshly captured screen as prev too.
-        let prev_tex = self.prev.clone().unwrap_or_else(|| screen_tex.clone());
         // Previous frame's screen; falls back to this frame's screen on the first frame.
-        let screen_prev_tex = self.screen_prev.clone().unwrap_or_else(|| screen_tex.clone());
+        let screen_prev_tex = self
+            .screen_prev
+            .clone()
+            .unwrap_or_else(|| source_tex.clone());
 
         let uniforms: Rc<[Uniform<'static>]> = Rc::new([
             Uniform::new("niri_time", self.time),
@@ -177,108 +186,140 @@ impl RenderElement<GlesRenderer> for GlobalShaderElement {
             ),
         ]);
 
-        // --- Dedicated feedback buffer pass ---
-        // If the source defines global_buffer, render it into a clean offscreen texture (reading
-        // last frame's buffer) and feed THAT as niri_buffer. Otherwise niri_buffer == niri_prev.
-        // OffscreenBuffer recreates its texture when we hold a clone of the previous one, which
-        // gives ping-pong for free (read buffer_prev, write a fresh texture).
-        let buffer_tex = if Shaders::get_from_frame(frame)
-            .program(ProgramType::GlobalBuffer)
-            .is_some()
-        {
-            // First frame (or after reload) there is no prior buffer; fall back to the previous
-            // screen. This briefly seeds the buffer with screen content, but it is overwritten the
-            // next frame and is purely cosmetic for one frame.
-            let buf_prev = self
-                .buffer_prev
-                .clone()
-                .unwrap_or_else(|| screen_prev_tex.clone());
+        // The input to the current pass: pass 0 reads the real screen, later passes read the prior
+        // pass's output.
+        let mut input = source_tex.clone();
 
-            let mut buf_textures = HashMap::new();
-            buf_textures.insert("niri_screen".to_string(), screen_tex.clone());
-            buf_textures.insert("niri_prev".to_string(), prev_tex.clone());
-            buf_textures.insert("niri_screen_prev".to_string(), screen_prev_tex.clone());
-            buf_textures.insert("niri_buffer".to_string(), buf_prev);
+        for (i, pass) in self.passes.iter().enumerate() {
+            // This pass's own previous-frame output (its niri_prev); on the first frame fall back
+            // to this pass's input so feedback shaders start from a sensible image.
+            let prev_tex = pass.prev.clone().unwrap_or_else(|| input.clone());
 
-            let buf_element = ShaderRenderElement::new(
-                ProgramType::GlobalBuffer,
+            // --- Dedicated buffer sub-pass for this pass (if it defines global_buffer) ---
+            // Render the GlobalPassBuffer(i) program into a clean offscreen (reading last frame's
+            // buffer) and feed THAT as niri_buffer. Otherwise niri_buffer aliases niri_prev.
+            let buffer_tex = if Shaders::get_from_frame(frame)
+                .program(ProgramType::GlobalPassBuffer(i))
+                .is_some()
+            {
+                // First frame (or after reload) there is no prior buffer; fall back to the previous
+                // screen. Overwritten next frame, so only cosmetic for one frame.
+                let buf_prev = pass
+                    .buffer_prev
+                    .clone()
+                    .unwrap_or_else(|| screen_prev_tex.clone());
+
+                let mut buf_textures = HashMap::new();
+                buf_textures.insert("niri_screen".to_string(), input.clone());
+                buf_textures.insert("niri_source".to_string(), source_tex.clone());
+                buf_textures.insert("niri_prev".to_string(), prev_tex.clone());
+                buf_textures.insert("niri_screen_prev".to_string(), screen_prev_tex.clone());
+                buf_textures.insert("niri_buffer".to_string(), buf_prev);
+
+                let buf_element = ShaderRenderElement::new(
+                    ProgramType::GlobalPassBuffer(i),
+                    self.area.size,
+                    None,
+                    self.scale,
+                    1.,
+                    uniforms.clone(),
+                    buf_textures,
+                    Kind::Unspecified,
+                );
+
+                let mut guard = frame.renderer();
+                let renderer = guard.as_mut();
+                match pass
+                    .buffer
+                    .render(renderer, Scale::from(self.scale as f64), &[buf_element])
+                {
+                    Ok((off_elem, _sync, _data)) => {
+                        let next = off_elem.texture().clone();
+                        drop(guard);
+                        // DO NOT remove this retained clone. It forces OffscreenBuffer to allocate
+                        // a distinct write texture next frame (its
+                        // is_unique_reference check); without an external
+                        // clone alive, next frame's buffer pass would read and write the
+                        // same texture and corrupt the feedback. The clone also lets the owner move
+                        // this texture into the pass's buffer_prev after submit.
+                        *pass.buffer_result.borrow_mut() = Some(next.clone());
+                        next
+                    }
+                    Err(err) => {
+                        drop(guard);
+                        warn!("global_buffer pass {i} failed: {err:?}");
+                        prev_tex.clone()
+                    }
+                }
+            } else {
+                prev_tex.clone()
+            };
+
+            // --- This pass's display program ---
+            let mut textures = HashMap::new();
+            textures.insert("niri_screen".to_string(), input.clone());
+            textures.insert("niri_source".to_string(), source_tex.clone());
+            textures.insert("niri_prev".to_string(), prev_tex.clone());
+            textures.insert("niri_screen_prev".to_string(), screen_prev_tex.clone());
+            textures.insert("niri_buffer".to_string(), buffer_tex);
+
+            let element = ShaderRenderElement::new(
+                ProgramType::GlobalPass(i),
                 self.area.size,
                 None,
                 self.scale,
                 1.,
                 uniforms.clone(),
-                buf_textures,
+                textures,
                 Kind::Unspecified,
             );
 
-            let mut guard = frame.renderer();
-            let renderer = guard.as_mut();
-            match self
-                .buffer
-                .render(renderer, Scale::from(self.scale as f64), &[buf_element])
-            {
-                Ok((off_elem, _sync, _data)) => {
-                    let next = off_elem.texture().clone();
-                    drop(guard);
-                    // DO NOT remove this retained clone. It is what forces OffscreenBuffer to
-                    // allocate a *distinct* write texture next frame (its `is_unique_reference`
-                    // check): without an external clone alive, next frame's buffer pass would read
-                    // and write the same texture and corrupt the feedback. The clone also lets the
-                    // owner move this texture into global_shader_buffer_prev after submit.
-                    *self.buffer_result.borrow_mut() = Some(next.clone());
-                    next
+            if i + 1 < n {
+                // Intermediate pass: render into this pass's display offscreen. Its texture is the
+                // next pass's input AND this pass's next-frame niri_prev (same retained-clone
+                // ping-pong as the buffer sub-pass).
+                let mut guard = frame.renderer();
+                let renderer = guard.as_mut();
+                match pass.pass_offscreen.render(
+                    renderer,
+                    Scale::from(self.scale as f64),
+                    &[element],
+                ) {
+                    Ok((off_elem, _sync, _data)) => {
+                        let next = off_elem.texture().clone();
+                        drop(guard);
+                        *pass.result.borrow_mut() = Some(next.clone());
+                        input = next;
+                    }
+                    Err(err) => {
+                        drop(guard);
+                        warn!("global pass {i} failed: {err:?}");
+                        // Best effort: feed the input forward unchanged.
+                    }
                 }
-                Err(err) => {
-                    drop(guard);
-                    warn!("global_buffer pass failed: {err:?}");
-                    prev_tex.clone()
-                }
+            } else {
+                // Last pass: composite into the output framebuffer, then capture for niri_prev.
+                // ShaderRenderElement::src() is the unit rectangle, so pass a unit src for a 1:1
+                // full-screen mapping of the captured texture onto dst.
+                RenderElement::<GlesRenderer>::draw(
+                    &element,
+                    frame,
+                    Rectangle::from_size((1., 1.).into()),
+                    dst,
+                    damage,
+                    &[],
+                    None,
+                )?;
+                let result_tex = {
+                    let mut guard = frame.renderer();
+                    guard
+                        .as_mut()
+                        .create_buffer(Fourcc::Abgr8888, buffer_size)?
+                };
+                capture::capture_framebuffer_region(frame, dst, &result_tex)?;
+                *pass.result.borrow_mut() = Some(result_tex);
             }
-        } else {
-            prev_tex.clone()
-        };
-
-        let mut textures = HashMap::new();
-        textures.insert("niri_screen".to_string(), screen_tex);
-        textures.insert("niri_prev".to_string(), prev_tex.clone());
-        textures.insert("niri_screen_prev".to_string(), screen_prev_tex);
-        textures.insert("niri_buffer".to_string(), buffer_tex);
-
-        // Delegate the actual program pass (named samplers + custom uniforms) to
-        // ShaderRenderElement, which already implements the GL uniform/texture binding.
-        let element = ShaderRenderElement::new(
-            ProgramType::Global,
-            self.area.size,
-            None,
-            self.scale,
-            1.,
-            uniforms,
-            textures,
-            Kind::Unspecified,
-        );
-
-        // ShaderRenderElement::src() is the unit rectangle, so pass a unit src for a 1:1
-        // full-screen mapping of the captured texture onto dst.
-        RenderElement::<GlesRenderer>::draw(
-            &element,
-            frame,
-            Rectangle::from_size((1., 1.).into()),
-            dst,
-            damage,
-            &[],
-            None,
-        )?;
-
-        // Capture the rendered result for prev-frame ping-pong. The shared handle is also held by
-        // OutputState.global_shader_result; after the frame is submitted, the owner moves this into
-        // OutputState.global_shader_prev.
-        let result_tex = {
-            let mut guard = frame.renderer();
-            let renderer = guard.as_mut();
-            renderer.create_buffer(Fourcc::Abgr8888, buffer_size)?
-        };
-        capture::capture_framebuffer_region(frame, dst, &result_tex)?;
-        *self.result.borrow_mut() = Some(result_tex);
+        }
 
         Ok(())
     }

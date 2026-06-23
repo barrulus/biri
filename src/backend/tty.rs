@@ -64,7 +64,7 @@ use wayland_protocols::wp::presentation_time::server::wp_presentation_feedback;
 use super::{IpcOutputMap, RenderResult};
 use crate::backend::OutputId;
 use crate::frame_clock::FrameClock;
-use crate::niri::{global_shader_source, Niri, RedrawState, State};
+use crate::niri::{global_shader_pass_sources, Niri, RedrawState, State};
 use crate::render_helpers::debug::draw_damage;
 use crate::render_helpers::renderer::AsGlesRenderer;
 use crate::render_helpers::{resources, shaders, RenderCtx, RenderTarget};
@@ -844,9 +844,8 @@ impl Tty {
                 shaders::set_custom_open_program(gles_renderer, Some(src));
             }
             {
-                let src = global_shader_source(&config.global_shader);
-                let hyprland = config.global_shader.mode == "hyprland";
-                shaders::set_custom_global_program(gles_renderer, src.as_deref(), hyprland);
+                let passes = global_shader_pass_sources(&config.global_shader);
+                shaders::set_custom_global_passes(gles_renderer, &passes);
             }
             drop(config);
 
@@ -1940,26 +1939,25 @@ impl Tty {
         let drm_compositor = &mut surface.compositor;
         match drm_compositor.render_frame::<_, _>(&mut renderer, &elements, [0.; 4], flags) {
             Ok(res) => {
-                // Global post-process shader ping-pong: the element wrote its captured result into
-                // the shared handle during render_frame; move it into prev for the next frame.
+                // Global post-process shader ping-pong: the element wrote each pass's captured
+                // result into the shared handles during render_frame; move them into prev for the
+                // next frame. Per-pass for the chain; the screen capture is frame-level.
                 if let Some(output_state) = niri.output_state.get_mut(output) {
-                    let result = output_state.global_shader_result.borrow_mut().take();
-                    if result.is_some() {
-                        output_state.global_shader_prev = result;
+                    let chain = output_state.global_shader_chain.get_mut();
+                    for i in 0..chain.result.len() {
+                        let result = chain.result[i].borrow_mut().take();
+                        if result.is_some() {
+                            chain.prev[i] = result;
+                        }
+                        let buffer_result = chain.buffer_result[i].borrow_mut().take();
+                        if buffer_result.is_some() {
+                            chain.buffer_prev[i] = buffer_result;
+                        }
                     }
-                    let screen_result = output_state
-                        .global_shader_screen_result
-                        .borrow_mut()
-                        .take();
+                    let screen_result =
+                        output_state.global_shader_screen_result.borrow_mut().take();
                     if screen_result.is_some() {
                         output_state.global_shader_screen_prev = screen_result;
-                    }
-                    let buffer_result = output_state
-                        .global_shader_buffer_result
-                        .borrow_mut()
-                        .take();
-                    if buffer_result.is_some() {
-                        output_state.global_shader_buffer_prev = buffer_result;
                     }
                 }
 
