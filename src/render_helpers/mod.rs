@@ -44,6 +44,7 @@ pub mod render_elements;
 pub mod renderer;
 pub mod resize;
 pub mod resources;
+pub mod scoped_shader_element;
 pub mod shader_element;
 pub mod shaders;
 pub mod shadow;
