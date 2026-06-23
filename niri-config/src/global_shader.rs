@@ -41,6 +41,20 @@ impl GlobalShaderCaps {
         }
     }
 
+    /// Capabilities for a multi-pass chain: the union of every pass's caps. The chain animates
+    /// if any pass does, so the whole chain redraws every frame.
+    pub fn scan_chain(passes: &[(String, bool)]) -> Self {
+        passes.iter().fold(Self::default(), |acc, (src, hyprland)| {
+            let c = Self::scan(src, *hyprland);
+            GlobalShaderCaps {
+                uses_time: acc.uses_time || c.uses_time,
+                uses_cursor: acc.uses_cursor || c.uses_cursor,
+                uses_prev: acc.uses_prev || c.uses_prev,
+                uses_buffer: acc.uses_buffer || c.uses_buffer,
+            }
+        })
+    }
+
     /// Animating shaders depend on time or the feedback buffer, so they must redraw every frame
     /// to progress even when the desktop is idle.
     pub fn is_animating(&self) -> bool {
@@ -357,6 +371,26 @@ mod tests {
         );
         assert_eq!(config.global_shader.passes[1].mode, "niri");
         assert_eq!(config.global_shader.passes[2].mode, "hyprland");
+    }
+
+    #[test]
+    fn caps_scan_chain_union() {
+        // A static blur pass + an animated final pass => chain is animating.
+        let chain = [
+            ("vec4 global_color(vec3 c){ return tex2D_screen(c.xy); }".to_string(), false),
+            ("vec4 global_color(vec3 c){ return vec4(niri_time); }".to_string(), false),
+        ];
+        let caps = GlobalShaderCaps::scan_chain(&chain);
+        assert!(caps.uses_time);
+        assert!(caps.is_animating());
+
+        // All-static chain => not animating.
+        let static_chain = [
+            ("vec4 global_color(vec3 c){ return tex2D_screen(c.xy); }".to_string(), false),
+            ("vec4 global_color(vec3 c){ return tex2D_screen(c.xy).gbra; }".to_string(), false),
+        ];
+        let caps = GlobalShaderCaps::scan_chain(&static_chain);
+        assert!(!caps.is_animating());
     }
 
     #[test]
