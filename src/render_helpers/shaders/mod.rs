@@ -1,4 +1,6 @@
 use std::cell::RefCell;
+use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 
 use glam::Mat3;
 use smithay::backend::renderer::gles::{
@@ -23,6 +25,7 @@ pub struct Shaders {
     pub custom_open: RefCell<Option<ShaderProgram>>,
     pub custom_global_passes: RefCell<Vec<ShaderProgram>>,
     pub custom_global_pass_buffers: RefCell<Vec<Option<ShaderProgram>>>,
+    pub scoped: RefCell<HashMap<u64, Vec<ShaderProgram>>>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -36,6 +39,7 @@ pub enum ProgramType {
     GlobalBuffer,
     GlobalPass(usize),
     GlobalPassBuffer(usize),
+    Scoped(u64, usize),
 }
 
 impl Shaders {
@@ -167,6 +171,7 @@ impl Shaders {
             custom_open: RefCell::new(None),
             custom_global_passes: RefCell::new(Vec::new()),
             custom_global_pass_buffers: RefCell::new(Vec::new()),
+            scoped: RefCell::new(HashMap::new()),
         }
     }
 
@@ -229,6 +234,12 @@ impl Shaders {
                 .get(i)
                 .cloned()
                 .flatten(),
+            ProgramType::Scoped(key, i) => self
+                .scoped
+                .borrow()
+                .get(&key)
+                .and_then(|chain| chain.get(i))
+                .cloned(),
         }
     }
 }
@@ -491,6 +502,73 @@ pub fn set_custom_global_passes(renderer: &mut GlesRenderer, passes: &[(String, 
     for p in old_buffers.into_iter().flatten() {
         if let Err(err) = p.destroy(renderer) {
             warn!("error destroying previous global_buffer pass: {err:?}");
+        }
+    }
+}
+
+/// Stable hash of a resolved pass list — the cache key for a scoped shader chain. Pure function of
+/// the source strings and hyprland flags (no nondeterminism).
+pub fn scoped_key(passes: &[(String, bool)]) -> u64 {
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    for (src, hypr) in passes {
+        src.hash(&mut h);
+        hypr.hash(&mut h);
+    }
+    h.finish()
+}
+
+/// Install the set of scoped shader chains. Each entry is a resolved `(source, hyprland)` pass
+/// list. Compiles any key not already cached, and destroys any cached key no longer referenced.
+/// Identical pass lists share one compiled chain (same key).
+pub fn set_scoped_programs(renderer: &mut GlesRenderer, chains: &[Vec<(String, bool)>]) {
+    use std::collections::HashSet;
+    let wanted: HashSet<u64> = chains.iter().map(|c| scoped_key(c)).collect();
+
+    // Drop + destroy stale keys: collect the chains first (releasing the borrow), then destroy.
+    let stale_chains: Vec<Vec<ShaderProgram>> = {
+        let mut scoped = Shaders::get(renderer).scoped.borrow_mut();
+        let stale: Vec<u64> = scoped
+            .keys()
+            .copied()
+            .filter(|k| !wanted.contains(k))
+            .collect();
+        stale.into_iter().filter_map(|k| scoped.remove(&k)).collect()
+    };
+    for chain in stale_chains {
+        for p in chain {
+            if let Err(err) = p.destroy(renderer) {
+                warn!("error destroying scoped shader program: {err:?}");
+            }
+        }
+    }
+
+    // Compile missing keys.
+    for passes in chains {
+        if passes.is_empty() {
+            continue;
+        }
+        let key = scoped_key(passes);
+        if Shaders::get(renderer).scoped.borrow().contains_key(&key) {
+            continue;
+        }
+        let mut compiled = Vec::with_capacity(passes.len());
+        let mut ok = true;
+        for (src, hyprland) in passes {
+            match compile_global_program(renderer, src, *hyprland) {
+                Ok(p) => compiled.push(p),
+                Err(err) => {
+                    warn!("error compiling scoped shader: {err:?}");
+                    ok = false;
+                    break;
+                }
+            }
+        }
+        if ok {
+            Shaders::get(renderer).scoped.borrow_mut().insert(key, compiled);
+        } else {
+            for p in compiled {
+                let _ = p.destroy(renderer);
+            }
         }
     }
 }
