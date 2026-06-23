@@ -29,6 +29,15 @@ pub enum WindowRef<'a> {
     Mapped(&'a Mapped),
 }
 
+/// Resolved per-window shader: a list of `(source, hyprland)` passes and a cache key.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ResolvedShader {
+    /// Resolved `(source, hyprland)` pass list for this window's shader.
+    pub passes: Vec<(String, bool)>,
+    /// Cache key into `Shaders.scoped` (== `shaders::scoped_key(&passes)`).
+    pub key: u64,
+}
+
 /// Rules fully resolved for a window.
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct ResolvedWindowRules {
@@ -125,6 +134,9 @@ pub struct ResolvedWindowRules {
 
     /// Rules for this window's popups.
     pub popups: ResolvedPopupsRules,
+
+    /// Per-window shader, if any.
+    pub shader: Option<ResolvedShader>,
 }
 
 impl<'a> WindowRef<'a> {
@@ -308,6 +320,16 @@ impl ResolvedWindowRules {
                     .merge_with(&rule.background_effect);
 
                 resolved.popups.merge_with(&rule.popups);
+
+                if let Some(shader_rule) = &rule.shader {
+                    let passes = shader_rule.pass_sources(crate::niri::read_scoped_shader_path);
+                    resolved.shader = if passes.is_empty() {
+                        None
+                    } else {
+                        let key = crate::render_helpers::shaders::scoped_key(&passes);
+                        Some(ResolvedShader { passes, key })
+                    };
+                }
             }
 
             resolved.open_on_output = open_on_output.map(|x| x.to_owned());
