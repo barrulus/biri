@@ -109,6 +109,35 @@ pub struct RegionShader {
     pub passes: Vec<GlobalShaderPass>,
 }
 
+impl RegionShader {
+    /// Resolve this region's shader into an ordered `(source, hyprland)` pass list. Empty `passes`
+    /// => the top-level `source`/`path` becomes a length-1 chain. Any pass that cannot be resolved
+    /// => empty (the whole region is disabled). `expand` maps a `path` to its file contents.
+    pub fn pass_sources(&self, expand: impl Fn(&str) -> Option<String>) -> Vec<(String, bool)> {
+        let resolve_one = |source: &Option<String>, path: &Option<String>, mode: &str| {
+            match (source, path) {
+                (Some(s), None) if !s.trim().is_empty() => Some((s.clone(), mode == "hyprland")),
+                (None, Some(p)) => expand(p).map(|s| (s, mode == "hyprland")),
+                _ => None,
+            }
+        };
+        if self.passes.is_empty() {
+            return match resolve_one(&self.source, &self.path, &self.mode) {
+                Some(pair) => vec![pair],
+                None => Vec::new(),
+            };
+        }
+        let mut out = Vec::with_capacity(self.passes.len());
+        for pass in &self.passes {
+            match resolve_one(&pass.source, &pass.path, &pass.mode) {
+                Some(pair) => out.push(pair),
+                None => return Vec::new(),
+            }
+        }
+        out
+    }
+}
+
 impl From<RegionShaderPart> for RegionShader {
     fn from(p: RegionShaderPart) -> Self {
         let mode = p.mode.clone().unwrap_or_else(|| String::from("niri"));
@@ -135,6 +164,40 @@ impl From<RegionShaderPart> for RegionShader {
 #[cfg(test)]
 mod tests {
     use crate::Config;
+
+    #[test]
+    fn region_pass_sources_resolves() {
+        let config = Config::parse_mem(
+            r##"
+            region-shader {
+                geometry x=0 y=0 width=10 height=10
+                source "A"
+            }
+            region-shader {
+                geometry x=0 y=0 width=10 height=10
+                pass {
+                    source "B"
+                }
+                pass {
+                    path "p.frag"
+                }
+            }
+            "##,
+        )
+        .unwrap();
+        // Top-level source -> length-1 chain.
+        let r0 = config.region_shaders[0].pass_sources(|_| None);
+        assert_eq!(r0, vec![("A".to_string(), false)]);
+        // Pass chain: inline B + resolved path.
+        let r1 = config.region_shaders[1].pass_sources(|p| {
+            assert_eq!(p, "p.frag");
+            Some("C".to_string())
+        });
+        assert_eq!(r1, vec![("B".to_string(), false), ("C".to_string(), false)]);
+        // Unresolvable path -> empty (disabled).
+        let r1_bad = config.region_shaders[1].pass_sources(|_| None);
+        assert!(r1_bad.is_empty());
+    }
 
     #[test]
     fn region_shader_parses() {
