@@ -136,12 +136,16 @@ Give the shader its own offscreen texture(s) it reads and writes, independent of
 - This is the natural substrate for item 3.3 (multi-pass).
 
 ### 3.3 Layers / multi-pass  [enhancement]
-- **Multi-pass chains:** allow N shaders run in sequence (blur → grade → vignette), each
-  reading the prior pass's output. Config: a list of shader blocks/passes. Needs intermediate
-  buffers (item 3.2).
-- **Scoped shaders:** apply to a region / single window / a specific layer-shell layer rather
-  than the whole output. Bigger model change ("output post-process" → "compositable shader
-  layers"); integrates with the layout/window machinery.
+- **Multi-pass chains:** ✅ **DONE & hardware-verified 2026-06-23** (`barrulus-custom`,
+  commits `d7302de7`..`57350d79`). N shaders run in sequence via repeatable `pass {}` config
+  blocks; each pass reads the prior pass's output as `niri_screen`, the original screen as
+  `niri_source`, and its own last-frame output as per-pass `niri_prev` (+ optional per-pass
+  `global_buffer`). Length-0/1 chain is byte-identical to the old single shader. Spec:
+  `docs/superpowers/specs/2026-06-22-global-shader-multipass-design.md`; plan:
+  `docs/superpowers/plans/2026-06-22-global-shader-multipass.md`.
+- **Scoped shaders:** [still pending — own spec] apply to a region / single window / a specific
+  layer-shell layer rather than the whole output. Bigger model change ("output post-process" →
+  "compositable shader layers"); integrates with the layout/window machinery.
 
 ### 3.4 iGPU / power  [enhancement]
 The effect is always-on GPU load, so on a hybrid laptop, running the compositor's render path
@@ -164,10 +168,10 @@ device selection.
 ---
 
 ## 4. Suggested order
-1. **3.1 Localised frames** (static-skip → time-vsync → region-damage) — makes it daily-viable.
-2. **3.2 Dedicated feedback buffer** — fixes trail smear, unlocks multi-pass.
-3. **3.3 Layers / multi-pass.**
-4. **3.4 iGPU / power**, then **3.5 reach polish.**
+1. ✅ **3.1 Localised frames** (static-skip → time-vsync → region-damage) — done.
+2. ✅ **3.2 Dedicated feedback buffer** — done.
+3. ✅ **3.3 Layers / multi-pass** — multi-pass chains done & hardware-verified 2026-06-23. (Scoped/windowed/layer shaders remain — own spec when wanted.)
+4. **3.4 iGPU / power**, then **3.5 reach polish.** ← next.
 5. **2.4 transform** — only if a rotated output is ever used (likely a 60-second check, maybe nothing).
 
 Each is real compositor-rendering work — treat each like v1: brainstorm → spec → plan →
