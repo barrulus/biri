@@ -4551,10 +4551,6 @@ impl Niri {
                     (area.size.w / full.size.w) as f32,
                     (area.size.h / full.size.h) as f32,
                 ];
-                let size_phys = (
-                    (geom.width * scale as f64) as f32,
-                    (geom.height * scale as f64) as f32,
-                );
                 let n_passes = chain.len();
                 let offscreens = (0..n_passes.saturating_sub(1))
                     .map(|_| {
@@ -4572,7 +4568,6 @@ impl Niri {
                     cursor,
                     region_norm,
                     out_phys,
-                    size_phys,
                     key,
                     n_passes,
                     ScopedSource::Capture,

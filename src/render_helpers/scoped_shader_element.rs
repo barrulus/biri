@@ -48,8 +48,6 @@ pub struct ScopedShaderElement {
     region_norm: [f32; 4],
     /// True full-output size in physical px (for the `niri_output_size` uniform).
     output_size_phys: (f32, f32),
-    /// Physical size of the scope area (for the `niri_size` uniform).
-    size_phys: (f32, f32),
     /// The shader program key (selects `ProgramType::Scoped(key, i)`).
     key: u64,
     /// Total number of passes in the chain.
@@ -70,7 +68,6 @@ impl ScopedShaderElement {
         cursor: (f32, f32),
         region_norm: [f32; 4],
         output_size_phys: (f32, f32),
-        size_phys: (f32, f32),
         key: u64,
         n_passes: usize,
         source: ScopedSource,
@@ -85,7 +82,6 @@ impl ScopedShaderElement {
             cursor,
             region_norm,
             output_size_phys,
-            size_phys,
             key,
             n_passes,
             source,
@@ -186,7 +182,12 @@ impl RenderElement<GlesRenderer> for ScopedShaderElement {
                 "niri_output_size",
                 (self.output_size_phys.0, self.output_size_phys.1),
             ),
-            Uniform::new("niri_size", (self.size_phys.0, self.size_phys.1)),
+            // NOTE: do NOT push `niri_size` here. It is a BUILT-IN uniform that
+            // ShaderRenderElement sets from the element's dest size;
+            // `compile_global_program` does not declare it as an additional uniform,
+            // so pushing it triggers a hard "Uniform niri_size was not declared"
+            // GlesError every frame (freezing the output). The shader still sees the correct
+            // niri_size via the built-in. Matches GlobalShaderElement, which also omits it.
         ]);
 
         // `input` advances through the pass chain: pass 0 reads the source, later passes read the
