@@ -375,6 +375,86 @@ Region mode applies only when the shader uses `niri_cursor` and is **not** anima
 
 ---
 
+### Region shaders
+
+A `region-shader {}` block runs a post-process shader scoped to a fixed screen rectangle instead of the whole output. It is independent of `global-shader` — you can have both active simultaneously, and you can repeat `region-shader {}` as many times as you need (they draw in config order).
+
+```kdl
+region-shader {
+    geometry x=100 y=100 width=800 height=600
+    source "vec4 global_color(vec3 c){ vec3 s=tex2D_screen(c.xy).rgb; return vec4(s.bgr,1.0); }"
+}
+```
+
+#### Fields
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `geometry` | node | — | Defines the rectangle. All four properties `x`, `y`, `width`, `height` are logical pixels (pre-scale). |
+| `output` | string | — | Optional output name (e.g. `"DP-1"`). When set, the region is only applied on that output. When absent, the same rectangle is applied on every output. |
+| `source` | string | — | Inline GLSL source. Same `global_color` contract as `global-shader`. Mutually exclusive with `path`. |
+| `path` | string | — | Path to a `.frag` file. Mutually exclusive with `source`. |
+| `mode` | string | `"niri"` | API flavour: `"niri"` or `"hyprland"`. |
+| `pass` | block (repeatable) | — | Multi-pass chain — same syntax as `global-shader`. When any `pass` blocks are present, the top-level `source`/`path` are ignored. See [Multi-pass chains](#multi-pass-chains-pass). |
+
+#### Shader contract
+
+A region shader uses the same `global_color` function and uniforms as `global-shader` — see [niri Mode](#niri-mode-default) for the full uniform table. The key difference is scope:
+
+- `niri_screen` (and `tex2D_screen`) samples the composited pixels **inside the region rectangle** only. Samples outside the rectangle clamp to a transparent border.
+- `niri_size` is the region rectangle's dimensions in physical pixels (not the full output). Use `niri_output_size` for absolute-pixel math when needed.
+- `niri_region` is `(origin.xy, size.xy)` in output-normalised coords for this region box.
+- `coord.xy` passed to `global_color` and the `uv` arguments to `tex2D_screen` are **output-normalised** (0..1 across the whole output), as with `global-shader`.
+
+Multi-pass chains work the same way as for `global-shader` — each pass reads the previous pass's output as `niri_screen`, and `niri_source` always holds the original composited pixels for the region.
+
+#### v1 limits
+
+- **No per-scope feedback.** `niri_prev`, `niri_screen_prev`, and `niri_buffer` all alias `niri_screen` (the current composited pixels in the rect), and `global_buffer` is ignored. There is no previous-frame feedback within a region shader in this release.
+- **No `reads-cursor` or `redraw` controls.** Redraw is automatic: a region shader redraws when the composited content under its rectangle changes, and — if it uses `niri_time` — every frame (the same `auto` behaviour as `global-shader`, with the same continuous-GPU-load cost).
+- **No overlap compositing.** Overlapping regions draw independently in config order; no blending between them is performed.
+
+#### Example: channel-swap over a rectangle
+
+```kdl
+region-shader {
+    geometry x=0 y=0 width=960 height=540
+    output "HDMI-A-1"
+    source "vec4 global_color(vec3 c){ vec3 s=tex2D_screen(c.xy).rgb; return vec4(s.bgr,1.0); }"
+}
+```
+
+#### Example: two independent regions
+
+Multiple `region-shader` blocks are independent. They compile separately if their sources differ (only one compiled shader is kept per unique source).
+
+```kdl
+region-shader {
+    geometry x=0 y=0 width=1920 height=40
+    source "vec4 global_color(vec3 c){ vec4 s=tex2D_screen(c.xy); return vec4(s.r*1.0,s.g*0.5,s.b*0.5,s.a); }"
+}
+region-shader {
+    geometry x=0 y=1040 width=1920 height=40
+    source "vec4 global_color(vec3 c){ vec4 s=tex2D_screen(c.xy); return vec4(s.r*0.5,s.g*1.0,s.b*0.5,s.a); }"
+}
+```
+
+#### Example: region multi-pass chain
+
+```kdl
+region-shader {
+    geometry x=200 y=200 width=400 height=300
+    pass {
+        source "vec4 global_color(vec3 c){ return tex2D_screen(c.xy); }"
+    }
+    pass {
+        source "vec4 global_color(vec3 c){ vec4 s=tex2D_screen(c.xy); return vec4(1.0-s.r,1.0-s.g,1.0-s.b,s.a); }"
+    }
+}
+```
+
+---
+
 ### Scope and Limitations
 
 - **TTY/DRM only.** The effect applies on the real (DRM/KMS) output. It is intentionally **not** applied on the nested winit backend (running niri in a window), nor to screenshots or screen recordings (screencast/screencopy) — those render without the effect.
