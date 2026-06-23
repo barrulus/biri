@@ -250,7 +250,8 @@ Per-pass fields:
 Notes: a multi-pass chain (two or more passes) is always whole-output — `cursor-radius` region
 mode applies only to a single-pass effect. The chain is treated as animated if **any** pass uses
 `niri_time`, feedback (`niri_prev`/`niri_screen_prev`), or a `global_buffer`. If any pass fails to
-resolve or compile, the whole chain is disabled and the screen renders normally.
+resolve or compile, the whole chain is disabled and the screen renders normally. A `hyprland`-mode
+pass uses its own prelude and does not see the niri samplers (`niri_source`, `niri_buffer`, …).
 
 ---
 

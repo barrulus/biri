@@ -202,16 +202,20 @@ mod tests {
 
     #[test]
     fn caps_scan_static_filter() {
-        let c =
-            GlobalShaderCaps::scan("vec4 global_color(vec3 c){ return tex2D_screen(c.xy); }", false);
+        let c = GlobalShaderCaps::scan(
+            "vec4 global_color(vec3 c){ return tex2D_screen(c.xy); }",
+            false,
+        );
         assert_eq!(c, GlobalShaderCaps::default());
         assert!(!c.is_animating());
     }
 
     #[test]
     fn caps_scan_time_only_is_animating() {
-        let c =
-            GlobalShaderCaps::scan("vec4 global_color(vec3 c){ return vec4(niri_time); }", false);
+        let c = GlobalShaderCaps::scan(
+            "vec4 global_color(vec3 c){ return vec4(niri_time); }",
+            false,
+        );
         assert!(c.uses_time && !c.uses_cursor && !c.uses_prev);
         assert!(c.is_animating());
     }
@@ -250,8 +254,10 @@ mod tests {
 
     #[test]
     fn caps_scan_plain_filter_not_buffer() {
-        let c =
-            GlobalShaderCaps::scan("vec4 global_color(vec3 c){ return tex2D_screen(c.xy); }", false);
+        let c = GlobalShaderCaps::scan(
+            "vec4 global_color(vec3 c){ return tex2D_screen(c.xy); }",
+            false,
+        );
         assert!(!c.uses_buffer);
         assert!(!c.is_animating());
     }
@@ -364,7 +370,10 @@ mod tests {
         .unwrap();
         assert!(config.global_shader.enable);
         assert_eq!(config.global_shader.passes.len(), 3);
-        assert_eq!(config.global_shader.passes[0].path.as_deref(), Some("blur.frag"));
+        assert_eq!(
+            config.global_shader.passes[0].path.as_deref(),
+            Some("blur.frag")
+        );
         assert_eq!(
             config.global_shader.passes[1].source.as_deref(),
             Some("vec4 global_color(vec3 c){ return tex2D_screen(c.xy); }")
@@ -377,8 +386,14 @@ mod tests {
     fn caps_scan_chain_union() {
         // A static blur pass + an animated final pass => chain is animating.
         let chain = [
-            ("vec4 global_color(vec3 c){ return tex2D_screen(c.xy); }".to_string(), false),
-            ("vec4 global_color(vec3 c){ return vec4(niri_time); }".to_string(), false),
+            (
+                "vec4 global_color(vec3 c){ return tex2D_screen(c.xy); }".to_string(),
+                false,
+            ),
+            (
+                "vec4 global_color(vec3 c){ return vec4(niri_time); }".to_string(),
+                false,
+            ),
         ];
         let caps = GlobalShaderCaps::scan_chain(&chain);
         assert!(caps.uses_time);
@@ -386,8 +401,14 @@ mod tests {
 
         // All-static chain => not animating.
         let static_chain = [
-            ("vec4 global_color(vec3 c){ return tex2D_screen(c.xy); }".to_string(), false),
-            ("vec4 global_color(vec3 c){ return tex2D_screen(c.xy).gbra; }".to_string(), false),
+            (
+                "vec4 global_color(vec3 c){ return tex2D_screen(c.xy); }".to_string(),
+                false,
+            ),
+            (
+                "vec4 global_color(vec3 c){ return tex2D_screen(c.xy).gbra; }".to_string(),
+                false,
+            ),
         ];
         let caps = GlobalShaderCaps::scan_chain(&static_chain);
         assert!(!caps.is_animating());
@@ -406,5 +427,30 @@ mod tests {
         .unwrap();
         assert!(config.global_shader.passes.is_empty());
         assert!(config.global_shader.source.is_some());
+    }
+
+    #[test]
+    fn global_shader_pass_mode_inherits_block_mode() {
+        // A pass with no explicit `mode` inherits the block-level `mode`; an explicit pass `mode`
+        // overrides it. (The merge runs `mode` before the pass list, so the block mode is the
+        // default applied to each pass.)
+        let config = Config::parse_mem(
+            r##"
+            global-shader {
+                enable
+                mode "hyprland"
+                pass {
+                    path "a.frag"
+                }
+                pass {
+                    path "b.frag"
+                    mode "niri"
+                }
+            }
+            "##,
+        )
+        .unwrap();
+        assert_eq!(config.global_shader.passes[0].mode, "hyprland"); // inherited from block
+        assert_eq!(config.global_shader.passes[1].mode, "niri"); // explicit pass mode wins
     }
 }
