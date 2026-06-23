@@ -1665,8 +1665,10 @@ impl State {
             shaders_changed = true;
         }
 
-        if config.region_shaders != old_config.region_shaders {
-            let chains = region_shader_chains(&config);
+        if config.region_shaders != old_config.region_shaders
+            || config.window_rules != old_config.window_rules
+        {
+            let chains = scoped_shader_chains(&config);
             self.backend.with_primary_renderer(|renderer| {
                 shaders::set_scoped_programs(renderer, &chains);
             });
@@ -6917,11 +6919,9 @@ pub(crate) fn global_shader_source(cfg: &niri_config::GlobalShader) -> Option<St
     }
 }
 
-/// Resolve every configured region shader into its `(source, hyprland)` pass list, reading any
-/// `path` files. Index-aligned with `config.region_shaders`.
 /// Read a scoped/region shader `path` to its file contents (expanding `~`). Returns `None` if the
 /// path cannot be expanded or read. This is the single source of truth for resolving a scoped
-/// shader path: the `scoped_key` computed at compile time (`region_shader_chains`) must match the
+/// shader path: the `scoped_key` computed at compile time (`scoped_shader_chains`) must match the
 /// one looked up at render time, so all `pass_sources` call sites resolve paths through this fn.
 pub(crate) fn read_scoped_shader_path(p: &str) -> Option<String> {
     let path = match expand_home(std::path::Path::new(p)) {
@@ -6932,12 +6932,24 @@ pub(crate) fn read_scoped_shader_path(p: &str) -> Option<String> {
     std::fs::read_to_string(&path).ok()
 }
 
-pub(crate) fn region_shader_chains(config: &niri_config::Config) -> Vec<Vec<(String, bool)>> {
-    config
+/// Resolve every configured scoped shader (region shaders + window-rule shaders) into its
+/// `(source, hyprland)` pass list, reading any `path` files. The list is the full set compiled
+/// into `Shaders.scoped` (dedupe is by key inside `set_scoped_programs`).
+pub(crate) fn scoped_shader_chains(config: &niri_config::Config) -> Vec<Vec<(String, bool)>> {
+    let mut chains: Vec<Vec<(String, bool)>> = config
         .region_shaders
         .iter()
         .map(|r| r.pass_sources(read_scoped_shader_path))
-        .collect()
+        .collect();
+    for rule in &config.window_rules {
+        if let Some(shader) = &rule.shader {
+            let chain = shader.pass_sources(read_scoped_shader_path);
+            if !chain.is_empty() {
+                chains.push(chain);
+            }
+        }
+    }
+    chains
 }
 
 /// Resolve a global-shader config into an ordered list of `(source, hyprland)` passes. Empty

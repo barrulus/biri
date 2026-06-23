@@ -848,7 +848,7 @@ impl Tty {
                 shaders::set_custom_global_passes(gles_renderer, &passes);
             }
             {
-                let chains = crate::niri::region_shader_chains(&config);
+                let chains = crate::niri::scoped_shader_chains(&config);
                 shaders::set_scoped_programs(gles_renderer, &chains);
             }
             drop(config);
