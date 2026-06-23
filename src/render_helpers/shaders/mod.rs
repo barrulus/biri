@@ -21,8 +21,8 @@ pub struct Shaders {
     pub custom_resize: RefCell<Option<ShaderProgram>>,
     pub custom_close: RefCell<Option<ShaderProgram>>,
     pub custom_open: RefCell<Option<ShaderProgram>>,
-    pub custom_global: RefCell<Option<ShaderProgram>>,
-    pub custom_global_buffer: RefCell<Option<ShaderProgram>>,
+    pub custom_global_passes: RefCell<Vec<ShaderProgram>>,
+    pub custom_global_pass_buffers: RefCell<Vec<Option<ShaderProgram>>>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -34,6 +34,8 @@ pub enum ProgramType {
     Open,
     Global,
     GlobalBuffer,
+    GlobalPass(usize),
+    GlobalPassBuffer(usize),
 }
 
 impl Shaders {
@@ -163,8 +165,8 @@ impl Shaders {
             custom_resize: RefCell::new(None),
             custom_close: RefCell::new(None),
             custom_open: RefCell::new(None),
-            custom_global: RefCell::new(None),
-            custom_global_buffer: RefCell::new(None),
+            custom_global_passes: RefCell::new(Vec::new()),
+            custom_global_pass_buffers: RefCell::new(Vec::new()),
         }
     }
 
@@ -202,20 +204,6 @@ impl Shaders {
         self.custom_open.replace(program)
     }
 
-    pub fn replace_custom_global_program(
-        &self,
-        program: Option<ShaderProgram>,
-    ) -> Option<ShaderProgram> {
-        self.custom_global.replace(program)
-    }
-
-    pub fn replace_custom_global_buffer_program(
-        &self,
-        program: Option<ShaderProgram>,
-    ) -> Option<ShaderProgram> {
-        self.custom_global_buffer.replace(program)
-    }
-
     pub fn program(&self, program: ProgramType) -> Option<ShaderProgram> {
         match program {
             ProgramType::Border => self.border.clone(),
@@ -227,8 +215,20 @@ impl Shaders {
                 .or_else(|| self.resize.clone()),
             ProgramType::Close => self.custom_close.borrow().clone(),
             ProgramType::Open => self.custom_open.borrow().clone(),
-            ProgramType::Global => self.custom_global.borrow().clone(),
-            ProgramType::GlobalBuffer => self.custom_global_buffer.borrow().clone(),
+            ProgramType::Global => self.custom_global_passes.borrow().first().cloned(),
+            ProgramType::GlobalBuffer => self
+                .custom_global_pass_buffers
+                .borrow()
+                .first()
+                .cloned()
+                .flatten(),
+            ProgramType::GlobalPass(i) => self.custom_global_passes.borrow().get(i).cloned(),
+            ProgramType::GlobalPassBuffer(i) => self
+                .custom_global_pass_buffers
+                .borrow()
+                .get(i)
+                .cloned()
+                .flatten(),
         }
     }
 }
@@ -424,43 +424,61 @@ fn compile_global_buffer_program(
     )
 }
 
-pub fn set_custom_global_program(renderer: &mut GlesRenderer, src: Option<&str>, hyprland: bool) {
-    let program = if let Some(src) = src {
-        match compile_global_program(renderer, src, hyprland) {
-            Ok(program) => Some(program),
+/// Install a whole pass chain: for each pass compile its display program and (niri mode only,
+/// when the source defines `global_buffer`) a dedicated-buffer program. Replaces both registry
+/// vecs wholesale and destroys every previously-installed program. An empty slice disables the
+/// chain. If any pass fails to compile, the whole chain is dropped (empty vecs) so we never run a
+/// partial chain.
+pub fn set_custom_global_passes(renderer: &mut GlesRenderer, passes: &[(String, bool)]) {
+    let mut display = Vec::with_capacity(passes.len());
+    let mut buffers = Vec::with_capacity(passes.len());
+    let mut ok = true;
+
+    for (src, hyprland) in passes {
+        match compile_global_program(renderer, src, *hyprland) {
+            Ok(p) => display.push(p),
             Err(err) => {
-                warn!("error compiling custom global shader: {err:?}");
-                return;
+                warn!("error compiling global shader pass: {err:?}");
+                ok = false;
+                break;
             }
         }
-    } else {
-        None
-    };
-
-    if let Some(prev) = Shaders::get(renderer).replace_custom_global_program(program) {
-        if let Err(err) = prev.destroy(renderer) {
-            warn!("error destroying previous custom global shader: {err:?}");
-        }
-    }
-
-    // Dedicated feedback buffer: compile a second program only when the source defines
-    // `global_buffer` (niri mode only; hyprland has no such function). When absent, install None
-    // so switching away from a buffer shader clears the old buffer program.
-    let buffer_program = match (src, hyprland) {
-        (Some(src), false) if src.contains("global_buffer") => {
-            match compile_global_buffer_program(renderer, src) {
+        let buffer = match (src.contains("global_buffer"), *hyprland) {
+            (true, false) => match compile_global_buffer_program(renderer, src) {
                 Ok(p) => Some(p),
                 Err(err) => {
-                    warn!("error compiling global_buffer shader: {err:?}");
+                    warn!("error compiling global_buffer pass: {err:?}");
                     None
                 }
-            }
+            },
+            _ => None,
+        };
+        buffers.push(buffer);
+    }
+
+    if !ok {
+        // Destroy anything compiled this round before bailing.
+        for p in display.drain(..) {
+            let _ = p.destroy(renderer);
         }
-        _ => None,
-    };
-    if let Some(prev) = Shaders::get(renderer).replace_custom_global_buffer_program(buffer_program) {
-        if let Err(err) = prev.destroy(renderer) {
-            warn!("error destroying previous global_buffer shader: {err:?}");
+        for p in buffers.drain(..).flatten() {
+            let _ = p.destroy(renderer);
+        }
+        display = Vec::new();
+        buffers = Vec::new();
+    }
+
+    let shaders = Shaders::get(renderer);
+    let old_display = shaders.custom_global_passes.replace(display);
+    let old_buffers = shaders.custom_global_pass_buffers.replace(buffers);
+    for p in old_display {
+        if let Err(err) = p.destroy(renderer) {
+            warn!("error destroying previous global pass: {err:?}");
+        }
+    }
+    for p in old_buffers.into_iter().flatten() {
+        if let Err(err) = p.destroy(renderer) {
+            warn!("error destroying previous global_buffer pass: {err:?}");
         }
     }
 }
