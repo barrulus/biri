@@ -2,6 +2,39 @@ use knuffel::errors::DecodeError;
 
 use crate::global_shader::{GlobalShaderPass, GlobalShaderPassPart};
 
+/// Resolve a scoped-shader source spec into an ordered `(source, hyprland)` pass list. Empty
+/// `passes` => the top-level `source`/`path` becomes a length-1 chain. Any pass that cannot be
+/// resolved => empty (disabled). `expand` maps a `path` to its file contents. Per-pass `mode`
+/// defaults to `default_mode`.
+pub(crate) fn resolve_scoped_pass_sources(
+    source: &Option<String>,
+    path: &Option<String>,
+    default_mode: &str,
+    passes: &[GlobalShaderPassPart],
+    expand: impl Fn(&str) -> Option<String>,
+) -> Vec<(String, bool)> {
+    let resolve_one = |src: &Option<String>, p: &Option<String>, mode: &str| match (src, p) {
+        (Some(s), None) if !s.trim().is_empty() => Some((s.clone(), mode == "hyprland")),
+        (None, Some(pp)) => expand(pp).map(|s| (s, mode == "hyprland")),
+        _ => None,
+    };
+    if passes.is_empty() {
+        return match resolve_one(source, path, default_mode) {
+            Some(pair) => vec![pair],
+            None => Vec::new(),
+        };
+    }
+    let mut out = Vec::with_capacity(passes.len());
+    for pass in passes {
+        let mode = pass.mode.as_deref().unwrap_or(default_mode);
+        match resolve_one(&pass.source, &pass.path, mode) {
+            Some(pair) => out.push(pair),
+            None => return Vec::new(),
+        }
+    }
+    out
+}
+
 /// A scalar that accepts both KDL integer and float literals and stores them as f64.
 /// Used for geometry coordinate/dimension properties.
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
@@ -115,26 +148,17 @@ impl RegionShader {
     /// => the top-level `source`/`path` becomes a length-1 chain. Any pass that cannot be resolved
     /// => empty (the whole region is disabled). `expand` maps a `path` to its file contents.
     pub fn pass_sources(&self, expand: impl Fn(&str) -> Option<String>) -> Vec<(String, bool)> {
-        let resolve_one =
-            |source: &Option<String>, path: &Option<String>, mode: &str| match (source, path) {
-                (Some(s), None) if !s.trim().is_empty() => Some((s.clone(), mode == "hyprland")),
-                (None, Some(p)) => expand(p).map(|s| (s, mode == "hyprland")),
-                _ => None,
-            };
-        if self.passes.is_empty() {
-            return match resolve_one(&self.source, &self.path, &self.mode) {
-                Some(pair) => vec![pair],
-                None => Vec::new(),
-            };
-        }
-        let mut out = Vec::with_capacity(self.passes.len());
-        for pass in &self.passes {
-            match resolve_one(&pass.source, &pass.path, &pass.mode) {
-                Some(pair) => out.push(pair),
-                None => return Vec::new(),
-            }
-        }
-        out
+        // Convert resolved passes to part form for the shared resolver.
+        let parts: Vec<GlobalShaderPassPart> = self
+            .passes
+            .iter()
+            .map(|p| GlobalShaderPassPart {
+                source: p.source.clone(),
+                path: p.path.clone(),
+                mode: Some(p.mode.clone()),
+            })
+            .collect();
+        resolve_scoped_pass_sources(&self.source, &self.path, &self.mode, &parts, expand)
     }
 }
 

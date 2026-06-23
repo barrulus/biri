@@ -4,9 +4,35 @@ use crate::appearance::{
     BackgroundEffect, BackgroundEffectRule, BlockOutFrom, BorderRule, CornerRadius, ShadowRule,
     TabIndicatorRule,
 };
+use crate::global_shader::GlobalShaderPassPart;
 use crate::layout::DefaultPresetSize;
 use crate::utils::{MergeWith, RegexEq};
 use crate::FloatOrInt;
+
+#[derive(knuffel::Decode, Debug, Default, Clone, PartialEq)]
+pub struct ShaderRule {
+    #[knuffel(child, unwrap(argument))]
+    pub source: Option<String>,
+    #[knuffel(child, unwrap(argument))]
+    pub path: Option<String>,
+    #[knuffel(child, unwrap(argument))]
+    pub mode: Option<String>,
+    #[knuffel(children(name = "pass"))]
+    pub passes: Vec<GlobalShaderPassPart>,
+}
+
+impl ShaderRule {
+    pub fn pass_sources(&self, expand: impl Fn(&str) -> Option<String>) -> Vec<(String, bool)> {
+        let mode = self.mode.as_deref().unwrap_or("niri");
+        crate::region_shader::resolve_scoped_pass_sources(
+            &self.source,
+            &self.path,
+            mode,
+            &self.passes,
+            expand,
+        )
+    }
+}
 
 #[derive(knuffel::Decode, Debug, Default, Clone, PartialEq)]
 pub struct WindowRule {
@@ -77,6 +103,8 @@ pub struct WindowRule {
     pub tiled_state: Option<bool>,
     #[knuffel(child, default)]
     pub background_effect: BackgroundEffectRule,
+    #[knuffel(child)]
+    pub shader: Option<ShaderRule>,
     #[knuffel(child, default)]
     pub popups: PopupsRule,
 }
@@ -160,4 +188,33 @@ pub enum RelativeTo {
     Bottom,
     Left,
     Right,
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::Config;
+
+    #[test]
+    fn window_rule_shader_parses() {
+        let config = Config::parse_mem(
+            r##"
+            window-rule {
+                match app-id="Alacritty"
+                shader {
+                    source "vec4 global_color(vec3 c){ return tex2D_screen(c.xy).bgra; }"
+                }
+            }
+            window-rule {
+                match app-id="foo"
+            }
+            "##,
+        )
+        .unwrap();
+        let r0 = &config.window_rules[0];
+        assert!(r0.shader.is_some());
+        let chain = r0.shader.as_ref().unwrap().pass_sources(|_| None);
+        assert_eq!(chain.len(), 1);
+        assert!(chain[0].0.contains("bgra"));
+        assert!(config.window_rules[1].shader.is_none());
+    }
 }
