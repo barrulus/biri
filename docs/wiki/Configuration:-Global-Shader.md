@@ -59,6 +59,7 @@ Fields:
 | `reads-cursor` | flag | off | Include cursor pixels in `niri_screen`. See [reads-cursor](#reads-cursor) below. |
 | `redraw` | string | `"auto"` | Redraw scheduling. `"auto"`: animate every frame only if the shader uses `niri_time` or the feedback buffer (`niri_prev`/`tex2D_prev`); otherwise redraw only on real damage. `"on-damage"`: never force idle redraws. `"continuous"`: always redraw every frame. See [Redraw scheduling](#redraw-scheduling) below. |
 | `cursor-radius` | integer (px) | — | For cursor-local shaders: reshade and damage only a box of this radius (logical px) around the cursor, preserving direct scanout elsewhere. Omit for a whole-output effect. See [cursor-radius](#cursor-radius-region-mode) below. |
+| `pass` | block (repeatable) | — | One pass in a multi-pass chain. When any `pass` block is present it replaces the top-level `source`/`path`. See [Multi-pass chains](#multi-pass-chains-pass) below. |
 
 If both `source` and `path` are set, or if neither is set while `enable` is present, biri logs a warning and disables the effect — the compositor never crashes.
 
@@ -196,6 +197,63 @@ only.
 
 ---
 
+### Multi-pass chains (`pass`)
+
+Instead of a single shader, you can run an ordered **chain** of shaders — e.g. blur → grade →
+vignette — where each pass reads the previous pass's output. List the passes as repeatable
+`pass {}` blocks inside `global-shader {}`. When one or more `pass` blocks are present they
+*are* the chain, and the top-level `source`/`path` are ignored.
+
+```kdl
+global-shader {
+    enable
+    pass {
+        path "/home/user/.config/niri/blur.frag"
+    }
+    pass {
+        source "vec4 global_color(vec3 c){ return tex2D_screen(c.xy); }"
+    }
+    pass {
+        path "/home/user/.config/niri/vignette.frag"
+        mode "niri"
+    }
+}
+```
+
+Each pass is an ordinary `global_color` shader (or a `hyprland`-mode raw shader). What it sees:
+
+| Sampler / helper | Meaning for pass *N* |
+|---|---|
+| `niri_screen` / `tex2D_screen` | this pass's **input** = pass *N−1*'s output. Pass 0 = the real composited screen. |
+| `niri_source` / `tex2D_source` | the **original** composited screen, unfiltered — the same for every pass. |
+| `niri_prev` / `tex2D_prev` | this pass's **own** output from last frame (per-pass feedback). |
+| `niri_screen_prev` / `tex2D_screen_prev` | the previous frame's real screen (frame-level, all passes). |
+| `niri_buffer` / `tex2D_buffer` + `global_buffer` | this pass's own dedicated accumulator (see above), per pass. |
+
+Because pass 0 reads the real screen as `niri_screen` (for pass 0, `niri_source` and `niri_screen`
+both point to the real screen; later passes still see the original via `niri_source`), with
+`niri_prev` being its own last output, **any existing single shader drops into a chain unchanged**,
+and a chain of one pass behaves exactly like the single-shader form.
+
+The whole-chain flags still live on the outer `global-shader {}` block: `reads-cursor` governs
+whether cursor pixels appear in `niri_screen` for the entire chain, and `redraw` controls the
+chain's scheduling.
+
+Per-pass fields:
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `source` | string | — | Inline GLSL for this pass. Mutually exclusive with `path`. |
+| `path` | string | — | Path to a `.frag` file for this pass. Mutually exclusive with `source`. |
+| `mode` | string | the block's `mode` | API flavour for this pass: `"niri"` or `"hyprland"`. Lets you mix a hyprland pass into a niri chain. |
+
+Notes: a multi-pass chain (two or more passes) is always whole-output — `cursor-radius` region
+mode applies only to a single-pass effect. The chain is treated as animated if **any** pass uses
+`niri_time`, feedback (`niri_prev`/`niri_screen_prev`), or a `global_buffer`. If any pass fails to
+resolve or compile, the whole chain is disabled and the screen renders normally.
+
+---
+
 ### hyprland Mode
 
 In hyprland mode you supply a complete raw fragment shader with its own `main()` that writes `gl_FragColor`.
@@ -320,4 +378,4 @@ Region mode applies only when the shader uses `niri_cursor` and is **not** anima
 
 - **TTY/DRM only.** The effect applies on the real (DRM/KMS) output. It is intentionally **not** applied on the nested winit backend (running niri in a window), nor to screenshots or screen recordings (screencast/screencopy) — those render without the effect.
 - **Output transform.** The effect is verified on outputs with the default (`normal`) transform. On outputs configured with a non-default `transform` (e.g. `90`, `270`, `flipped`), the shader's view of `niri_screen`/`niri_prev` may be mis-oriented. If you use a rotated or flipped output, verify your shader there before relying on it.
-- **Single shader.** One global shader applies to all outputs; per-output or per-window shaders are not supported.
+- **Whole-output only.** One global shader (or one multi-pass chain) applies to all outputs; per-output, per-window, or per-layer shaders are not supported. Multi-pass chains are supported (see [Multi-pass chains](#multi-pass-chains-pass)) but a chain of two or more passes is always whole-output (no `cursor-radius` region mode).
