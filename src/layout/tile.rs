@@ -1,5 +1,4 @@
 use core::f64;
-use std::cell::RefCell;
 use std::rc::Rc;
 
 use niri_config::utils::MergeWith as _;
@@ -121,16 +120,6 @@ pub struct Tile<W: LayoutElement> {
 
     /// Configurable properties of the layout.
     pub(super) options: Rc<Options>,
-
-    /// Persistent offscreen for the per-window shader's window-content render-to-texture, reused
-    /// across frames. Allocating a fresh `OffscreenBuffer` (GPU texture) every frame causes NVIDIA
-    /// driver sync stalls → severe input latency; reusing it keeps the texture and lets the
-    /// offscreen's internal damage tracker skip re-rendering an idle window.
-    shader_offscreen: OffscreenBuffer,
-
-    /// Persistent intermediate offscreens for a multi-pass window shader (one per pass except the
-    /// last), reused across frames. Resized only when the chain length changes.
-    shader_pass_offscreens: RefCell<Vec<Rc<OffscreenBuffer>>>,
 }
 
 niri_render_elements! {
@@ -226,8 +215,6 @@ impl<W: LayoutElement> Tile<W> {
             scale,
             clock,
             options,
-            shader_offscreen: OffscreenBuffer::default(),
-            shader_pass_offscreens: RefCell::new(Vec::new()),
         }
     }
 
@@ -1179,87 +1166,54 @@ impl<W: LayoutElement> Tile<W> {
             }
         }
 
-        // If a per-window shader is configured and its program chain is compiled, render ONLY the
-        // window's own content into an offscreen and run the scoped shader chain over it. Border,
-        // shadow and focus ring are emitted normally below, OUTSIDE this offscreen, so they are not
-        // shaded and the offscreen is sized to the window itself (not window + decorations).
-        //
-        // This mirrors the resize-animation path above: render the window with `render_normal` into
-        // an `OffscreenBuffer`, then push a single element (here a `ScopedShaderElement`) in place
-        // of the raw window content. Crash-safety: if the rule is absent or the program is missing
-        // we leave `pushed_window` false and fall through to the normal window render path, so the
-        // window is never blank/frozen.
-        let mut pushed_window = false;
+        // If a per-window shader is configured and its program chain is compiled, push a
+        // capture-based scoped shader element ABOVE the window content (it is pushed first, so it
+        // is topmost and drawn last — capturing the composited window in its rectangle, then
+        // shading it). We do NOT suppress the normal window render: the window composites below and
+        // the shaded capture covers it. This is a region shader pinned to the window's geometry — a
+        // cheap framebuffer blit + shade — rather than rasterizing the window's surface tree into
+        // an offscreen every frame (which `OffscreenBuffer`'s `is_unique_reference` reset
+        // would force, since the shader element retains a clone of the offscreen texture
+        // across frames). Border, shadow and focus ring are emitted below and lie OUTSIDE
+        // the window rectangle, so they are not captured or shaded. Crash-safety: if the
+        // rule is absent or the program is missing, nothing is pushed and the window
+        // renders normally.
         if !pushed_resize {
             if let Some(resolved) = self.window.rules().shader.clone() {
-                let mut gctx = ctx.as_gles();
-                let have_program = Shaders::get(gctx.renderer)
+                let have_program = Shaders::get(ctx.renderer)
                     .program(ProgramType::Scoped(resolved.key, 0))
                     .is_some();
                 if have_program {
-                    // Render only the window content into an offscreen, at the origin.
-                    let mut window_elements = Vec::new();
-                    self.window.render_normal(
-                        gctx.r(),
-                        Point::from((0., 0.)),
-                        scale,
-                        win_alpha,
-                        &mut |elem| window_elements.push(elem),
+                    let area = Rectangle::new(window_render_loc, window_size);
+                    let size_phys = (
+                        (window_size.w * self.scale) as f32,
+                        (window_size.h * self.scale) as f32,
                     );
-
-                    // Reuse the persistent per-tile offscreen (no per-frame GPU texture alloc).
-                    match self
-                        .shader_offscreen
-                        .render(gctx.renderer, scale, &window_elements)
-                    {
-                        Ok((off_elem, _sync, _data)) => {
-                            let tex = off_elem.texture().clone();
-                            let area = Rectangle::new(window_render_loc, window_size);
-                            let size_phys = (
-                                (window_size.w * self.scale) as f32,
-                                (window_size.h * self.scale) as f32,
-                            );
-                            let n_passes = resolved.passes.len();
-                            // Reuse the persistent intermediate offscreens, resizing only when the
-                            // chain length changes.
-                            let want = n_passes.saturating_sub(1);
-                            {
-                                let mut pass_offscreens = self.shader_pass_offscreens.borrow_mut();
-                                if pass_offscreens.len() != want {
-                                    *pass_offscreens = (0..want)
-                                        .map(|_| Rc::new(OffscreenBuffer::default()))
-                                        .collect();
-                                }
-                            }
-                            let offscreens = self.shader_pass_offscreens.borrow().clone();
-                            let elem = ScopedShaderElement::new(
-                                Id::new(),
-                                area,
-                                self.scale as f32,
-                                0.0,                  // niri_time = 0 (static v1)
-                                (0.0, 0.0),           // niri_cursor = (0, 0) (v1)
-                                [0.0, 0.0, 1.0, 1.0], // region_norm: whole window
-                                size_phys,            // niri_output_size = window physical size
-                                resolved.key,
-                                n_passes,
-                                ScopedSource::Texture(tex),
-                                offscreens,
-                            );
-                            push(elem.into());
-                            pushed_window = true;
-                        }
-                        Err(err) => {
-                            warn!("window shader offscreen failed: {err:?}");
-                        }
-                    }
+                    let n_passes = resolved.passes.len();
+                    let offscreens = (0..n_passes.saturating_sub(1))
+                        .map(|_| Rc::new(OffscreenBuffer::default()))
+                        .collect::<Vec<_>>();
+                    let elem = ScopedShaderElement::new(
+                        Id::new(),
+                        area,
+                        self.scale as f32,
+                        0.0,                  // niri_time = 0 (static v1)
+                        (0.0, 0.0),           // niri_cursor = (0, 0) (v1)
+                        [0.0, 0.0, 1.0, 1.0], // region_norm: whole window
+                        size_phys,            // niri_output_size = window physical size
+                        resolved.key,
+                        n_passes,
+                        ScopedSource::Capture,
+                        offscreens,
+                    );
+                    push(elem.into());
                 }
             }
         }
 
-        // If we're not resizing (and didn't already push the shaded window), render the window
-        // itself.
+        // Render the window itself (composites below the shaded capture above, when present).
         let has_border_shader = BorderRenderElement::has_shader(ctx.renderer);
-        if !pushed_resize && !pushed_window {
+        if !pushed_resize {
             let geo = Rectangle::new(window_render_loc, window_size);
             let radius = radius.fit_to(window_size.w as f32, window_size.h as f32);
 
