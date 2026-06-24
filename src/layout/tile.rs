@@ -1,4 +1,5 @@
 use core::f64;
+use std::cell::RefCell;
 use std::rc::Rc;
 
 use niri_config::utils::MergeWith as _;
@@ -120,6 +121,16 @@ pub struct Tile<W: LayoutElement> {
 
     /// Configurable properties of the layout.
     pub(super) options: Rc<Options>,
+
+    /// Persistent offscreen for the per-window shader's window-content render-to-texture, reused
+    /// across frames. Allocating a fresh `OffscreenBuffer` (GPU texture) every frame causes NVIDIA
+    /// driver sync stalls → severe input latency; reusing it keeps the texture and lets the
+    /// offscreen's internal damage tracker skip re-rendering an idle window.
+    shader_offscreen: OffscreenBuffer,
+
+    /// Persistent intermediate offscreens for a multi-pass window shader (one per pass except the
+    /// last), reused across frames. Resized only when the chain length changes.
+    shader_pass_offscreens: RefCell<Vec<Rc<OffscreenBuffer>>>,
 }
 
 niri_render_elements! {
@@ -215,6 +226,8 @@ impl<W: LayoutElement> Tile<W> {
             scale,
             clock,
             options,
+            shader_offscreen: OffscreenBuffer::default(),
+            shader_pass_offscreens: RefCell::new(Vec::new()),
         }
     }
 
@@ -1194,8 +1207,11 @@ impl<W: LayoutElement> Tile<W> {
                         &mut |elem| window_elements.push(elem),
                     );
 
-                    let window_offscreen = OffscreenBuffer::default();
-                    match window_offscreen.render(gctx.renderer, scale, &window_elements) {
+                    // Reuse the persistent per-tile offscreen (no per-frame GPU texture alloc).
+                    match self
+                        .shader_offscreen
+                        .render(gctx.renderer, scale, &window_elements)
+                    {
                         Ok((off_elem, _sync, _data)) => {
                             let tex = off_elem.texture().clone();
                             let area = Rectangle::new(window_render_loc, window_size);
@@ -1204,9 +1220,18 @@ impl<W: LayoutElement> Tile<W> {
                                 (window_size.h * self.scale) as f32,
                             );
                             let n_passes = resolved.passes.len();
-                            let offscreens = (0..n_passes.saturating_sub(1))
-                                .map(|_| Rc::new(OffscreenBuffer::default()))
-                                .collect::<Vec<_>>();
+                            // Reuse the persistent intermediate offscreens, resizing only when the
+                            // chain length changes.
+                            let want = n_passes.saturating_sub(1);
+                            {
+                                let mut pass_offscreens = self.shader_pass_offscreens.borrow_mut();
+                                if pass_offscreens.len() != want {
+                                    *pass_offscreens = (0..want)
+                                        .map(|_| Rc::new(OffscreenBuffer::default()))
+                                        .collect();
+                                }
+                            }
+                            let offscreens = self.shader_pass_offscreens.borrow().clone();
                             let elem = ScopedShaderElement::new(
                                 Id::new(),
                                 area,
