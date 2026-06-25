@@ -3,10 +3,13 @@ use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 
 use glam::Mat3;
+use smithay::backend::allocator::Fourcc;
 use smithay::backend::renderer::gles::{
-    GlesError, GlesFrame, GlesRenderer, GlesTexProgram, Uniform, UniformName, UniformType,
-    UniformValue,
+    GlesError, GlesFrame, GlesRenderer, GlesTexProgram, GlesTexture, Uniform, UniformName,
+    UniformType, UniformValue,
 };
+use smithay::backend::renderer::ImportMem;
+use smithay::utils::Size;
 
 use super::renderer::NiriRenderer;
 use super::shader_element::ShaderProgram;
@@ -26,6 +29,9 @@ pub struct Shaders {
     pub custom_global_passes: RefCell<Vec<ShaderProgram>>,
     pub custom_global_pass_buffers: RefCell<Vec<Option<ShaderProgram>>>,
     pub scoped: RefCell<HashMap<u64, Vec<ShaderProgram>>>,
+    /// 1×1 transparent-black texture used to seed a feedback shader's first-frame niri_prev /
+    /// niri_buffer (an "empty feedback buffer"), instead of ingesting the live screen.
+    pub black_texture: GlesTexture,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -158,6 +164,11 @@ impl Shaders {
             })
             .ok();
 
+        // 1×1 transparent black; sampled (clamped) it returns black for every uv at any size.
+        let black_texture = renderer
+            .import_memory(&[0u8, 0, 0, 0], Fourcc::Abgr8888, Size::from((1, 1)), false)
+            .expect("importing a 1x1 black texture must not fail");
+
         Self {
             border,
             shadow,
@@ -172,6 +183,7 @@ impl Shaders {
             custom_global_passes: RefCell::new(Vec::new()),
             custom_global_pass_buffers: RefCell::new(Vec::new()),
             scoped: RefCell::new(HashMap::new()),
+            black_texture,
         }
     }
 
