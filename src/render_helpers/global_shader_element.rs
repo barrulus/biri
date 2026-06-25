@@ -162,6 +162,10 @@ impl RenderElement<GlesRenderer> for GlobalShaderElement {
             );
         }
 
+        // Empty-feedback seed: on the first frame a pass's niri_prev / niri_buffer has no prior
+        // value; seed with black so accumulators start empty instead of ingesting the live screen.
+        let black = Shaders::get_from_frame(frame).black_texture.clone();
+
         // Previous frame's screen; falls back to this frame's screen on the first frame.
         let screen_prev_tex = self
             .screen_prev
@@ -192,8 +196,8 @@ impl RenderElement<GlesRenderer> for GlobalShaderElement {
 
         for (i, pass) in self.passes.iter().enumerate() {
             // This pass's own previous-frame output (its niri_prev); on the first frame fall back
-            // to this pass's input so feedback shaders start from a sensible image.
-            let prev_tex = pass.prev.clone().unwrap_or_else(|| input.clone());
+            // to black so accumulators start empty instead of ingesting the live screen.
+            let prev_tex = pass.prev.clone().unwrap_or_else(|| black.clone());
 
             // --- Dedicated buffer sub-pass for this pass (if it defines global_buffer) ---
             // Render the GlobalPassBuffer(i) program into a clean offscreen (reading last frame's
@@ -202,12 +206,8 @@ impl RenderElement<GlesRenderer> for GlobalShaderElement {
                 .program(ProgramType::GlobalPassBuffer(i))
                 .is_some()
             {
-                // First frame (or after reload) there is no prior buffer; fall back to the previous
-                // screen. Overwritten next frame, so only cosmetic for one frame.
-                let buf_prev = pass
-                    .buffer_prev
-                    .clone()
-                    .unwrap_or_else(|| screen_prev_tex.clone());
+                // First frame: seed niri_buffer with black (empty accumulator), not the screen.
+                let buf_prev = pass.buffer_prev.clone().unwrap_or_else(|| black.clone());
 
                 let mut buf_textures = HashMap::new();
                 buf_textures.insert("niri_screen".to_string(), input.clone());
