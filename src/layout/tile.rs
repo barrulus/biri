@@ -1179,7 +1179,12 @@ impl<W: LayoutElement> Tile<W> {
         // rule is absent or the program is missing, nothing is pushed and the window
         // renders normally.
         if !pushed_resize {
-            if let Some(resolved) = self.window.rules().shader.clone() {
+            if let Some(resolved) = self.window.rules().shader.clone().filter(|_| {
+                crate::render_helpers::target_renders_shaders(
+                    ctx.target,
+                    self.options.shaders_in_capture,
+                )
+            }) {
                 let have_program = Shaders::get(ctx.renderer)
                     .program(ProgramType::Scoped(resolved.key, 0))
                     .is_some();
