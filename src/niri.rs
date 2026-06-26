@@ -4299,10 +4299,10 @@ impl Niri {
 
         if ctx.target == RenderTarget::Output {
             if let Some(preview) = self.config.borrow().debug.preview_render {
-                // Note: this retargets away from RenderTarget::Output, which means the global
-                // post-process shader (gated on `ctx.target == Output` further down) is disabled
-                // while debug.preview_render is active — the preview deliberately simulates the
-                // screencast/capture path, which is shaderless by design.
+                // Note: this retargets away from RenderTarget::Output. The global post-process
+                // shader is now gated on `target_renders_shaders`, so the preview is shaderless
+                // unless `shaders-in-capture` is enabled — in which case it shows shaders via
+                // the same capture path.
                 ctx.target = match preview {
                     PreviewRender::Screencast => RenderTarget::Screencast,
                     PreviewRender::ScreenCapture => RenderTarget::ScreenCapture,
@@ -4341,10 +4341,11 @@ impl Niri {
             push
         };
 
-        // Global post-process shader: only push for the real Output sink (never screenshots or
-        // screencopy), so the effect does not leak into recordings and the per-output ping-pong
-        // state is not corrupted by capture renders. A compiled program is also required; this
-        // gate has zero overhead when no program is loaded.
+        // Global post-process shader: always pushed for the real Output sink; pushed for capture
+        // targets (Screencast/ScreenCapture) only when `shaders-in-capture` is enabled. Capture
+        // renders use throwaway feedback sinks so the per-output ping-pong state is never
+        // corrupted. A compiled program is also required; this gate has zero overhead when no
+        // program is loaded.
         //
         // When reads_cursor is active, the element must render ABOVE the cursor (pushed before
         // render_pointer) so the cursor is captured into the screen texture. Otherwise it renders
@@ -4423,9 +4424,8 @@ impl Niri {
                         );
                         if box_rect.size.w <= 0.0 || box_rect.size.h <= 0.0 {
                             // Cursor is off this output (e.g. on another monitor) so the clamped
-                            // box is empty: render whole-output here. A
-                            // zero-size region would otherwise
-                            // divide by zero in the shader's tex2D_* remap.
+                            // box is empty: render whole-output here. A zero-size region would
+                            // otherwise divide by zero in the shader's tex2D_* remap.
                             (full, [0.0, 0.0, 1.0, 1.0])
                         } else {
                             let region_norm = [
@@ -4443,12 +4443,12 @@ impl Niri {
                 // A fresh Id every frame makes smithay damage both the new box and the vacated old
                 // box (the removed element's last geometry), which is what gives region mode its
                 // correct box(cursor) ∪ box(prev_cursor) damage. If this is ever changed to a
-                // stable per-output Id for a damage optimization, region mode must
-                // damage the vacated box explicitly or moving-cursor effects will
-                // leave trails. Size the per-output chain state to the active chain
-                // length and snapshot each pass's feedback handles for this frame.
-                // The borrow is dropped before constructing the element (it only
-                // needs the cloned handles, not the chain itself).
+                // stable per-output Id for a damage optimization, region mode must damage
+                // the vacated box explicitly or moving-cursor effects will leave trails. Size the
+                // per-output chain state to the active chain length and snapshot
+                // each pass's feedback handles for this frame. The borrow is
+                // dropped before constructing the element (it only needs the cloned
+                // handles, not the chain itself).
                 let passes = {
                     let mut chain = state.global_shader_chain.borrow_mut();
                     chain.resize(n_passes);
