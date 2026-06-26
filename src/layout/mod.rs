@@ -397,6 +397,7 @@ pub struct Options {
     pub disable_resize_throttling: bool,
     pub disable_transactions: bool,
     pub deactivate_unfocused_windows: bool,
+    pub shaders_in_capture: bool,
 }
 
 #[allow(clippy::large_enum_variant)]
@@ -657,6 +658,7 @@ impl Options {
             disable_resize_throttling: config.debug.disable_resize_throttling,
             disable_transactions: config.debug.disable_transactions,
             deactivate_unfocused_windows: config.debug.deactivate_unfocused_windows,
+            shaders_in_capture: config.shaders_in_capture,
         }
     }
 

@@ -129,6 +129,12 @@ impl RenderTarget {
     }
 }
 
+/// Whether shaders (global / region / window) should render for this target. Always on for the
+/// real Output; on for capture targets (Screencast / ScreenCapture) only when opted in.
+pub fn target_renders_shaders(target: RenderTarget, capture_enabled: bool) -> bool {
+    target == RenderTarget::Output || capture_enabled
+}
+
 impl ToRenderElement for BakedBuffer<TextureBuffer<GlesTexture>> {
     type RenderElement = PrimaryGpuTextureRenderElement;
 
