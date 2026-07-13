@@ -548,6 +548,9 @@ impl Mapped {
                 renderer,
                 target: RenderTarget::Screencast,
                 xray: None,
+                // Single-window cast is a separate render path with no access to the
+                // compositor time origin; per-window shaders are static here (v1).
+                shader_time: 0.0,
             },
             location,
             scale,

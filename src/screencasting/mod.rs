@@ -597,6 +597,7 @@ impl Niri {
                     renderer,
                     target: RenderTarget::Screencast,
                     xray: None,
+                    shader_time: self.window_shader_start.elapsed().as_secs_f32(),
                 };
                 self.render(ctx, output, false, &mut |elem| elements.push(elem.into()));
 

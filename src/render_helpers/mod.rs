@@ -61,6 +61,9 @@ pub struct RenderCtx<'a, R> {
     pub renderer: &'a mut R,
     pub target: RenderTarget,
     pub xray: Option<&'a Xray>,
+    /// Seconds since the compositor's window-shader time origin, bound as `niri_time` for
+    /// per-window scoped shaders. `0.0` on incidental render paths that don't animate windows.
+    pub shader_time: f32,
 }
 
 impl<'a, R> RenderCtx<'a, R> {
@@ -71,6 +74,7 @@ impl<'a, R> RenderCtx<'a, R> {
             renderer: self.renderer,
             target: self.target,
             xray: self.xray,
+            shader_time: self.shader_time,
         }
     }
 }
@@ -81,6 +85,7 @@ impl<'a, R: AsGlesRenderer> RenderCtx<'a, R> {
             renderer: self.renderer.as_gles_renderer(),
             target: self.target,
             xray: self.xray,
+            shader_time: self.shader_time,
         }
     }
 }

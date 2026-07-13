@@ -201,6 +201,12 @@ pub struct Niri {
     /// `None` = not yet computed this load.
     pub global_shader_caps: Cell<Option<niri_config::GlobalShaderCaps>>,
 
+    /// Shared origin for per-window scoped shaders' `niri_time`. Set once at startup and never
+    /// reset, so all window shaders animate in-phase off one monotonic real-seconds clock. Unlike
+    /// the global shader's per-output `global_shader_start`, this is compositor-global because
+    /// window shaders can exist without a global shader.
+    pub window_shader_start: std::time::Instant,
+
     /// Output config from the config file.
     ///
     /// This does not include transient output config changes done via IPC. It is only used when
@@ -2157,6 +2163,8 @@ impl State {
                     target: RenderTarget::Output,
                     renderer,
                     xray: None,
+                    // Feeds a static unmap snapshot (Tile::render_snapshot uses shader_time 0).
+                    shader_time: 0.0,
                 };
 
                 self.niri.fill_xray_elements(ctx.r(), output);
@@ -2606,6 +2614,7 @@ impl Niri {
         let mut niri = Self {
             config,
             global_shader_caps: Cell::new(None),
+            window_shader_start: std::time::Instant::now(),
             config_file_output_config,
             config_file_watcher: None,
 
@@ -5022,6 +5031,15 @@ impl Niri {
                 })
             };
 
+            // Decide whether any window on this output runs a time-driven per-window shader.
+            // Scans the resolved shader sources the same way region shaders are scanned above;
+            // static per-window shaders (no niri_time usage) impose no continuous-redraw cost.
+            let window_shader_animate = self.layout.windows_for_output(output).any(|win| {
+                win.rules().shader.as_ref().map_or(false, |shader| {
+                    niri_config::GlobalShaderCaps::scan_chain(&shader.passes).is_animating()
+                })
+            });
+
             let state = self.output_state.get_mut(output).unwrap();
             state.unfinished_animations_remain = self.layout.are_animations_ongoing(Some(output));
             state.unfinished_animations_remain |=
@@ -5048,6 +5066,8 @@ impl Niri {
             state.unfinished_animations_remain |= global_shader_animate;
             // Animated region shaders on this output also need continuous redraws.
             state.unfinished_animations_remain |= region_shader_animate;
+            // Time-driven per-window shaders on this output also need continuous redraws.
+            state.unfinished_animations_remain |= window_shader_animate;
 
             // Render.
             res = backend.render(self, output, target_presentation_time);
@@ -5704,6 +5724,7 @@ impl Niri {
                         renderer,
                         target: RenderTarget::ScreenCapture,
                         xray: None,
+                        shader_time: self.window_shader_start.elapsed().as_secs_f32(),
                     };
                     let offset = screencopy.region_loc().upscale(-1);
                     let mut elements = Vec::new();
@@ -5782,6 +5803,7 @@ impl Niri {
             renderer,
             target: RenderTarget::ScreenCapture,
             xray: None,
+            shader_time: self.window_shader_start.elapsed().as_secs_f32(),
         };
         let offset = screencopy.region_loc().upscale(-1);
         let mut elements = Vec::new();
@@ -5907,6 +5929,7 @@ impl Niri {
                     renderer,
                     target,
                     xray: None,
+                    shader_time: self.window_shader_start.elapsed().as_secs_f32(),
                 };
                 let elements = self.render_to_vec(ctx, &output, false);
                 let elements = elements.iter().rev();
@@ -5989,6 +6012,7 @@ impl Niri {
             renderer,
             target: RenderTarget::ScreenCapture,
             xray: None,
+            shader_time: self.window_shader_start.elapsed().as_secs_f32(),
         };
         let elements = self.render_to_vec(ctx, output, include_pointer);
         let elements = elements.iter().rev();
@@ -6044,6 +6068,7 @@ impl Niri {
             renderer,
             target: RenderTarget::ScreenCapture,
             xray: None,
+            shader_time: self.window_shader_start.elapsed().as_secs_f32(),
         };
         mapped.render(
             ctx,
@@ -6210,6 +6235,7 @@ impl Niri {
             renderer,
             target: RenderTarget::ScreenCapture,
             xray: None,
+            shader_time: self.window_shader_start.elapsed().as_secs_f32(),
         };
         let elements = self.render_to_vec(ctx, &output, include_pointer);
         let elements = elements.iter().rev();
@@ -6688,6 +6714,7 @@ impl Niri {
                         renderer,
                         target,
                         xray: None,
+                        shader_time: self.window_shader_start.elapsed().as_secs_f32(),
                     };
                     let elements = self.render_to_vec(ctx, &output, false);
                     let elements = elements.iter().rev();

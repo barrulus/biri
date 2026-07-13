@@ -229,6 +229,7 @@ impl Winit {
             renderer: self.backend.renderer(),
             target: RenderTarget::Output,
             xray: None,
+            shader_time: niri.window_shader_start.elapsed().as_secs_f32(),
         };
         let mut elements = niri.render_to_vec(ctx, output, true);
 
