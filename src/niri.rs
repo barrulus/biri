@@ -504,6 +504,46 @@ impl GlobalShaderChain {
     }
 }
 
+/// Decision for one frame of the `shader-animation-max-fps` throttle.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ShaderFrameDecision {
+    /// This is the first shader frame, or a full interval has elapsed: render it as a shader
+    /// frame and schedule the next wake one interval out.
+    Due,
+    /// Not yet due; the next shader frame is `remaining` away.
+    Wait(Duration),
+}
+
+/// Given when the last shader frame rendered, the current time, and the capped frame interval,
+/// decide whether this frame is due. Pure so it is unit-testable without a running compositor.
+fn decide_shader_frame(
+    last: Option<std::time::Instant>,
+    now: std::time::Instant,
+    interval: Duration,
+) -> ShaderFrameDecision {
+    match last {
+        None => ShaderFrameDecision::Due,
+        Some(last) => {
+            let elapsed = now.saturating_duration_since(last);
+            if elapsed >= interval {
+                ShaderFrameDecision::Due
+            } else {
+                ShaderFrameDecision::Wait(interval - elapsed)
+            }
+        }
+    }
+}
+
+/// What to do with the per-output shader-throttle timer after a redraw decision.
+enum ThrottleAction {
+    /// Leave the currently-armed timer as-is.
+    Keep,
+    /// Cancel any pending timer.
+    Cancel,
+    /// Arm (replacing any pending) a one-shot wake this far out.
+    Arm(Duration),
+}
+
 pub struct OutputState {
     pub global: GlobalId,
     pub frame_clock: FrameClock,
@@ -511,6 +551,12 @@ pub struct OutputState {
     pub on_demand_vrr_enabled: bool,
     // After the last redraw, some ongoing animations still remain.
     pub unfinished_animations_remain: bool,
+    /// When we last allowed a shader-driven redraw on this output, for the
+    /// `shader-animation-max-fps` throttle. `None` until the first shader frame.
+    pub last_shader_frame: Option<std::time::Instant>,
+    /// Pending one-shot timer that re-queues a throttled shader redraw at the next capped
+    /// deadline. Stored so it can be cancelled/replaced; `None` when no throttle wake is armed.
+    pub shader_throttle_timer: Option<RegistrationToken>,
     /// Last sequence received in a vblank event.
     pub last_drm_sequence: Option<u32>,
     pub vblank_throttle: VBlankThrottle,
@@ -3011,6 +3057,8 @@ impl Niri {
             redraw_state: RedrawState::Idle,
             on_demand_vrr_enabled: false,
             unfinished_animations_remain: false,
+            last_shader_frame: None,
+            shader_throttle_timer: None,
             frame_clock: FrameClock::new(refresh_interval, vrr),
             last_drm_sequence: None,
             vblank_throttle: VBlankThrottle::new(self.event_loop.clone(), name.connector.clone()),
@@ -3817,6 +3865,43 @@ impl Niri {
     pub fn queue_redraw(&mut self, output: &Output) {
         let state = self.output_state.get_mut(output).unwrap();
         state.redraw_state = mem::take(&mut state.redraw_state).queue_redraw();
+    }
+
+    /// Cancel any pending `shader-animation-max-fps` throttle wake for `output`.
+    fn cancel_shader_throttle_timer(&mut self, output: &Output) {
+        let token = self
+            .output_state
+            .get_mut(output)
+            .and_then(|state| state.shader_throttle_timer.take());
+        if let Some(token) = token {
+            self.event_loop.remove(token);
+        }
+    }
+
+    /// Arm a one-shot wake `delay` from now that re-queues a throttled shader redraw for `output`,
+    /// replacing any pending wake.
+    fn arm_shader_throttle_timer(&mut self, output: &Output, delay: Duration) {
+        self.cancel_shader_throttle_timer(output);
+        let out = output.clone();
+        let token =
+            match self
+                .event_loop
+                .insert_source(Timer::from_duration(delay), move |_, _, state| {
+                    if let Some(s) = state.niri.output_state.get_mut(&out) {
+                        s.shader_throttle_timer = None;
+                    }
+                    state.niri.queue_redraw(&out);
+                    TimeoutAction::Drop
+                }) {
+                Ok(token) => token,
+                Err(err) => {
+                    warn!("error arming shader throttle timer: {err:?}");
+                    return;
+                }
+            };
+        if let Some(state) = self.output_state.get_mut(output) {
+            state.shader_throttle_timer = Some(token);
+        }
     }
 
     pub fn redraw_queued_outputs(&mut self, backend: &mut Backend) {
@@ -5088,12 +5173,57 @@ impl Niri {
                     .any(|mapped| mapped.are_animations_ongoing());
             }
 
-            // Time/feedback-driven global shaders must keep redrawing to animate when idle.
-            state.unfinished_animations_remain |= global_shader_animate;
-            // Animated region shaders on this output also need continuous redraws.
-            state.unfinished_animations_remain |= region_shader_animate;
-            // Time-driven per-window shaders on this output also need continuous redraws.
-            state.unfinished_animations_remain |= window_shader_animate;
+            // Time/feedback-driven global, region and per-window shaders must keep redrawing to
+            // animate when the desktop is otherwise idle. When `shader-animation-max-fps` is 0
+            // (default) this is unconditional — a redraw every frame, as before. When a cap is set,
+            // throttle the *shader-only* case to that rate: render one shader frame, then drive the
+            // next via a one-shot timer instead of the vblank loop, so an idle animated shader
+            // recomposites `cap_fps` times/sec instead of at the panel's native refresh. Shaders
+            // riding along with a non-shader animation (drag, transition, overview) are never
+            // throttled — those must stay smooth.
+            let shader_animate =
+                global_shader_animate || region_shader_animate || window_shader_animate;
+            let cap_fps = self.config.borrow().shader_animation_max_fps;
+            let now = std::time::Instant::now();
+
+            let throttle = if cap_fps == 0 {
+                state.unfinished_animations_remain |= shader_animate;
+                ThrottleAction::Cancel
+            } else if !shader_animate {
+                ThrottleAction::Cancel
+            } else if state.unfinished_animations_remain {
+                // A non-shader animation already drives full-rate redraws; shaders ride along.
+                // Keep the clock current so the throttle doesn't immediately fire afterwards.
+                state.last_shader_frame = Some(now);
+                ThrottleAction::Cancel
+            } else {
+                // Shaders are the sole reason to redraw → cap the rate.
+                let interval = Duration::from_secs_f64(1.0 / f64::from(cap_fps));
+                match decide_shader_frame(state.last_shader_frame, now, interval) {
+                    ShaderFrameDecision::Due => {
+                        // Render this as a shader frame; drive the next via the timer, not the
+                        // vblank loop, so we get exactly cap_fps recomposites/sec.
+                        state.last_shader_frame = Some(now);
+                        ThrottleAction::Arm(interval)
+                    }
+                    ShaderFrameDecision::Wait(remaining) => {
+                        // Other damage triggered this redraw between shader frames. Ensure a wake
+                        // is pending for the next shader deadline without
+                        // churning the timer.
+                        if state.shader_throttle_timer.is_some() {
+                            ThrottleAction::Keep
+                        } else {
+                            ThrottleAction::Arm(remaining)
+                        }
+                    }
+                }
+            };
+            // `state`'s borrow ends here; the timer ops re-borrow `&mut self`.
+            match throttle {
+                ThrottleAction::Keep => {}
+                ThrottleAction::Cancel => self.cancel_shader_throttle_timer(output),
+                ThrottleAction::Arm(delay) => self.arm_shader_throttle_timer(output, delay),
+            }
 
             // Render.
             res = backend.render(self, output, target_presentation_time);
@@ -7153,5 +7283,65 @@ niri_render_elements! {
         RelocatedMemoryBuffer = RelocateRenderElement<MemoryRenderBufferRenderElement<R>>,
         GlobalShader = GlobalShaderElement,
         ScopedShader = ScopedShaderElement,
+    }
+}
+
+#[cfg(test)]
+mod shader_throttle_tests {
+    use std::time::{Duration, Instant};
+
+    use super::{decide_shader_frame, ShaderFrameDecision};
+
+    #[test]
+    fn first_frame_is_due() {
+        let now = Instant::now();
+        assert_eq!(
+            decide_shader_frame(None, now, Duration::from_millis(33)),
+            ShaderFrameDecision::Due
+        );
+    }
+
+    #[test]
+    fn within_interval_waits_for_remaining() {
+        let now = Instant::now();
+        let interval = Duration::from_millis(33);
+        let last = now - Duration::from_millis(10);
+        match decide_shader_frame(Some(last), now, interval) {
+            ShaderFrameDecision::Wait(remaining) => {
+                // ~23ms left; allow a little slack for clock resolution.
+                assert!(remaining <= Duration::from_millis(23));
+                assert!(remaining >= Duration::from_millis(22));
+            }
+            ShaderFrameDecision::Due => panic!("should not be due yet"),
+        }
+    }
+
+    #[test]
+    fn at_or_past_interval_is_due() {
+        let now = Instant::now();
+        let interval = Duration::from_millis(33);
+        // Exactly one interval elapsed.
+        assert_eq!(
+            decide_shader_frame(Some(now - interval), now, interval),
+            ShaderFrameDecision::Due
+        );
+        // Well past the interval.
+        assert_eq!(
+            decide_shader_frame(Some(now - Duration::from_millis(100)), now, interval),
+            ShaderFrameDecision::Due
+        );
+    }
+
+    #[test]
+    fn clock_going_backwards_does_not_panic() {
+        let now = Instant::now();
+        // last is in the "future" relative to now (saturating_duration_since → 0 elapsed).
+        let last = now + Duration::from_millis(50);
+        match decide_shader_frame(Some(last), now, Duration::from_millis(33)) {
+            ShaderFrameDecision::Wait(remaining) => {
+                assert_eq!(remaining, Duration::from_millis(33));
+            }
+            ShaderFrameDecision::Due => panic!("elapsed clamped to 0, so not due"),
+        }
     }
 }

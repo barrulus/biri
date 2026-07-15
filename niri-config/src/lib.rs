@@ -79,6 +79,9 @@ pub struct Config {
     pub layout: Layout,
     pub prefer_no_csd: bool,
     pub shaders_in_capture: bool,
+    /// Max frames per second for shader-driven continuous redraws (global/region/window shaders).
+    /// `0` = uncapped (redraw at the output's native refresh rate, the historical behaviour).
+    pub shader_animation_max_fps: u16,
     pub cursor: Cursor,
     pub screenshot_path: ScreenshotPath,
     pub clipboard: Clipboard,
@@ -119,6 +122,10 @@ pub enum ConfigPath {
         system_path: PathBuf,
     },
 }
+
+// Single-argument scalar node: `shader-animation-max-fps 30`.
+#[derive(knuffel::Decode)]
+struct ShaderAnimationMaxFps(#[knuffel(argument)] u16);
 
 // Newtypes for putting information into the knuffel context.
 struct BasePath(PathBuf);
@@ -253,6 +260,11 @@ where
 
                 "shaders-in-capture" => {
                     config.borrow_mut().shaders_in_capture = Flag::decode_node(node, ctx)?.0
+                }
+
+                "shader-animation-max-fps" => {
+                    config.borrow_mut().shader_animation_max_fps =
+                        ShaderAnimationMaxFps::decode_node(node, ctx)?.0
                 }
 
                 "screenshot-path" => {
@@ -1501,6 +1513,7 @@ mod tests {
             },
             prefer_no_csd: true,
             shaders_in_capture: false,
+            shader_animation_max_fps: 0,
             cursor: Cursor {
                 xcursor_theme: "breeze_cursors",
                 xcursor_size: 16,
@@ -2524,5 +2537,17 @@ mod tests {
         assert!(on.shaders_in_capture);
         let off = Config::parse_mem("").unwrap();
         assert!(!off.shaders_in_capture);
+    }
+
+    #[test]
+    fn shader_animation_max_fps_parses() {
+        let capped = Config::parse_mem("shader-animation-max-fps 30\n").unwrap();
+        assert_eq!(capped.shader_animation_max_fps, 30);
+        // Absent → 0 (uncapped).
+        let unset = Config::parse_mem("").unwrap();
+        assert_eq!(unset.shader_animation_max_fps, 0);
+        // Explicit 0 is accepted and means uncapped.
+        let zero = Config::parse_mem("shader-animation-max-fps 0\n").unwrap();
+        assert_eq!(zero.shader_animation_max_fps, 0);
     }
 }
