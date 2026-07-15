@@ -1645,6 +1645,36 @@ impl<W: LayoutElement> Layout<W> {
         moving_window.chain(mon_windows)
     }
 
+    /// Windows currently visible on `output`: the on-screen tiles of the active workspace, plus
+    /// any window being interactively moved onto this output. Unlike [`Self::windows_for_output`],
+    /// this excludes inactive workspaces and columns scrolled off the viewport — used to decide
+    /// whether an animating window shader must force continuous redraws, so hidden windows don't
+    /// peg the GPU. NOTE: only meaningful when the overview is closed; in the overview several
+    /// workspaces are shown zoomed out and the per-tile `visible` flag reflects normal-view
+    /// culling, so callers should fall back to `windows_for_output` while the overview is open.
+    pub fn visible_windows_for_output(&self, output: &Output) -> impl Iterator<Item = &W> + '_ {
+        let MonitorSet::Normal { monitors, .. } = &self.monitor_set else {
+            panic!()
+        };
+
+        let moving_window = self
+            .interactive_move
+            .as_ref()
+            .and_then(|x| x.moving())
+            .filter(|move_| move_.output == *output)
+            .map(|move_| move_.tile.window())
+            .into_iter();
+
+        let mon = monitors.iter().find(|mon| &mon.output == output).unwrap();
+        let visible_windows = mon
+            .active_workspace_ref()
+            .tiles_with_render_positions()
+            .filter(|(_, _, visible)| *visible)
+            .map(|(tile, _, _)| tile.window());
+
+        moving_window.chain(visible_windows)
+    }
+
     pub fn windows_for_output_mut(&mut self, output: &Output) -> impl Iterator<Item = &mut W> + '_ {
         let MonitorSet::Normal { monitors, .. } = &mut self.monitor_set else {
             panic!()
