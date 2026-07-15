@@ -3887,8 +3887,11 @@ impl Niri {
             match self
                 .event_loop
                 .insert_source(Timer::from_duration(delay), move |_, _, state| {
-                    if let Some(s) = state.niri.output_state.get_mut(&out) {
-                        s.shader_throttle_timer = None;
+                    match state.niri.output_state.get_mut(&out) {
+                        Some(s) => s.shader_throttle_timer = None,
+                        // Output disconnected before this wake fired; queue_redraw would unwrap a
+                        // missing output and panic, so just drop the timer.
+                        None => return TimeoutAction::Drop,
                     }
                     state.niri.queue_redraw(&out);
                     TimeoutAction::Drop
