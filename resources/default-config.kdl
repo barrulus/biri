@@ -104,6 +104,10 @@ input {
     // If the position is unset or results in an overlap, the output is instead placed
     // automatically.
     position x=1280 y=0
+
+    // Mark this output as isolated from compositor UI (overview, window switching, overlays).
+    // Useful for projectors, digital signage, "shop-front" visuals, or a clean OBS/capture feed.
+    // isolated
 }
 
 // Settings that influence how windows are positioned and sized.
