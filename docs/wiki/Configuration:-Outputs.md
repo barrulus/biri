@@ -14,6 +14,7 @@ output "eDP-1" {
     position x=1280 y=0
     variable-refresh-rate // on-demand=true
     focus-at-startup
+    // isolated
     backdrop-color "#001100"
     // max-bpc 8
 
@@ -245,6 +246,22 @@ output "HDMI-A-1" {
 // ...if HDMI-A-1 wasn't connected, focus DP-2 instead.
 output "DP-2" {
     focus-at-startup
+}
+```
+
+### `isolated`
+
+Mark this output as isolated from compositor UI.
+
+This is intended for outputs used as a dedicated display surface — projection, digital signage, "shop-front" style visuals, or a clean OBS/capture feed — where the compositor's own UI (the overview, window switching, and overlays) should never appear.
+
+> [!NOTE]
+> This is currently only the configuration marker. Reading it back (for example via `niri msg`) reflects the flag, but it does not yet change any behavior; the UI-exclusion behavior is planned as a follow-up.
+
+```kdl
+// Keep compositor UI off the signage display.
+output "HDMI-A-1" {
+    isolated
 }
 ```
 
