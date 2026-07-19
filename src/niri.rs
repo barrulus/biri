@@ -3253,6 +3253,20 @@ impl Niri {
         Some((output, pos_within_output))
     }
 
+    /// Whether the output is marked `isolated` in its config.
+    ///
+    /// Isolated outputs are intended for projection/signage/capture use: a later feature set will
+    /// exclude them from compositor UI (overview, window switching, overlays). For now this is only
+    /// the config accessor; it has no behavioral effect yet.
+    pub fn is_output_isolated(&self, output: &Output) -> bool {
+        let config = self.config.borrow();
+        output
+            .user_data()
+            .get::<OutputName>()
+            .and_then(|name| config.outputs.find(name))
+            .is_some_and(|c| c.isolated)
+    }
+
     fn is_inside_hot_corner(&self, output: &Output, pos: Point<f64, Logical>) -> bool {
         let config = self.config.borrow();
         let hot_corners = output
