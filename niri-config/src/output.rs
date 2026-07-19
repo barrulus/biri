@@ -69,6 +69,8 @@ pub struct Output {
     pub variable_refresh_rate: Option<Vrr>,
     #[knuffel(child)]
     pub focus_at_startup: bool,
+    #[knuffel(child)]
+    pub isolated: bool,
     // Deprecated; use layout.background_color.
     #[knuffel(child)]
     pub background_color: Option<Color>,
@@ -99,6 +101,7 @@ impl Default for Output {
         Self {
             off: false,
             focus_at_startup: false,
+            isolated: false,
             name: String::new(),
             scale: None,
             transform: Transform::Normal,

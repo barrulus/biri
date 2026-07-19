@@ -770,6 +770,7 @@ mod tests {
 
             output "eDP-1" {
                 focus-at-startup
+                isolated
                 scale 2
                 transform "flipped-90"
                 position x=10 y=20
@@ -1214,6 +1215,7 @@ mod tests {
                             },
                         ),
                         focus_at_startup: true,
+                        isolated: true,
                         background_color: Some(
                             Color {
                                 r: 0.09803922,
@@ -1256,6 +1258,7 @@ mod tests {
                         modeline: None,
                         variable_refresh_rate: None,
                         focus_at_startup: false,
+                        isolated: false,
                         background_color: None,
                         backdrop_color: None,
                         hot_corners: None,
@@ -1286,6 +1289,7 @@ mod tests {
                         ),
                         variable_refresh_rate: None,
                         focus_at_startup: false,
+                        isolated: false,
                         background_color: None,
                         backdrop_color: None,
                         hot_corners: None,
