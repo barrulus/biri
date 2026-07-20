@@ -2543,7 +2543,11 @@ impl<W: LayoutElement> Layout<W> {
                 "monitor base options must be synchronized with layout"
             );
 
-            assert_eq!(self.overview_open, monitor.overview_open);
+            let consolidated = self.options.overview.consolidated_carousel.is_some();
+            let expect_open = self.overview_open
+                && !monitor.isolated
+                && (!consolidated || idx == active_monitor_idx);
+            assert_eq!(expect_open, monitor.overview_open);
             assert_eq!(
                 self.overview_progress.as_ref().map(|p| p.value()),
                 monitor.overview_progress_value()
@@ -4639,13 +4643,25 @@ impl<W: LayoutElement> Layout<W> {
     }
 
     pub fn set_monitors_overview_state(&mut self) {
-        let MonitorSet::Normal { monitors, .. } = &mut self.monitor_set else {
+        let consolidated = self.options.overview.consolidated_carousel.is_some();
+        let overview_open = self.overview_open;
+
+        let MonitorSet::Normal {
+            monitors,
+            active_monitor_idx,
+            ..
+        } = &mut self.monitor_set
+        else {
             return;
         };
+        let active_idx = *active_monitor_idx;
 
-        for mon in monitors {
-            // Isolated outputs never enter the overview.
-            mon.overview_open = self.overview_open && !mon.isolated;
+        for (idx, mon) in monitors.iter_mut().enumerate() {
+            // Isolated outputs never enter the overview. In consolidated-carousel
+            // mode the overview is a lens on the focused output only, so every
+            // other physical output stays live.
+            mon.overview_open =
+                overview_open && !mon.isolated && (!consolidated || idx == active_idx);
             mon.set_overview_progress(self.overview_progress.as_ref());
         }
     }
