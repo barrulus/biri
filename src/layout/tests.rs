@@ -4100,4 +4100,11 @@ fn carousel_regime_tracks_zoom_threshold() {
     // At/below threshold: carousel regime.
     layout.set_overview_zoom_for_test(0.2);
     assert!(layout.in_carousel_regime());
+
+    // Exact boundary: activation_zoom uses <=, so exactly-at-threshold is in-regime.
+    layout.set_overview_zoom_for_test(0.25);
+    assert!(
+        layout.in_carousel_regime(),
+        "zoom exactly at threshold is in-regime (<=)"
+    );
 }

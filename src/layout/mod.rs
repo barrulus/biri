@@ -365,8 +365,9 @@ pub struct Layout<W: LayoutElement> {
     overview_open: bool,
     /// The overview zoom progress.
     overview_progress: Option<OverviewProgress>,
-    /// Which output the consolidated carousel is centered on. Meaningful only
-    /// while in the carousel regime; defaults to the active monitor.
+    /// Which output the consolidated carousel is centered on. Initialized to 0;
+    /// Phase 2 sets it to the centered output when entering the carousel regime.
+    /// Meaningful only while in the carousel regime.
     ///
     /// Not yet read anywhere; consumed by carousel rendering in a follow-up task.
     #[allow(dead_code)]
