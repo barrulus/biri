@@ -4042,3 +4042,62 @@ fn consolidated_mode_scopes_overview_to_active_output() {
     assert!(mons[0].overview_open, "active output enters overview");
     assert!(!mons[1].overview_open, "non-active output stays live");
 }
+
+#[test]
+fn carousel_regime_tracks_zoom_threshold() {
+    fn make_output(name: &str) -> Output {
+        let output = Output::new(
+            name.to_owned(),
+            PhysicalProperties {
+                size: Size::from((1280, 720)),
+                subpixel: Subpixel::Unknown,
+                make: String::new(),
+                model: String::new(),
+                serial_number: String::new(),
+            },
+        );
+        output.change_current_state(
+            Some(Mode {
+                size: Size::from((1280, 720)),
+                refresh: 60000,
+            }),
+            None,
+            None,
+            None,
+        );
+        output.user_data().insert_if_missing(|| OutputName {
+            connector: name.to_owned(),
+            make: None,
+            model: None,
+            serial: None,
+        });
+        output
+    }
+
+    let mut options = Options::default();
+    options.overview.consolidated_carousel = Some(niri_config::ConsolidatedCarousel {
+        activation_zoom: 0.25,
+    });
+
+    let mut layout = Layout::<TestWindow>::with_options(Clock::with_time(Duration::ZERO), options);
+
+    let first = make_output("first");
+    let second = make_output("second");
+    layout.add_output(first.clone(), None, false);
+    layout.add_output(second.clone(), None, false);
+
+    layout.toggle_overview();
+
+    // Finish the overview-open animation so overview_zoom() reflects the target zoom.
+    layout.clock.set_complete_instantly(true);
+    layout.advance_animations();
+    layout.clock.set_complete_instantly(false);
+
+    // Above threshold: single-output overview, not carousel.
+    layout.set_overview_zoom_for_test(0.5);
+    assert!(!layout.in_carousel_regime());
+
+    // At/below threshold: carousel regime.
+    layout.set_overview_zoom_for_test(0.2);
+    assert!(layout.in_carousel_regime());
+}

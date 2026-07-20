@@ -365,6 +365,12 @@ pub struct Layout<W: LayoutElement> {
     overview_open: bool,
     /// The overview zoom progress.
     overview_progress: Option<OverviewProgress>,
+    /// Which output the consolidated carousel is centered on. Meaningful only
+    /// while in the carousel regime; defaults to the active monitor.
+    ///
+    /// Not yet read anywhere; consumed by carousel rendering in a follow-up task.
+    #[allow(dead_code)]
+    carousel_centered_output_idx: usize,
     /// Configurable properties of the layout.
     options: Rc<Options>,
 }
@@ -706,6 +712,7 @@ impl<W: LayoutElement> Layout<W> {
             update_render_elements_time: Duration::ZERO,
             overview_open: false,
             overview_progress: None,
+            carousel_centered_output_idx: 0,
             options: Rc::new(options),
         }
     }
@@ -731,6 +738,7 @@ impl<W: LayoutElement> Layout<W> {
             update_render_elements_time: Duration::ZERO,
             overview_open: false,
             overview_progress: None,
+            carousel_centered_output_idx: 0,
             options: opts,
         }
     }
@@ -2407,6 +2415,20 @@ impl<W: LayoutElement> Layout<W> {
             .map(|m| m.overview_zoom_target())
             .unwrap_or(self.options.overview.zoom);
         compute_overview_zoom(target_zoom, progress)
+    }
+
+    pub fn in_carousel_regime(&self) -> bool {
+        let Some(cc) = self.options.overview.consolidated_carousel else {
+            return false;
+        };
+        self.overview_open && self.overview_zoom() <= cc.activation_zoom
+    }
+
+    #[cfg(test)]
+    fn set_overview_zoom_for_test(&mut self, target: f64) {
+        if let Some(monitor) = self.active_monitor() {
+            monitor.set_zoom_target_no_anim(target);
+        }
     }
 
     #[cfg(test)]
