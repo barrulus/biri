@@ -2481,12 +2481,25 @@ impl State {
                             wmru.set_filter(filter);
                         }
 
-                        if let Some(output) = self.niri.layout.active_output() {
-                            self.niri.window_mru_ui.open(
-                                self.niri.clock.clone(),
-                                wmru,
-                                output.clone(),
-                            );
+                        // The switcher is compositor chrome, so it must never be displayed on an
+                        // isolated output. If the active output is isolated, fall back to the first
+                        // non-isolated one; otherwise the tabs get suppressed at render time while
+                        // other outputs still draw the backdrop, leaving a dimmed screen with no
+                        // tabs. The window list itself is unaffected.
+                        let mru_output = match self.niri.layout.active_output().cloned() {
+                            Some(output) if !self.niri.is_output_isolated(&output) => Some(output),
+                            _ => self
+                                .niri
+                                .layout
+                                .outputs()
+                                .find(|output| !self.niri.is_output_isolated(output))
+                                .cloned(),
+                        };
+
+                        if let Some(output) = mru_output {
+                            self.niri
+                                .window_mru_ui
+                                .open(self.niri.clock.clone(), wmru, output);
 
                             // Only select the *next* window if some window (which should be the
                             // first one) is already focused. If nothing is focused, keep the first
