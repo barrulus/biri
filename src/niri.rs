@@ -274,6 +274,11 @@ pub struct Niri {
     // When false, we're idling with monitors powered off.
     pub monitors_active: bool,
 
+    // When monitors are powered off (`monitors_active == false`) but the power-off requested
+    // `skip-isolated`, outputs marked `isolated` stay powered on and keep rendering. Meaningless
+    // while `monitors_active` is true.
+    pub power_off_skip_isolated: bool,
+
     /// Whether the laptop lid is closed.
     ///
     /// Libinput guarantees that the lid switch starts in open state, and if it was closed during
@@ -2698,6 +2703,7 @@ impl Niri {
             blocker_cleared_tx,
             blocker_cleared_rx,
             monitors_active: true,
+            power_off_skip_isolated: false,
             is_lid_closed: false,
             touchpad_disabled_by_toggle: false,
 
@@ -3221,13 +3227,19 @@ impl Niri {
         self.queue_redraw(output);
     }
 
-    pub fn deactivate_monitors(&mut self, backend: &mut Backend) {
+    pub fn deactivate_monitors(&mut self, backend: &mut Backend, skip_isolated: bool) {
         if !self.monitors_active {
             return;
         }
 
         self.monitors_active = false;
-        backend.set_monitors_active(false);
+        self.power_off_skip_isolated = skip_isolated;
+        backend.set_monitors_active(false, skip_isolated);
+
+        // Isolated outputs stay on when skipping them, so they must keep redrawing.
+        if skip_isolated {
+            self.queue_redraw_all();
+        }
     }
 
     pub fn activate_monitors(&mut self, backend: &mut Backend) {
@@ -3236,7 +3248,8 @@ impl Niri {
         }
 
         self.monitors_active = true;
-        backend.set_monitors_active(true);
+        self.power_off_skip_isolated = false;
+        backend.set_monitors_active(true, false);
 
         self.queue_redraw_all();
     }
@@ -3263,8 +3276,9 @@ impl Niri {
     /// Note that the overview is additionally suppressed in the layout (see `Monitor::isolated`),
     /// since its zoom is driven by `overview_progress` rather than by this render-time check.
     ///
-    /// Not yet covered: dimming/idle power-off, and layer-shell surfaces such as notification
-    /// daemons.
+    /// Isolated outputs can also stay powered on during a `power-off-monitors skip-isolated=true`
+    /// (see `deactivate_monitors` and `power_off_skip_isolated`). Not covered: layer-shell surfaces
+    /// such as notification daemons.
     pub fn is_output_isolated(&self, output: &Output) -> bool {
         let config = self.config.borrow();
         output
@@ -5134,8 +5148,12 @@ impl Niri {
 
         self.update_render_elements(Some(output));
 
+        // Isolated outputs keep rendering while the rest are powered off with skip-isolated.
+        let output_active = self.monitors_active
+            || (self.power_off_skip_isolated && self.is_output_isolated(output));
+
         let mut res = RenderResult::Skipped;
-        if self.monitors_active {
+        if output_active {
             // Decide whether a time/feedback-driven global shader needs continuous redraws.
             // Computed before the `&mut state` borrow below, since this reads `&self`.
             let global_shader_animate = {

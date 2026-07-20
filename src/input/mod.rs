@@ -707,8 +707,9 @@ impl State {
                 // Suspend may not deliver the key releases, so clear the state.
                 self.niri.suppressed_keys.clear();
             }
-            Action::PowerOffMonitors => {
-                self.niri.deactivate_monitors(&mut self.backend);
+            Action::PowerOffMonitors(skip_isolated) => {
+                self.niri
+                    .deactivate_monitors(&mut self.backend, skip_isolated);
             }
             Action::PowerOnMonitors => {
                 self.niri.activate_monitors(&mut self.backend);
@@ -4831,7 +4832,7 @@ fn allowed_when_locked(action: &Action) -> bool {
         Action::Quit(_)
             | Action::ChangeVt(_)
             | Action::Suspend
-            | Action::PowerOffMonitors
+            | Action::PowerOffMonitors(_)
             | Action::PowerOnMonitors
             | Action::SwitchLayout(_)
             | Action::ToggleKeyboardShortcutsInhibit
@@ -4844,7 +4845,7 @@ fn allowed_during_screenshot(action: &Action) -> bool {
         Action::Quit(_)
             | Action::ChangeVt(_)
             | Action::Suspend
-            | Action::PowerOffMonitors
+            | Action::PowerOffMonitors(_)
             | Action::PowerOnMonitors
             // Intended for binds such as volume up/down, lock the screen, etc.
             | Action::Spawn(_)

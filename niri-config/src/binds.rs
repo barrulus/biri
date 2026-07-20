@@ -107,7 +107,7 @@ pub enum Action {
     #[knuffel(skip)]
     ChangeVt(i32),
     Suspend,
-    PowerOffMonitors,
+    PowerOffMonitors(#[knuffel(property(name = "skip-isolated"), default)] bool),
     PowerOnMonitors,
     ToggleDebugTint,
     DebugToggleOpaqueRegions,
@@ -404,7 +404,9 @@ impl From<niri_ipc::Action> for Action {
     fn from(value: niri_ipc::Action) -> Self {
         match value {
             niri_ipc::Action::Quit { skip_confirmation } => Self::Quit(skip_confirmation),
-            niri_ipc::Action::PowerOffMonitors {} => Self::PowerOffMonitors,
+            niri_ipc::Action::PowerOffMonitors { skip_isolated } => {
+                Self::PowerOffMonitors(skip_isolated)
+            }
             niri_ipc::Action::PowerOnMonitors {} => Self::PowerOnMonitors,
             niri_ipc::Action::Spawn { command } => Self::Spawn(command),
             niri_ipc::Action::SpawnSh { command } => Self::SpawnSh(command),

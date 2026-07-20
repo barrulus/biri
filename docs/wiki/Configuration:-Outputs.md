@@ -264,8 +264,10 @@ On an isolated output, niri does not draw:
 
 Windows and layer-shell surfaces still render normally, so the output remains fully usable — you can open windows on it and work with them as usual. The Alt-Tab switcher still works; it is simply displayed on a non-isolated output.
 
+Isolated outputs can also stay powered on when the rest are turned off: call the [`power-off-monitors`](./Configuration:-Key-Bindings.md) action with `skip-isolated=true` (typically from your idle daemon). This keeps a signage/projection display lit while everything else sleeps.
+
 > [!NOTE]
-> Isolated outputs are not yet excluded from dimming and idle power-off — they still turn off with everything else. Application notifications are drawn by notification daemons as layer-shell surfaces, which niri does not currently filter, so those can still appear.
+> Application notifications are drawn by notification daemons as layer-shell surfaces, which niri does not currently filter, so those can still appear on an isolated output.
 
 ```kdl
 // Keep compositor UI off the signage display.

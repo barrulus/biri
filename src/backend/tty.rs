@@ -736,7 +736,8 @@ impl Tty {
 
                 niri.notify_activity();
                 niri.monitors_active = true;
-                self.set_monitors_active(true);
+                niri.power_off_skip_isolated = false;
+                self.set_monitors_active(true, false);
                 niri.queue_redraw_all();
             }
         }
@@ -1520,7 +1521,9 @@ impl Tty {
 
         // Some buggy monitors replug upon powering off, so powering on here would prevent such
         // monitors from powering off. Therefore, we avoid unconditionally powering on.
-        if !niri.monitors_active {
+        // An isolated output that (re)connects while the rest are off with skip-isolated stays lit.
+        let keep_isolated_on = niri.power_off_skip_isolated && niri.is_output_isolated(&output);
+        if !niri.monitors_active && !keep_isolated_on {
             if let Err(err) = compositor.clear() {
                 warn!("error clearing drm surface: {err:?}");
             }
@@ -2285,7 +2288,7 @@ impl Tty {
         Some(device?.gbm.clone())
     }
 
-    pub fn set_monitors_active(&mut self, active: bool) {
+    pub fn set_monitors_active(&mut self, active: bool, skip_isolated: bool) {
         // We only disable the CRTC here, this will also reset the
         // surface state so that the next call to `render_frame` will
         // always produce a new frame and `queue_frame` will change
@@ -2295,8 +2298,19 @@ impl Tty {
             return;
         }
 
+        let config = self.config.borrow();
         for device in self.devices.values_mut() {
             for surface in device.surfaces.values_mut() {
+                // Leave isolated outputs powered on when asked to skip them.
+                if skip_isolated
+                    && config
+                        .outputs
+                        .find(&surface.name)
+                        .is_some_and(|c| c.isolated)
+                {
+                    continue;
+                }
+
                 if let Err(err) = surface.compositor.clear() {
                     warn!("error clearing drm surface: {err:?}");
                 }

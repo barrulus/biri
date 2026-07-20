@@ -644,5 +644,9 @@ binds {
 
     // Powers off the monitors. To turn them back on, do any input like
     // moving the mouse or pressing any other key.
+    // Add skip-isolated=true to leave outputs marked `isolated` powered on
+    // (useful when an idle daemon powers off the monitors but you want a
+    // signage/projection display to stay lit):
+    // Mod+Shift+P { power-off-monitors skip-isolated=true; }
     Mod+Shift+P { power-off-monitors; }
 }
