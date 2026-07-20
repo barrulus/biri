@@ -253,10 +253,19 @@ output "DP-2" {
 
 Mark this output as isolated from compositor UI.
 
-This is intended for outputs used as a dedicated display surface — projection, digital signage, "shop-front" style visuals, or a clean OBS/capture feed — where the compositor's own UI (the overview, window switching, and overlays) should never appear.
+This is intended for outputs used as a dedicated display surface — projection, digital signage, "shop-front" style visuals, or a clean OBS/capture feed — where the compositor's own UI should never appear.
+
+On an isolated output, niri does not draw:
+
+- the overview (the output stays at its normal zoom even while the overview is open elsewhere),
+- the Alt-Tab window switcher,
+- the hotkey overlay,
+- the config error notification.
+
+Windows and layer-shell surfaces still render normally, so the output remains fully usable — you can open windows on it and work with them as usual. The Alt-Tab switcher still works; it is simply displayed on a non-isolated output.
 
 > [!NOTE]
-> This is currently only the configuration marker. Reading it back (for example via `niri msg`) reflects the flag, but it does not yet change any behavior; the UI-exclusion behavior is planned as a follow-up.
+> Isolated outputs are not yet excluded from dimming and idle power-off — they still turn off with everything else. Application notifications are drawn by notification daemons as layer-shell surfaces, which niri does not currently filter, so those can still appear.
 
 ```kdl
 // Keep compositor UI off the signage display.

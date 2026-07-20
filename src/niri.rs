@@ -3256,9 +3256,15 @@ impl Niri {
 
     /// Whether the output is marked `isolated` in its config.
     ///
-    /// Isolated outputs are intended for projection/signage/capture use: a later feature set will
-    /// exclude them from compositor UI (overview, window switching, overlays). For now this is only
-    /// the config accessor; it has no behavioral effect yet.
+    /// Isolated outputs are intended for projection/signage/capture use, and are kept free of
+    /// compositor chrome: the overview, the Alt-Tab switcher, the hotkey overlay, and the config
+    /// error notification are not drawn on them. Windows and layer-shell surfaces still render.
+    ///
+    /// Note that the overview is additionally suppressed in the layout (see `Monitor::isolated`),
+    /// since its zoom is driven by `overview_progress` rather than by this render-time check.
+    ///
+    /// Not yet covered: dimming/idle power-off, and layer-shell surfaces such as notification
+    /// daemons.
     pub fn is_output_isolated(&self, output: &Output) -> bool {
         let config = self.config.borrow();
         output
