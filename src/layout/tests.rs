@@ -3929,3 +3929,66 @@ proptest! {
         check_ops_with_options(options, ops);
     }
 }
+
+#[test]
+fn isolated_output_stays_out_of_overview() {
+    fn make_output(name: &str) -> Output {
+        let output = Output::new(
+            name.to_owned(),
+            PhysicalProperties {
+                size: Size::from((1280, 720)),
+                subpixel: Subpixel::Unknown,
+                make: String::new(),
+                model: String::new(),
+                serial_number: String::new(),
+            },
+        );
+        output.change_current_state(
+            Some(Mode {
+                size: Size::from((1280, 720)),
+                refresh: 60000,
+            }),
+            None,
+            None,
+            None,
+        );
+        output.user_data().insert_if_missing(|| OutputName {
+            connector: name.to_owned(),
+            make: None,
+            model: None,
+            serial: None,
+        });
+        output
+    }
+
+    let mut layout = Layout::<TestWindow>::default();
+
+    let normal = make_output("normal");
+    let isolated = make_output("isolated");
+    layout.add_output(normal.clone(), None, false);
+    layout.add_output(isolated.clone(), None, true);
+
+    layout.toggle_overview();
+
+    let normal_mon = layout.monitor_for_output(&normal).unwrap();
+    let isolated_mon = layout.monitor_for_output(&isolated).unwrap();
+
+    // The regular output enters the overview and receives zoom progress.
+    assert!(
+        normal_mon.overview_progress_value().is_some(),
+        "regular output should receive overview progress"
+    );
+
+    // The isolated output must not. The visual zoom is driven by overview_progress (not
+    // overview_open), so leaving progress set here is what makes the overview still show up.
+    assert_eq!(
+        isolated_mon.overview_progress_value(),
+        None,
+        "isolated output must not receive overview progress"
+    );
+    assert_eq!(
+        isolated_mon.overview_zoom(),
+        1.,
+        "isolated output must not zoom out"
+    );
+}

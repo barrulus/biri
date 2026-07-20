@@ -1527,6 +1527,12 @@ impl<W: LayoutElement> Monitor<W> {
     }
 
     pub(super) fn set_overview_progress(&mut self, progress: Option<&super::OverviewProgress>) {
+        // Isolated outputs never enter the overview. The visual zoom is driven by
+        // `overview_progress` (not `overview_open`), so refusing progress here is what actually
+        // keeps them out. This is enforced centrally on purpose: there are several call sites and
+        // gating each one is easy to get wrong.
+        let progress = if self.isolated { None } else { progress };
+
         let prev_render_idx = self.workspace_render_idx();
         self.overview_progress = progress.map(OverviewProgress::from);
         let new_render_idx = self.workspace_render_idx();
