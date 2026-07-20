@@ -125,6 +125,10 @@ pub struct Overview {
     pub workspace_shadow: WorkspaceShadow,
     /// Optional zoom presets for cycling. If None/empty, zoom cycling is disabled.
     pub zoom_presets: Option<Vec<f64>>,
+    /// When Some, the consolidated carousel mode is enabled: the overview
+    /// applies to the focused output only, and zooming past `activation_zoom`
+    /// reveals sibling outputs as a carousel.
+    pub consolidated_carousel: Option<ConsolidatedCarousel>,
 }
 
 impl Default for Overview {
@@ -134,6 +138,7 @@ impl Default for Overview {
             backdrop_color: DEFAULT_BACKDROP_COLOR,
             workspace_shadow: WorkspaceShadow::default(),
             zoom_presets: None,
+            consolidated_carousel: None,
         }
     }
 }
@@ -142,6 +147,17 @@ impl Default for Overview {
 /// Usage: `zoom-presets 0.5 0.25 0.1`
 #[derive(knuffel::Decode, Debug, Clone, PartialEq)]
 pub struct ZoomPresets(#[knuffel(arguments)] pub Vec<f64>);
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ConsolidatedCarousel {
+    pub activation_zoom: f64,
+}
+
+#[derive(knuffel::Decode, Debug, Clone, PartialEq)]
+pub struct ConsolidatedCarouselPart {
+    #[knuffel(child, unwrap(argument))]
+    pub activation_zoom: Option<FloatOrInt<0, 1>>,
+}
 
 #[derive(knuffel::Decode, Debug, Clone, PartialEq)]
 pub struct OverviewPart {
@@ -153,6 +169,8 @@ pub struct OverviewPart {
     pub workspace_shadow: Option<WorkspaceShadowPart>,
     #[knuffel(child)]
     pub zoom_presets: Option<ZoomPresets>,
+    #[knuffel(child)]
+    pub consolidated_carousel: Option<ConsolidatedCarouselPart>,
 }
 
 impl MergeWith<OverviewPart> for Overview {
@@ -161,6 +179,11 @@ impl MergeWith<OverviewPart> for Overview {
         merge_clone!((self, part), backdrop_color);
         if let Some(presets) = &part.zoom_presets {
             self.zoom_presets = Some(presets.0.clone());
+        }
+        if let Some(cc) = &part.consolidated_carousel {
+            self.consolidated_carousel = Some(ConsolidatedCarousel {
+                activation_zoom: cc.activation_zoom.map_or(0.25, |v| v.0),
+            });
         }
     }
 }

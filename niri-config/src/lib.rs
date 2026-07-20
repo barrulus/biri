@@ -1757,6 +1757,7 @@ mod tests {
                     },
                 },
                 zoom_presets: None,
+                consolidated_carousel: None,
             },
             environment: Environment(
                 [
@@ -2553,5 +2554,31 @@ mod tests {
         // Explicit 0 is accepted and means uncapped.
         let zero = Config::parse_mem("shader-animation-max-fps 0\n").unwrap();
         assert_eq!(zero.shader_animation_max_fps, 0);
+    }
+
+    #[test]
+    fn consolidated_carousel_parses() {
+        // Enabled with explicit threshold.
+        let enabled = Config::parse_mem(
+            "overview {\n    consolidated-carousel {\n        activation-zoom 0.2\n    }\n}\n",
+        )
+        .unwrap();
+        let cc = enabled
+            .overview
+            .consolidated_carousel
+            .expect("block present => Some");
+        assert_eq!(cc.activation_zoom, 0.2);
+
+        // Enabled, threshold omitted => default 0.25.
+        let defaulted =
+            Config::parse_mem("overview {\n    consolidated-carousel {}\n}\n").unwrap();
+        assert_eq!(
+            defaulted.overview.consolidated_carousel.unwrap().activation_zoom,
+            0.25
+        );
+
+        // Absent => None (default global overview unchanged).
+        let disabled = Config::parse_mem("").unwrap();
+        assert!(disabled.overview.consolidated_carousel.is_none());
     }
 }
