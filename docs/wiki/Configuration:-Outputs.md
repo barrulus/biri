@@ -276,6 +276,18 @@ output "HDMI-A-1" {
 }
 ```
 
+#### Recipes
+
+**Signage that stays lit on idle.** Mark the output `isolated`, and point your idle daemon's power-off command at `power-off-monitors skip-isolated=true` instead of the plain `power-off-monitors`. Your normal screens sleep on idle; the signage output stays on and keeps rendering.
+
+**A fully passive "just wallpaper" display.** `isolated` removes the compositor's own UI, but windows can still be opened on the output (and it renders layer-shell surfaces normally). To make it show only a wallpaper — with any window that ends up there hidden — run a wallpaper client on the **overlay** layer, which niri draws above windows. Combined with `isolated`, the result is an output that shows only your wallpaper/video and nothing else:
+
+- New windows open on the *active* output, and an isolated signage output is one you never focus, so windows rarely land there in the first place.
+- If one does (an explicit move, or an `open-on-output` rule), the overlay-layer wallpaper covers it.
+- Note that this depends on your wallpaper tool being able to target the `overlay` layer; not all can (many are background-only). The wallpaper hides windows visually, but whether it also blocks clicks depends on the client's input handling.
+
+You can also push windows away from the output with a catch-all `open-on-output` [window rule](./Configuration:-Window-Rules.md) pointing at another output, though that affects placement globally and does not prevent manual moves.
+
 ### `background-color`
 
 <sup>Since: 0.1.8</sup>
