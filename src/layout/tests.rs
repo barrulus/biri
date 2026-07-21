@@ -4112,6 +4112,67 @@ fn carousel_regime_tracks_zoom_threshold() {
 }
 
 #[test]
+fn carousel_regime_and_lens_are_mutually_exclusive_bands() {
+    fn make_output(name: &str) -> Output {
+        let output = Output::new(
+            name.to_owned(),
+            PhysicalProperties {
+                size: Size::from((1280, 720)),
+                subpixel: Subpixel::Unknown,
+                make: String::new(),
+                model: String::new(),
+                serial_number: String::new(),
+            },
+        );
+        output.change_current_state(
+            Some(Mode {
+                size: Size::from((1280, 720)),
+                refresh: 60000,
+            }),
+            None,
+            None,
+            None,
+        );
+        output.user_data().insert_if_missing(|| OutputName {
+            connector: name.to_owned(),
+            make: None,
+            model: None,
+            serial: None,
+        });
+        output
+    }
+
+    let mut options = Options::default();
+    options.overview.consolidated_carousel = Some(niri_config::ConsolidatedCarousel {
+        activation_zoom: 0.25,
+        expand_zoom: 0.1,
+    });
+
+    let mut layout = Layout::<TestWindow>::with_options(Clock::with_time(Duration::ZERO), options);
+
+    let first = make_output("first");
+    let second = make_output("second");
+    layout.add_output(first.clone(), None, false);
+    layout.add_output(second.clone(), None, false);
+
+    layout.toggle_overview();
+
+    // Finish the overview-open animation so overview_zoom() reflects the target zoom.
+    layout.clock.set_complete_instantly(true);
+    layout.advance_animations();
+    layout.clock.set_complete_instantly(false);
+
+    layout.set_overview_zoom_for_test(0.5); // above activation
+    assert!(!layout.in_carousel_regime() && !layout.in_carousel_lens());
+
+    layout.set_overview_zoom_for_test(0.2); // carousel band
+    assert!(layout.in_carousel_regime() && !layout.in_carousel_lens());
+
+    layout.set_overview_zoom_for_test(0.05); // lens band
+    assert!(!layout.in_carousel_regime() && layout.in_carousel_lens());
+}
+
+#[test]
 fn carousel_participants_excludes_host_isolated_and_empty() {
     fn make_output(name: &str) -> Output {
         let output = Output::new(
