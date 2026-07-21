@@ -4108,3 +4108,83 @@ fn carousel_regime_tracks_zoom_threshold() {
         "zoom exactly at threshold is in-regime (<=)"
     );
 }
+
+#[test]
+fn carousel_participants_excludes_host_isolated_and_empty() {
+    fn make_output(name: &str) -> Output {
+        let output = Output::new(
+            name.to_owned(),
+            PhysicalProperties {
+                size: Size::from((1280, 720)),
+                subpixel: Subpixel::Unknown,
+                make: String::new(),
+                model: String::new(),
+                serial_number: String::new(),
+            },
+        );
+        output.change_current_state(
+            Some(Mode {
+                size: Size::from((1280, 720)),
+                refresh: 60000,
+            }),
+            None,
+            None,
+            None,
+        );
+        output.user_data().insert_if_missing(|| OutputName {
+            connector: name.to_owned(),
+            make: None,
+            model: None,
+            serial: None,
+        });
+        output
+    }
+
+    let mut layout = Layout::<TestWindow>::default();
+
+    let host = make_output("eDP-1");
+    let populated = make_output("S-pop");
+    let isolated = make_output("S-iso");
+    let empty = make_output("S-empty");
+
+    layout.add_output(host.clone(), None, false);
+    layout.add_output(populated.clone(), None, false);
+    layout.add_output(isolated.clone(), None, true);
+    layout.add_output(empty.clone(), None, false);
+
+    layout.add_window(
+        TestWindow::new(TestWindowParams::new(0)),
+        AddWindowTarget::Output(&host),
+        None,
+        None,
+        false,
+        false,
+        ActivateWindow::default(),
+    );
+    layout.add_window(
+        TestWindow::new(TestWindowParams::new(1)),
+        AddWindowTarget::Output(&populated),
+        None,
+        None,
+        false,
+        false,
+        ActivateWindow::default(),
+    );
+    layout.add_window(
+        TestWindow::new(TestWindowParams::new(2)),
+        AddWindowTarget::Output(&isolated),
+        None,
+        None,
+        false,
+        false,
+        ActivateWindow::default(),
+    );
+
+    let names: Vec<String> = layout
+        .carousel_participants(&host)
+        .iter()
+        .map(|m| m.output_name().clone())
+        .collect();
+
+    assert_eq!(names, vec!["S-pop".to_string()]);
+}

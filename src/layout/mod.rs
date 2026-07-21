@@ -1803,6 +1803,17 @@ impl<W: LayoutElement> Layout<W> {
         monitors.iter()
     }
 
+    /// Sibling outputs to show as cards for `host`: every monitor that is not
+    /// `host`, not isolated, and has at least one window. Deterministic order
+    /// (layout monitor order).
+    pub fn carousel_participants(&self, host: &Output) -> Vec<&Monitor<W>> {
+        self.monitors()
+            .filter(|m| m.output() != host)
+            .filter(|m| !m.is_isolated())
+            .filter(|m| m.has_windows())
+            .collect()
+    }
+
     pub fn monitors_mut(&mut self) -> impl Iterator<Item = &mut Monitor<W>> + '_ {
         let monitors = if let MonitorSet::Normal { monitors, .. } = &mut self.monitor_set {
             &mut monitors[..]

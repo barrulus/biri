@@ -383,6 +383,16 @@ impl<W: LayoutElement> Monitor<W> {
         &self.output_name
     }
 
+    /// Whether this output is marked `isolated` in config.
+    pub fn is_isolated(&self) -> bool {
+        self.isolated
+    }
+
+    /// Whether any workspace on this monitor has at least one window.
+    pub fn has_windows(&self) -> bool {
+        self.workspaces.iter().any(|ws| ws.has_windows())
+    }
+
     pub fn active_workspace_idx(&self) -> usize {
         self.active_workspace_idx
     }
