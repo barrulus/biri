@@ -5038,12 +5038,12 @@ impl Niri {
                 ] {
                     let strip = BorderRenderElement::new(
                         rect.size,
-                        rect, // gradient_area
+                        Rectangle::from_size(rect.size), // gradient_area (zero-based)
                         GradientInterpolation::default(),
                         from,
                         to,
                         0., // angle: horizontal
-                        rect, // geometry
+                        Rectangle::from_size(rect.size), // geometry (zero-based)
                         f32::MAX, // border_width huge => full-fill gradient
                         CornerRadius::default(),
                         host_scale as f32,
