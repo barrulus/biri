@@ -151,12 +151,15 @@ pub struct ZoomPresets(#[knuffel(arguments)] pub Vec<f64>);
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ConsolidatedCarousel {
     pub activation_zoom: f64,
+    pub expand_zoom: f64,
 }
 
 #[derive(knuffel::Decode, Debug, Clone, PartialEq)]
 pub struct ConsolidatedCarouselPart {
     #[knuffel(child, unwrap(argument))]
     pub activation_zoom: Option<FloatOrInt<0, 1>>,
+    #[knuffel(child, unwrap(argument))]
+    pub expand_zoom: Option<FloatOrInt<0, 1>>,
 }
 
 #[derive(knuffel::Decode, Debug, Clone, PartialEq)]
@@ -183,6 +186,7 @@ impl MergeWith<OverviewPart> for Overview {
         if let Some(cc) = &part.consolidated_carousel {
             self.consolidated_carousel = Some(ConsolidatedCarousel {
                 activation_zoom: cc.activation_zoom.map_or(0.25, |v| v.0),
+                expand_zoom: cc.expand_zoom.map_or(0.1, |v| v.0),
             });
         }
     }

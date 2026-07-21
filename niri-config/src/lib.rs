@@ -2581,4 +2581,19 @@ mod tests {
         let disabled = Config::parse_mem("").unwrap();
         assert!(disabled.overview.consolidated_carousel.is_none());
     }
+
+    #[test]
+    fn consolidated_carousel_expand_zoom_parses() {
+        let cfg = Config::parse_mem(
+            "overview {\n    consolidated-carousel {\n        activation-zoom 0.25\n        expand-zoom 0.08\n    }\n}\n",
+        )
+        .unwrap();
+        let cc = cfg.overview.consolidated_carousel.unwrap();
+        assert_eq!(cc.activation_zoom, 0.25);
+        assert_eq!(cc.expand_zoom, 0.08);
+
+        // Omitted -> default 0.1.
+        let d = Config::parse_mem("overview {\n    consolidated-carousel {}\n}\n").unwrap();
+        assert_eq!(d.overview.consolidated_carousel.unwrap().expand_zoom, 0.1);
+    }
 }
