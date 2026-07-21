@@ -16,8 +16,8 @@ use calloop::futures::Scheduler;
 use niri_config::debug::PreviewRender;
 use niri_config::output::MaxBpc;
 use niri_config::{
-    Config, FloatOrInt, Key, Modifiers, OutputName, TrackLayout, WarpMouseToFocusMode,
-    WorkspaceReference, Xkb,
+    Config, CornerRadius, FloatOrInt, GradientInterpolation, Key, Modifiers, OutputName,
+    TrackLayout, WarpMouseToFocusMode, WorkspaceReference, Xkb,
 };
 use smithay::backend::allocator::Fourcc;
 use smithay::backend::input::Keycode;
@@ -153,6 +153,7 @@ use crate::protocols::output_management::OutputManagementManagerState;
 use crate::protocols::screencopy::{Screencopy, ScreencopyBuffer, ScreencopyManagerState};
 use crate::protocols::virtual_pointer::VirtualPointerManagerState;
 use crate::render_helpers::blur::BlurOptions;
+use crate::render_helpers::border::BorderRenderElement;
 use crate::render_helpers::debug::push_opaque_regions;
 use crate::render_helpers::global_shader_element::{GlobalPassState, GlobalShaderElement};
 use crate::render_helpers::primary_gpu_texture::PrimaryGpuTextureRenderElement;
@@ -5006,6 +5007,51 @@ impl Niri {
                         }
                     },
                 );
+
+                // Soften the card's left/right hard edges with backdrop-colored gradient
+                // strips: opaque at the card's outer edge, fading to transparent inward.
+                // Top/bottom stay hard-cropped -- only the horizontal (infinite-scroll) axis
+                // needs the fade.
+                let backdrop = self.config.borrow().overview.backdrop_color;
+                let transparent = {
+                    let mut c = backdrop;
+                    c.a = 0.;
+                    c
+                };
+                let fade_w = place.card_rect.size.w * 0.10;
+                // LEFT strip: opaque at x=loc.x (outer) -> transparent at x=loc.x+fade_w.
+                let left = Rectangle::new(
+                    place.card_rect.loc,
+                    Size::from((fade_w, place.card_rect.size.h)),
+                );
+                // RIGHT strip: transparent -> opaque at the right edge.
+                let right = Rectangle::new(
+                    Point::from((
+                        place.card_rect.loc.x + place.card_rect.size.w - fade_w,
+                        place.card_rect.loc.y,
+                    )),
+                    Size::from((fade_w, place.card_rect.size.h)),
+                );
+                for (rect, from, to) in [
+                    (left, backdrop, transparent), // opaque at left edge, fading right (inward)
+                    (right, transparent, backdrop), // fading to opaque at right edge
+                ] {
+                    let strip = BorderRenderElement::new(
+                        rect.size,
+                        rect, // gradient_area
+                        GradientInterpolation::default(),
+                        from,
+                        to,
+                        0., // angle: horizontal
+                        rect, // geometry
+                        f32::MAX, // border_width huge => full-fill gradient
+                        CornerRadius::default(),
+                        host_scale as f32,
+                        1.0,
+                    )
+                    .with_location(rect.loc);
+                    push(OutputRenderElements::CarouselFade(strip));
+                }
             }
         }
         // ===== END carousel =====
@@ -7364,6 +7410,8 @@ niri_render_elements! {
         CarouselCard = CropRenderElement<RelocateRenderElement<RescaleRenderElement<
             MonitorRenderElement<R>
         >>>,
+        // Consolidated carousel: gradient darken strip over a card edge.
+        CarouselFade = BorderRenderElement,
     }
 }
 
