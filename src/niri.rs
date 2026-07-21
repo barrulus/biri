@@ -5112,12 +5112,28 @@ impl Niri {
                 let fit = (host_view.w / target_view.w).min(host_view.h / target_view.h);
                 let fill_zoom = fit * (host_scale / target_scale);
                 let host_rect = Rectangle::new(Point::from((0., 0.)), host_view);
+                // render_overview_at_zoom centers the target's overview content within the
+                // TARGET output's own view_size (content center sits at target_view/2 in
+                // logical coords). When target_view != host_view, reusing scale_relocate_crop
+                // with a host_rect starting at (0,0) leaves the content off-center on the
+                // host. Relocate by the host/target centering delta to re-center onto the
+                // host view before cropping to the full host rect.
+                let dx = (host_view.w - target_view.w) / 2.0;
+                let dy = (host_view.h - target_view.h) / 2.0;
+                let host_rect_physical = host_rect.to_physical_precise_round(output_scale);
                 target.render_overview_at_zoom(ctx.r(), fill_zoom, focus_ring, &mut |elem| {
                     // render_overview_at_zoom already baked fill_zoom into geo+rescale, so
                     // wrap with zoom=1.0 (identity rescale) -- just relocate+crop onto the host.
-                    if let Some(wrapped) = scale_relocate_crop(elem, output_scale, 1.0, host_rect)
+                    let elem = RescaleRenderElement::from_element(elem, Point::from((0, 0)), 1.0);
+                    let elem = RelocateRenderElement::from_element(
+                        elem,
+                        Point::from((dx, dy)).to_physical_precise_round(output_scale),
+                        Relocate::Relative,
+                    );
+                    if let Some(elem) =
+                        CropRenderElement::from_element(elem, output_scale, host_rect_physical)
                     {
-                        push(OutputRenderElements::CarouselCard(wrapped));
+                        push(OutputRenderElements::CarouselCard(elem));
                     }
                 });
             }
