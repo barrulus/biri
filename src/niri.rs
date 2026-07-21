@@ -4909,6 +4909,12 @@ impl Niri {
             }};
         }
 
+        // Whether this output is currently rendering the consolidated carousel: while
+        // active, the host's own full overview is suppressed here and instead drawn as
+        // the centered card in the carousel block below.
+        let carousel_active =
+            self.layout.in_carousel_regime() && self.layout.active_output() == Some(output);
+
         // The overlay layer elements go next.
         push_popups_from_layer!(Layer::Overlay);
         push_normal_from_layer!(Layer::Overlay);
@@ -4955,56 +4961,62 @@ impl Niri {
                 }};
             }
 
-            for (ws, geo) in mon.workspaces_with_render_geo() {
-                let ns = Some(ws.id().get() as usize);
-                let xray_pos = XrayPos::new(geo.loc, zoom);
-                push_popups_from_layer!(Layer::Bottom, ns, xray_pos, process!(geo));
-                push_popups_from_layer!(Layer::Background, ns, xray_pos, process!(geo));
-            }
+            // Suppressed while the carousel is active on this output: the host's own
+            // workspace strip (and its per-workspace background/bottom layer-shell
+            // elements) is instead drawn as the centered card in the carousel block
+            // below. Overlay/top popups above and the backdrop/cursor elsewhere are
+            // unaffected.
+            if !carousel_active {
+                for (ws, geo) in mon.workspaces_with_render_geo() {
+                    let ns = Some(ws.id().get() as usize);
+                    let xray_pos = XrayPos::new(geo.loc, zoom);
+                    push_popups_from_layer!(Layer::Bottom, ns, xray_pos, process!(geo));
+                    push_popups_from_layer!(Layer::Background, ns, xray_pos, process!(geo));
+                }
 
-            mon.render_workspaces(ctx.r(), focus_ring, &mut |elem| push(elem.into()));
+                mon.render_workspaces(ctx.r(), focus_ring, &mut |elem| push(elem.into()));
 
-            for (ws, geo) in mon.workspaces_with_render_geo() {
-                // The render element namespace. This will be set to the workspace index for
-                // elements duplicated across workspaces (i.e. background and bottom layers) in
-                // order to have their non-xray framebuffer effects separated from each other.
-                //
-                // This doesn't have to correspond exactly to workspace id or idx, the only
-                // requirement is that there's only one framebuffer effect element with a given id +
-                // namespace on the frame at once. Id + namespace is used as the cache key in the
-                // damage tracker.
-                let ns = Some(ws.id().get() as usize);
-                let xray_pos = XrayPos::new(geo.loc, zoom);
-                push_normal_from_layer!(Layer::Bottom, ns, xray_pos, process!(geo));
-                push_normal_from_layer!(Layer::Background, ns, xray_pos, process!(geo));
+                for (ws, geo) in mon.workspaces_with_render_geo() {
+                    // The render element namespace. This will be set to the workspace index for
+                    // elements duplicated across workspaces (i.e. background and bottom layers) in
+                    // order to have their non-xray framebuffer effects separated from each other.
+                    //
+                    // This doesn't have to correspond exactly to workspace id or idx, the only
+                    // requirement is that there's only one framebuffer effect element with a given id +
+                    // namespace on the frame at once. Id + namespace is used as the cache key in the
+                    // damage tracker.
+                    let ns = Some(ws.id().get() as usize);
+                    let xray_pos = XrayPos::new(geo.loc, zoom);
+                    push_normal_from_layer!(Layer::Bottom, ns, xray_pos, process!(geo));
+                    push_normal_from_layer!(Layer::Background, ns, xray_pos, process!(geo));
 
-                process!(geo)(ws.render_background());
+                    process!(geo)(ws.render_background());
+                }
             }
         }
 
-        // ===== Consolidated carousel: sibling cards on the focused output =====
-        if self.layout.in_carousel_regime() && self.layout.active_output() == Some(output) {
+        // ===== Consolidated carousel: rotating carousel (centered + tucks) =====
+        if carousel_active {
             let host_scale = output.current_scale().fractional_scale();
-            let participants = self.layout.carousel_participants(output);
-            let placements = crate::layout::carousel::carousel_card_layout(
+            let outputs = self.layout.carousel_outputs();
+            let centered = self
+                .layout
+                .carousel_centered_output_idx()
+                .min(outputs.len().saturating_sub(1));
+            let placements = crate::layout::carousel::carousel_centered_layout(
                 mon.view_size(),
-                participants.len(),
+                outputs.len(),
+                centered,
             );
-            let backdrop = self.config.borrow().overview.backdrop_color;
-            for (sibling, place) in participants.iter().zip(placements) {
-                // Scale-normalize so mixed-DPI siblings render at a consistent size.
-                // Sibling render elements are laid out in the sibling's physical pixel
-                // scale; normalize by host/sibling to fit them into the host-physical
-                // card box.
-                let sibling_scale = sibling.scale().fractional_scale();
-                let norm = host_scale / sibling_scale;
-                let effective_zoom = place.card_scale * norm;
-
-                // Soften the card's left/right hard edges with backdrop-colored gradient
-                // strips: opaque at the card's outer edge, fading to transparent inward.
-                // Top/bottom stay hard-cropped -- only the horizontal (infinite-scroll) axis
-                // needs the fade. Pushed BEFORE the card below so the fade strips render
-                // IN FRONT of the card (earlier-pushed = on top).
+            // niri renders EARLIER-pushed elements IN FRONT, so push the centered card's
+            // group FIRST (front), then the tucks in index order.
+            let mut order = vec![centered];
+            order.extend((0..outputs.len()).filter(|&j| j != centered));
+            for &i in &order {
+                let m = outputs[i];
+                let place = placements[i];
+                // fade strips FIRST (in front of this card), then the card -- per 2a fade fix.
+                let backdrop = self.config.borrow().overview.backdrop_color;
                 let opaque = {
                     let mut c = backdrop;
                     c.a = 1.;
@@ -5016,12 +5028,10 @@ impl Niri {
                     c
                 };
                 let fade_w = place.card_rect.size.w * 0.10;
-                // LEFT strip: opaque at x=loc.x (outer) -> transparent at x=loc.x+fade_w.
                 let left = Rectangle::new(
                     place.card_rect.loc,
                     Size::from((fade_w, place.card_rect.size.h)),
                 );
-                // RIGHT strip: transparent -> opaque at the right edge.
                 let right = Rectangle::new(
                     Point::from((
                         place.card_rect.loc.x + place.card_rect.size.w - fade_w,
@@ -5029,19 +5039,17 @@ impl Niri {
                     )),
                     Size::from((fade_w, place.card_rect.size.h)),
                 );
-                for (rect, from, to) in [
-                    (left, opaque, transparent), // opaque at left edge, fading right (inward)
-                    (right, transparent, opaque), // fading to opaque at right edge
-                ] {
+                for (rect, from, to) in [(left, opaque, transparent), (right, transparent, opaque)]
+                {
                     let strip = BorderRenderElement::new(
                         rect.size,
-                        Rectangle::from_size(rect.size), // gradient_area (zero-based)
+                        Rectangle::from_size(rect.size),
                         GradientInterpolation::default(),
                         from,
                         to,
-                        0., // angle: horizontal
-                        Rectangle::from_size(rect.size), // geometry (zero-based)
-                        f32::MAX, // border_width huge => full-fill gradient
+                        0.,
+                        Rectangle::from_size(rect.size),
+                        f32::MAX,
                         CornerRadius::default(),
                         host_scale as f32,
                         1.0,
@@ -5049,19 +5057,15 @@ impl Niri {
                     .with_location(rect.loc);
                     push(OutputRenderElements::CarouselFade(strip));
                 }
-
-                sibling.render_active_workspace_at_zoom(
-                    ctx.r(),
-                    1.0, // render sibling content at native zoom; card_scale shrinks it below
-                    focus_ring,
-                    &mut |elem| {
-                        if let Some(wrapped) =
-                            scale_relocate_crop(elem, output_scale, effective_zoom, place.card_rect)
-                        {
-                            push(OutputRenderElements::CarouselCard(wrapped));
-                        }
-                    },
-                );
+                let sibling_scale = m.scale().fractional_scale();
+                let effective_zoom = place.card_scale * (host_scale / sibling_scale);
+                m.render_active_workspace_at_zoom(ctx.r(), 1.0, focus_ring, &mut |elem| {
+                    if let Some(wrapped) =
+                        scale_relocate_crop(elem, output_scale, effective_zoom, place.card_rect)
+                    {
+                        push(OutputRenderElements::CarouselCard(wrapped));
+                    }
+                });
             }
         }
         // ===== END carousel =====
