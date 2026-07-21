@@ -4999,23 +4999,17 @@ impl Niri {
                 let sibling_scale = sibling.scale().fractional_scale();
                 let norm = host_scale / sibling_scale;
                 let effective_zoom = place.card_scale * norm;
-                sibling.render_active_workspace_at_zoom(
-                    ctx.r(),
-                    1.0, // render sibling content at native zoom; card_scale shrinks it below
-                    focus_ring,
-                    &mut |elem| {
-                        if let Some(wrapped) =
-                            scale_relocate_crop(elem, output_scale, effective_zoom, place.card_rect)
-                        {
-                            push(OutputRenderElements::CarouselCard(wrapped));
-                        }
-                    },
-                );
 
                 // Soften the card's left/right hard edges with backdrop-colored gradient
                 // strips: opaque at the card's outer edge, fading to transparent inward.
                 // Top/bottom stay hard-cropped -- only the horizontal (infinite-scroll) axis
-                // needs the fade.
+                // needs the fade. Pushed BEFORE the card below so the fade strips render
+                // IN FRONT of the card (earlier-pushed = on top).
+                let opaque = {
+                    let mut c = backdrop;
+                    c.a = 1.;
+                    c
+                };
                 let transparent = {
                     let mut c = backdrop;
                     c.a = 0.;
@@ -5036,8 +5030,8 @@ impl Niri {
                     Size::from((fade_w, place.card_rect.size.h)),
                 );
                 for (rect, from, to) in [
-                    (left, backdrop, transparent), // opaque at left edge, fading right (inward)
-                    (right, transparent, backdrop), // fading to opaque at right edge
+                    (left, opaque, transparent), // opaque at left edge, fading right (inward)
+                    (right, transparent, opaque), // fading to opaque at right edge
                 ] {
                     let strip = BorderRenderElement::new(
                         rect.size,
@@ -5055,6 +5049,19 @@ impl Niri {
                     .with_location(rect.loc);
                     push(OutputRenderElements::CarouselFade(strip));
                 }
+
+                sibling.render_active_workspace_at_zoom(
+                    ctx.r(),
+                    1.0, // render sibling content at native zoom; card_scale shrinks it below
+                    focus_ring,
+                    &mut |elem| {
+                        if let Some(wrapped) =
+                            scale_relocate_crop(elem, output_scale, effective_zoom, place.card_rect)
+                        {
+                            push(OutputRenderElements::CarouselCard(wrapped));
+                        }
+                    },
+                );
             }
         }
         // ===== END carousel =====
