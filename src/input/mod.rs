@@ -1084,6 +1084,11 @@ impl State {
                 }
             }
             Action::FocusColumnLeft => {
+                if self.niri.layout.in_carousel_regime() {
+                    self.niri.layout.slide_carousel(-1);
+                    self.niri.queue_redraw_all();
+                    return;
+                }
                 self.niri.layout.focus_left();
                 self.maybe_warp_cursor_to_focus();
                 self.niri.layer_shell_on_demand_focus = None;
@@ -1104,6 +1109,11 @@ impl State {
                 }
             }
             Action::FocusColumnRight => {
+                if self.niri.layout.in_carousel_regime() {
+                    self.niri.layout.slide_carousel(1);
+                    self.niri.queue_redraw_all();
+                    return;
+                }
                 self.niri.layout.focus_right();
                 self.maybe_warp_cursor_to_focus();
                 self.niri.layer_shell_on_demand_focus = None;
@@ -3375,6 +3385,20 @@ impl State {
                         });
                         (bind_up, bind_down)
                     } else if should_handle_in_overview && modifiers == Modifiers::SHIFT {
+                        if self.niri.layout.in_carousel_regime() {
+                            if ticks > 0 {
+                                for _ in 0..ticks {
+                                    self.niri.layout.slide_carousel(1);
+                                }
+                            } else {
+                                for _ in ticks..0 {
+                                    self.niri.layout.slide_carousel(-1);
+                                }
+                            }
+                            self.niri.queue_redraw_all();
+                            return;
+                        }
+
                         let bind_up = Some(Bind {
                             key: Key {
                                 trigger: Trigger::WheelScrollUp,
