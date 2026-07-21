@@ -1717,9 +1717,8 @@ impl<W: LayoutElement> Monitor<W> {
     }
 
     /// Verbatim copy of [`Self::workspaces_with_render_geo`] zipped against
-    /// [`Self::workspaces_render_geo_at_zoom`] instead (removed once Task 4 wires up its
-    /// caller).
-    fn workspaces_with_render_geo_at_zoom(
+    /// [`Self::workspaces_render_geo_at_zoom`] instead.
+    pub fn workspaces_with_render_geo_at_zoom(
         &self,
         zoom: f64,
     ) -> impl Iterator<Item = (&Workspace<W>, Rectangle<f64, Logical>)> {

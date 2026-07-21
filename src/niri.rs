@@ -5136,6 +5136,56 @@ impl Niri {
                         push(OutputRenderElements::CarouselCard(elem));
                     }
                 });
+
+                // Target's background layer-shell surfaces + per-workspace solid background,
+                // drawn AFTER the windows above so they land behind them (niri renders
+                // earlier-pushed elements on top). Shifted by the same host/target centering
+                // delta the windows use, so the wallpaper lines up with the windows.
+                let target_layer_map = layer_map_for_output(target.output());
+                for (ws, geo) in target.workspaces_with_render_geo_at_zoom(fill_zoom) {
+                    let geo_shifted = Rectangle::new(
+                        Point::from((geo.loc.x + dx, geo.loc.y + dy)),
+                        geo.size,
+                    );
+                    self.render_layer_normal(
+                        ctx.r(),
+                        None,
+                        &target_layer_map,
+                        Layer::Bottom,
+                        XrayPos::default(),
+                        false,
+                        &mut |elem| {
+                            if let Some(w) =
+                                scale_relocate_crop(elem, output_scale, fill_zoom, geo_shifted)
+                            {
+                                push(OutputRenderElements::RelocatedLayerSurface(w));
+                            }
+                        },
+                    );
+                    self.render_layer_normal(
+                        ctx.r(),
+                        None,
+                        &target_layer_map,
+                        Layer::Background,
+                        XrayPos::default(),
+                        false,
+                        &mut |elem| {
+                            if let Some(w) =
+                                scale_relocate_crop(elem, output_scale, fill_zoom, geo_shifted)
+                            {
+                                push(OutputRenderElements::RelocatedLayerSurface(w));
+                            }
+                        },
+                    );
+                    if let Some(w) = scale_relocate_crop(
+                        ws.render_background(),
+                        output_scale,
+                        fill_zoom,
+                        geo_shifted,
+                    ) {
+                        push(OutputRenderElements::RelocatedColor(w));
+                    }
+                }
             }
         }
         // ===== END lens =====
