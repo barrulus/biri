@@ -4354,3 +4354,137 @@ fn slide_carousel_wraps_over_outputs() {
     layout.slide_carousel(-1);
     assert_eq!(layout.carousel_centered_output_idx(), 2); // wrapped backward
 }
+
+#[test]
+fn slide_carousel_single_output_is_noop() {
+    fn make_output(name: &str) -> Output {
+        let output = Output::new(
+            name.to_owned(),
+            PhysicalProperties {
+                size: Size::from((1280, 720)),
+                subpixel: Subpixel::Unknown,
+                make: String::new(),
+                model: String::new(),
+                serial_number: String::new(),
+            },
+        );
+        output.change_current_state(
+            Some(Mode {
+                size: Size::from((1280, 720)),
+                refresh: 60000,
+            }),
+            None,
+            None,
+            None,
+        );
+        output.user_data().insert_if_missing(|| OutputName {
+            connector: name.to_owned(),
+            make: None,
+            model: None,
+            serial: None,
+        });
+        output
+    }
+
+    // Single eligible output -- slide_carousel's `len < 2` guard must make this a no-op.
+    let mut layout = Layout::<TestWindow>::default();
+
+    let a = make_output("A");
+    layout.add_output(a.clone(), None, false);
+
+    layout.add_window(
+        TestWindow::new(TestWindowParams::new(0)),
+        AddWindowTarget::Output(&a),
+        None,
+        None,
+        false,
+        false,
+        ActivateWindow::default(),
+    );
+
+    layout.reset_carousel_center();
+    assert_eq!(layout.carousel_centered_output_idx(), 0);
+
+    layout.slide_carousel(1);
+    assert_eq!(layout.carousel_centered_output_idx(), 0);
+
+    layout.slide_carousel(-1);
+    assert_eq!(layout.carousel_centered_output_idx(), 0);
+}
+
+#[test]
+fn reset_carousel_center_noop_when_active_not_in_set() {
+    fn make_output(name: &str) -> Output {
+        let output = Output::new(
+            name.to_owned(),
+            PhysicalProperties {
+                size: Size::from((1280, 720)),
+                subpixel: Subpixel::Unknown,
+                make: String::new(),
+                model: String::new(),
+                serial_number: String::new(),
+            },
+        );
+        output.change_current_state(
+            Some(Mode {
+                size: Size::from((1280, 720)),
+                refresh: 60000,
+            }),
+            None,
+            None,
+            None,
+        );
+        output.user_data().insert_if_missing(|| OutputName {
+            connector: name.to_owned(),
+            make: None,
+            model: None,
+            serial: None,
+        });
+        output
+    }
+
+    // "A" is the active output (first-added, empty -- no window, so excluded from
+    // carousel_outputs()). "B" and "C" have windows and are in the carousel set.
+    let mut layout = Layout::<TestWindow>::default();
+
+    let a = make_output("A");
+    let b = make_output("B");
+    let c = make_output("C");
+
+    layout.add_output(a.clone(), None, false);
+    layout.add_output(b.clone(), None, false);
+    layout.add_output(c.clone(), None, false);
+
+    layout.add_window(
+        TestWindow::new(TestWindowParams::new(0)),
+        AddWindowTarget::Output(&b),
+        None,
+        None,
+        false,
+        false,
+        ActivateWindow::default(),
+    );
+    layout.add_window(
+        TestWindow::new(TestWindowParams::new(1)),
+        AddWindowTarget::Output(&c),
+        None,
+        None,
+        false,
+        false,
+        ActivateWindow::default(),
+    );
+
+    let names: Vec<String> = layout
+        .carousel_outputs()
+        .iter()
+        .map(|m| m.output_name().clone())
+        .collect();
+    assert_eq!(names, vec!["B".to_string(), "C".to_string()]); // "A" excluded (empty)
+
+    // Directly set a known, non-default centered index (private field, accessible from
+    // this child module) to prove reset_carousel_center() leaves it untouched.
+    layout.carousel_centered_output_idx = 1;
+
+    layout.reset_carousel_center();
+    assert_eq!(layout.carousel_centered_output_idx(), 1); // unchanged: active "A" not in set
+}

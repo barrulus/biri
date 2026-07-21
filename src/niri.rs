@@ -4999,23 +4999,28 @@ impl Niri {
         if carousel_active {
             let host_scale = output.current_scale().fractional_scale();
             let outputs = self.layout.carousel_outputs();
-            let centered = self
-                .layout
-                .carousel_centered_output_idx()
-                .min(outputs.len().saturating_sub(1));
-            let placements = crate::layout::carousel::carousel_centered_layout(
-                mon.view_size(),
-                outputs.len(),
-                centered,
-            );
-            // niri renders EARLIER-pushed elements IN FRONT, so push the centered card's
-            // group FIRST (front), then the tucks in index order.
-            let mut order = vec![centered];
-            order.extend((0..outputs.len()).filter(|&j| j != centered));
-            for &i in &order {
-                let m = outputs[i];
-                let place = placements[i];
-                // fade strips FIRST (in front of this card), then the card -- per 2a fade fix.
+            if outputs.is_empty() {
+                // Nothing to show -- with all outputs empty the overview is empty anyway.
+            } else {
+                // `carousel_centered_output_idx` is only re-synced to the active output in
+                // `toggle_overview` (on open); if the output/window set changes while the
+                // overview is open, this clamp keeps the stored index in range but it may no
+                // longer point at the output the user last centered. Live re-centering while
+                // the carousel is open is deferred to Phase 2c.
+                let centered = self
+                    .layout
+                    .carousel_centered_output_idx()
+                    .min(outputs.len().saturating_sub(1));
+                let placements = crate::layout::carousel::carousel_centered_layout(
+                    mon.view_size(),
+                    outputs.len(),
+                    centered,
+                );
+                // niri renders EARLIER-pushed elements IN FRONT, so push the centered card's
+                // group FIRST (front), then the tucks in index order.
+                let mut order = vec![centered];
+                order.extend((0..outputs.len()).filter(|&j| j != centered));
+                // Constant across all cards -- hoisted out of the loop (per 2a fade fix).
                 let backdrop = self.config.borrow().overview.backdrop_color;
                 let opaque = {
                     let mut c = backdrop;
@@ -5027,45 +5032,54 @@ impl Niri {
                     c.a = 0.;
                     c
                 };
-                let fade_w = place.card_rect.size.w * 0.10;
-                let left = Rectangle::new(
-                    place.card_rect.loc,
-                    Size::from((fade_w, place.card_rect.size.h)),
-                );
-                let right = Rectangle::new(
-                    Point::from((
-                        place.card_rect.loc.x + place.card_rect.size.w - fade_w,
-                        place.card_rect.loc.y,
-                    )),
-                    Size::from((fade_w, place.card_rect.size.h)),
-                );
-                for (rect, from, to) in [(left, opaque, transparent), (right, transparent, opaque)]
-                {
-                    let strip = BorderRenderElement::new(
-                        rect.size,
-                        Rectangle::from_size(rect.size),
-                        GradientInterpolation::default(),
-                        from,
-                        to,
-                        0.,
-                        Rectangle::from_size(rect.size),
-                        f32::MAX,
-                        CornerRadius::default(),
-                        host_scale as f32,
-                        1.0,
-                    )
-                    .with_location(rect.loc);
-                    push(OutputRenderElements::CarouselFade(strip));
-                }
-                let sibling_scale = m.scale().fractional_scale();
-                let effective_zoom = place.card_scale * (host_scale / sibling_scale);
-                m.render_active_workspace_at_zoom(ctx.r(), 1.0, focus_ring, &mut |elem| {
-                    if let Some(wrapped) =
-                        scale_relocate_crop(elem, output_scale, effective_zoom, place.card_rect)
+                for &i in &order {
+                    let m = outputs[i];
+                    let place = placements[i];
+                    // fade strips FIRST (in front of this card), then the card.
+                    let fade_w = place.card_rect.size.w * 0.10;
+                    let left = Rectangle::new(
+                        place.card_rect.loc,
+                        Size::from((fade_w, place.card_rect.size.h)),
+                    );
+                    let right = Rectangle::new(
+                        Point::from((
+                            place.card_rect.loc.x + place.card_rect.size.w - fade_w,
+                            place.card_rect.loc.y,
+                        )),
+                        Size::from((fade_w, place.card_rect.size.h)),
+                    );
+                    for (rect, from, to) in
+                        [(left, opaque, transparent), (right, transparent, opaque)]
                     {
-                        push(OutputRenderElements::CarouselCard(wrapped));
+                        let strip = BorderRenderElement::new(
+                            rect.size,
+                            Rectangle::from_size(rect.size),
+                            GradientInterpolation::default(),
+                            from,
+                            to,
+                            0.,
+                            Rectangle::from_size(rect.size),
+                            f32::MAX,
+                            CornerRadius::default(),
+                            host_scale as f32,
+                            1.0,
+                        )
+                        .with_location(rect.loc);
+                        push(OutputRenderElements::CarouselFade(strip));
                     }
-                });
+                    let sibling_scale = m.scale().fractional_scale();
+                    let effective_zoom = place.card_scale * (host_scale / sibling_scale);
+                    m.render_active_workspace_at_zoom(ctx.r(), 1.0, focus_ring, &mut |elem| {
+                        if let Some(wrapped) = scale_relocate_crop(
+                            elem,
+                            output_scale,
+                            effective_zoom,
+                            place.card_rect,
+                        ) {
+                            push(OutputRenderElements::CarouselCard(wrapped));
+                        }
+                    });
+                }
             }
         }
         // ===== END carousel =====
