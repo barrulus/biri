@@ -4990,10 +4990,14 @@ impl Niri {
                 mon.view_size(),
                 participants.len(),
             );
+            let backdrop = self.config.borrow().overview.backdrop_color;
             for (sibling, place) in participants.iter().zip(placements) {
                 // Scale-normalize so mixed-DPI siblings render at a consistent size.
+                // Sibling render elements are laid out in the sibling's physical pixel
+                // scale; normalize by host/sibling to fit them into the host-physical
+                // card box.
                 let sibling_scale = sibling.scale().fractional_scale();
-                let norm = (sibling_scale / host_scale) as f64;
+                let norm = host_scale / sibling_scale;
                 let effective_zoom = place.card_scale * norm;
                 sibling.render_active_workspace_at_zoom(
                     ctx.r(),
@@ -5012,7 +5016,6 @@ impl Niri {
                 // strips: opaque at the card's outer edge, fading to transparent inward.
                 // Top/bottom stay hard-cropped -- only the horizontal (infinite-scroll) axis
                 // needs the fade.
-                let backdrop = self.config.borrow().overview.backdrop_color;
                 let transparent = {
                     let mut c = backdrop;
                     c.a = 0.;

@@ -1920,8 +1920,8 @@ impl<W: LayoutElement> Monitor<W> {
     /// overview progress. Elements are rescaled by `zoom` about the origin; the
     /// caller positions/crops them. Used for consolidated carousel cards.
     ///
-    /// Not yet called anywhere; consumed by carousel card compositing in a follow-up task.
-    #[allow(dead_code)]
+    /// Renders a sibling monitor's active workspace at a fixed zoom for consolidated
+    /// carousel cards.
     pub fn render_active_workspace_at_zoom<R: NiriRenderer>(
         &self,
         mut ctx: RenderCtx<R>,
