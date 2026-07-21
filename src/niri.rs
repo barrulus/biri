@@ -4914,6 +4914,11 @@ impl Niri {
         // the centered card in the carousel block below.
         let carousel_active =
             self.layout.in_carousel_regime() && self.layout.active_output() == Some(output);
+        // Whether this output is currently rendering the consolidated carousel lens: while
+        // active, the centered output's full overview fills the host screen, and the host's
+        // own overview (and the carousel cards) are suppressed here.
+        let in_carousel_lens =
+            self.layout.in_carousel_lens() && self.layout.active_output() == Some(output);
 
         // The overlay layer elements go next.
         push_popups_from_layer!(Layer::Overlay);
@@ -4966,7 +4971,7 @@ impl Niri {
             // elements) is instead drawn as the centered card in the carousel block
             // below. Overlay/top popups above and the backdrop/cursor elsewhere are
             // unaffected.
-            if !carousel_active {
+            if !carousel_active && !in_carousel_lens {
                 for (ws, geo) in mon.workspaces_with_render_geo() {
                     let ns = Some(ws.id().get() as usize);
                     let xray_pos = XrayPos::new(geo.loc, zoom);
@@ -4994,6 +4999,10 @@ impl Niri {
                 }
             }
         }
+
+        // `in_carousel_regime` and `in_carousel_lens` are mutually exclusive bands (Task 2),
+        // so the carousel and lens render blocks below never both fire for the same output.
+        debug_assert!(!(carousel_active && in_carousel_lens));
 
         // ===== Consolidated carousel: rotating carousel (centered + tucks) =====
         if carousel_active {
@@ -5083,6 +5092,37 @@ impl Niri {
             }
         }
         // ===== END carousel =====
+
+        // ===== Consolidated carousel: LENS — centered output's full overview fills the host =====
+        if in_carousel_lens {
+            let outputs = self.layout.carousel_outputs();
+            if !outputs.is_empty() {
+                let centered = self
+                    .layout
+                    .carousel_centered_output_idx()
+                    .min(outputs.len() - 1);
+                let target = outputs[centered];
+                let host_view = mon.view_size();
+                let target_view = target.view_size();
+                let host_scale = output.current_scale().fractional_scale();
+                let target_scale = target.scale().fractional_scale();
+                // Fit the target's overview into the host view (letterbox: min of the axis
+                // ratios), corrected for the host/target output-scale difference. STARTING
+                // value -- tune on hardware (Step 4).
+                let fit = (host_view.w / target_view.w).min(host_view.h / target_view.h);
+                let fill_zoom = fit * (host_scale / target_scale);
+                let host_rect = Rectangle::new(Point::from((0., 0.)), host_view);
+                target.render_overview_at_zoom(ctx.r(), fill_zoom, focus_ring, &mut |elem| {
+                    // render_overview_at_zoom already baked fill_zoom into geo+rescale, so
+                    // wrap with zoom=1.0 (identity rescale) -- just relocate+crop onto the host.
+                    if let Some(wrapped) = scale_relocate_crop(elem, output_scale, 1.0, host_rect)
+                    {
+                        push(OutputRenderElements::CarouselCard(wrapped));
+                    }
+                });
+            }
+        }
+        // ===== END lens =====
 
         mon.render_workspace_shadows(ctx.renderer, &mut |elem| push(elem.into()));
 

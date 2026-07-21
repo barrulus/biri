@@ -1683,7 +1683,6 @@ impl<W: LayoutElement> Monitor<W> {
     /// Verbatim copy of [`Self::workspaces_render_geo`] with the internal overview zoom
     /// replaced by the passed-in `zoom`. Used to render a monitor's full overview at a
     /// caller-forced zoom (removed once Task 4 wires up its caller).
-    #[allow(dead_code)]
     fn workspaces_render_geo_at_zoom(
         &self,
         zoom: f64,
@@ -1720,7 +1719,6 @@ impl<W: LayoutElement> Monitor<W> {
     /// Verbatim copy of [`Self::workspaces_with_render_geo`] zipped against
     /// [`Self::workspaces_render_geo_at_zoom`] instead (removed once Task 4 wires up its
     /// caller).
-    #[allow(dead_code)]
     fn workspaces_with_render_geo_at_zoom(
         &self,
         zoom: f64,
@@ -1972,7 +1970,6 @@ impl<W: LayoutElement> Monitor<W> {
     /// Render this monitor's full overview (all workspaces stacked) at a fixed `zoom`,
     /// ignoring its inherited overview zoom. Elements are positioned in this monitor's
     /// own view space; the caller relocates/crops them onto the host output.
-    #[allow(dead_code)] // No caller until Task 4 wires up the lens render path.
     pub fn render_overview_at_zoom<R: NiriRenderer>(
         &self,
         mut ctx: RenderCtx<R>,
