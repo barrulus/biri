@@ -1680,6 +1680,59 @@ impl<W: LayoutElement> Monitor<W> {
             .filter(move |(_ws, geo)| geo.intersection(output_geo).is_some())
     }
 
+    /// Verbatim copy of [`Self::workspaces_render_geo`] with the internal overview zoom
+    /// replaced by the passed-in `zoom`. Used to render a monitor's full overview at a
+    /// caller-forced zoom (removed once Task 4 wires up its caller).
+    #[allow(dead_code)]
+    fn workspaces_render_geo_at_zoom(
+        &self,
+        zoom: f64,
+    ) -> impl Iterator<Item = Rectangle<f64, Logical>> {
+        let scale = self.scale.fractional_scale();
+
+        let ws_size = self.workspace_size(zoom);
+        let gap = self.workspace_gap(zoom);
+        let ws_height_with_gap = ws_size.h + gap;
+
+        let static_offset = (self.view_size.to_point() - ws_size.to_point()).downscale(2.);
+        let static_offset = static_offset
+            .to_physical_precise_round(scale)
+            .to_logical(scale);
+
+        let first_ws_y = -self.workspace_render_idx() * ws_height_with_gap;
+        let first_ws_y = round_logical_in_physical(scale, first_ws_y);
+
+        // Return position for one-past-last workspace too.
+        (0..=self.workspaces.len()).map(move |idx| {
+            let y = first_ws_y + idx as f64 * ws_height_with_gap;
+            let loc = Point::from((0., y)) + static_offset;
+
+            // Even though all components that go into loc are rounded to physical pixels, the
+            // floating point addition may lose precision. This can result for example in the
+            // current workspace having y = 0.0000000000002 and thus missing pointer hits at the
+            // monitor edge with y = 0. So, post-round the location too.
+            let loc = loc.to_physical_precise_round(scale).to_logical(scale);
+
+            Rectangle::new(loc, ws_size)
+        })
+    }
+
+    /// Verbatim copy of [`Self::workspaces_with_render_geo`] zipped against
+    /// [`Self::workspaces_render_geo_at_zoom`] instead (removed once Task 4 wires up its
+    /// caller).
+    #[allow(dead_code)]
+    fn workspaces_with_render_geo_at_zoom(
+        &self,
+        zoom: f64,
+    ) -> impl Iterator<Item = (&Workspace<W>, Rectangle<f64, Logical>)> {
+        let output_geo = Rectangle::from_size(self.view_size);
+
+        let geo = self.workspaces_render_geo_at_zoom(zoom);
+        zip(self.workspaces.iter(), geo)
+            // Cull out workspaces outside the output.
+            .filter(move |(_ws, geo)| geo.intersection(output_geo).is_some())
+    }
+
     pub fn workspaces_with_render_geo_idx(
         &self,
     ) -> impl Iterator<Item = ((usize, &Workspace<W>), Rectangle<f64, Logical>)> {
@@ -1888,6 +1941,90 @@ impl<W: LayoutElement> Monitor<W> {
         };
 
         for (ws, geo) in self.workspaces_with_render_geo() {
+            // Macro instead of closure because ws and insert hint have different elem types.
+            macro_rules! push {
+                () => {{
+                    &mut |elem| {
+                        let elem = CropRenderElement::from_element(elem, scale, crop_bounds);
+                        if let Some(elem) = elem {
+                            let elem = MonitorInnerRenderElement::from(elem);
+                            push(scale_relocate(geo, elem));
+                        }
+                    }
+                }};
+            }
+
+            let xray_pos = XrayPos::new(geo.loc, zoom);
+
+            ws.render_floating(ctx.r(), xray_pos, focus_ring, push!());
+
+            if let Some(loc) = insert_hint_render_loc {
+                if loc.workspace == InsertWorkspace::Existing(ws.id()) {
+                    self.insert_hint_element
+                        .render(ctx.renderer, loc.location, push!());
+                }
+            }
+
+            ws.render_scrolling(ctx.r(), xray_pos, focus_ring, push!());
+        }
+    }
+
+    /// Render this monitor's full overview (all workspaces stacked) at a fixed `zoom`,
+    /// ignoring its inherited overview zoom. Elements are positioned in this monitor's
+    /// own view space; the caller relocates/crops them onto the host output.
+    #[allow(dead_code)] // No caller until Task 4 wires up the lens render path.
+    pub fn render_overview_at_zoom<R: NiriRenderer>(
+        &self,
+        mut ctx: RenderCtx<R>,
+        zoom: f64,
+        focus_ring: bool,
+        push: &mut dyn FnMut(MonitorRenderElement<R>),
+    ) {
+        let _span = tracy_client::span!("Monitor::render_overview_at_zoom");
+
+        let scale = self.scale.fractional_scale();
+        // Ceil the height in physical pixels.
+        let height = (self.view_size.h * scale).ceil() as i32;
+
+        // Crop the elements to prevent them overflowing, currently visible during a workspace
+        // switch.
+        //
+        // HACK: crop to infinite bounds at least horizontally where we
+        // know there's no workspace joining or monitor bounds, otherwise
+        // it will cut pixel shaders and mess up the coordinate space.
+        // There's also a damage tracking bug which causes glitched
+        // rendering for maximized GTK windows.
+        //
+        // FIXME: use proper bounds after fixing the Crop element.
+        let crop_bounds = if self.workspace_switch.is_some() || self.overview_progress.is_some() {
+            Rectangle::new(
+                Point::from((-i32::MAX / 2, 0)),
+                Size::from((i32::MAX, height)),
+            )
+        } else {
+            Rectangle::new(
+                Point::from((-i32::MAX / 2, -i32::MAX / 2)),
+                Size::from((i32::MAX, i32::MAX)),
+            )
+        };
+
+        let insert_hint_render_loc = self
+            .insert_hint_render_loc
+            .filter(|_| !self.options.layout.insert_hint.off);
+
+        let scale_relocate = move |geo: Rectangle<f64, Logical>, elem| {
+            let elem = RescaleRenderElement::from_element(elem, Point::from((0, 0)), zoom);
+            RelocateRenderElement::from_element(
+                elem,
+                // The offset we get from workspaces_with_render_geo() is already
+                // rounded to physical pixels, but it's in the logical coordinate
+                // space, so we need to convert it to physical.
+                geo.loc.to_physical_precise_round(scale),
+                Relocate::Relative,
+            )
+        };
+
+        for (ws, geo) in self.workspaces_with_render_geo_at_zoom(zoom) {
             // Macro instead of closure because ws and insert hint have different elem types.
             macro_rules! push {
                 () => {{
