@@ -1845,6 +1845,17 @@ impl<W: LayoutElement> Layout<W> {
         }
     }
 
+    /// Rotates the carousel's centered output by `delta` positions, wrapping
+    /// over `carousel_outputs()`. No-op if fewer than 2 outputs are eligible.
+    pub fn slide_carousel(&mut self, delta: isize) {
+        let len = self.carousel_outputs().len();
+        if len < 2 {
+            return;
+        }
+        let idx = self.carousel_centered_output_idx as isize;
+        self.carousel_centered_output_idx = (idx + delta).rem_euclid(len as isize) as usize;
+    }
+
     pub fn monitors_mut(&mut self) -> impl Iterator<Item = &mut Monitor<W>> + '_ {
         let monitors = if let MonitorSet::Normal { monitors, .. } = &mut self.monitor_set {
             &mut monitors[..]

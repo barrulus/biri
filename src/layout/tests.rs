@@ -4272,3 +4272,85 @@ fn carousel_outputs_includes_host_and_reset_centers_on_active() {
     layout.reset_carousel_center();
     assert_eq!(layout.carousel_centered_output_idx(), 0); // centered on active host "A"
 }
+
+#[test]
+fn slide_carousel_wraps_over_outputs() {
+    fn make_output(name: &str) -> Output {
+        let output = Output::new(
+            name.to_owned(),
+            PhysicalProperties {
+                size: Size::from((1280, 720)),
+                subpixel: Subpixel::Unknown,
+                make: String::new(),
+                model: String::new(),
+                serial_number: String::new(),
+            },
+        );
+        output.change_current_state(
+            Some(Mode {
+                size: Size::from((1280, 720)),
+                refresh: 60000,
+            }),
+            None,
+            None,
+            None,
+        );
+        output.user_data().insert_if_missing(|| OutputName {
+            connector: name.to_owned(),
+            make: None,
+            model: None,
+            serial: None,
+        });
+        output
+    }
+
+    // 3 outputs, centered idx starts at 0.
+    let mut layout = Layout::<TestWindow>::default();
+
+    let a = make_output("A");
+    let b = make_output("B");
+    let c = make_output("C");
+
+    layout.add_output(a.clone(), None, false);
+    layout.add_output(b.clone(), None, false);
+    layout.add_output(c.clone(), None, false);
+
+    layout.add_window(
+        TestWindow::new(TestWindowParams::new(0)),
+        AddWindowTarget::Output(&a),
+        None,
+        None,
+        false,
+        false,
+        ActivateWindow::default(),
+    );
+    layout.add_window(
+        TestWindow::new(TestWindowParams::new(1)),
+        AddWindowTarget::Output(&b),
+        None,
+        None,
+        false,
+        false,
+        ActivateWindow::default(),
+    );
+    layout.add_window(
+        TestWindow::new(TestWindowParams::new(2)),
+        AddWindowTarget::Output(&c),
+        None,
+        None,
+        false,
+        false,
+        ActivateWindow::default(),
+    );
+
+    layout.reset_carousel_center();
+
+    layout.slide_carousel(1);
+    assert_eq!(layout.carousel_centered_output_idx(), 1);
+    layout.slide_carousel(1);
+    assert_eq!(layout.carousel_centered_output_idx(), 2);
+    layout.slide_carousel(1);
+    assert_eq!(layout.carousel_centered_output_idx(), 0); // wrapped
+    layout.slide_carousel(-1);
+    assert_eq!(layout.carousel_centered_output_idx(), 2); // wrapped backward
+}
