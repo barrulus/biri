@@ -70,7 +70,10 @@ pub fn carousel_centered_layout(
                 let x = (view_size.w - center_w) / 2.;
                 let y = (view_size.h - center_h) / 2.;
                 CardPlacement {
-                    card_rect: Rectangle::new(Point::from((x, y)), Size::from((center_w, center_h))),
+                    card_rect: Rectangle::new(
+                        Point::from((x, y)),
+                        Size::from((center_w, center_h)),
+                    ),
                     card_scale: center_scale,
                 }
             } else {
@@ -96,8 +99,9 @@ pub fn carousel_centered_layout(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use smithay::utils::Size;
+
+    use super::*;
 
     #[test]
     fn zero_cards_is_empty() {
@@ -152,6 +156,19 @@ mod tests {
             assert!(c.card_rect.loc.x + c.card_rect.size.w <= view.w);
             assert!(c.card_rect.loc.y >= 0.);
             assert!(c.card_rect.loc.y + c.card_rect.size.h <= view.h);
+        }
+    }
+
+    #[test]
+    fn centered_layout_many_outputs_stay_on_screen() {
+        let view = Size::from((1920., 1080.));
+        for centered in [0usize, 3, 7] {
+            for c in carousel_centered_layout(view, 8, centered) {
+                assert!(c.card_rect.loc.x >= 0.);
+                assert!(c.card_rect.loc.x + c.card_rect.size.w <= view.w);
+                assert!(c.card_rect.loc.y >= 0.);
+                assert!(c.card_rect.loc.y + c.card_rect.size.h <= view.h);
+            }
         }
     }
 }
