@@ -4981,6 +4981,35 @@ impl Niri {
             }
         }
 
+        // ===== Consolidated carousel: sibling cards on the focused output =====
+        if self.layout.in_carousel_regime() && self.layout.active_output() == Some(output) {
+            let host_scale = output.current_scale().fractional_scale();
+            let participants = self.layout.carousel_participants(output);
+            let placements = crate::layout::carousel::carousel_card_layout(
+                mon.view_size(),
+                participants.len(),
+            );
+            for (sibling, place) in participants.iter().zip(placements) {
+                // Scale-normalize so mixed-DPI siblings render at a consistent size.
+                let sibling_scale = sibling.scale().fractional_scale();
+                let norm = (sibling_scale / host_scale) as f64;
+                let effective_zoom = place.card_scale * norm;
+                sibling.render_active_workspace_at_zoom(
+                    ctx.r(),
+                    1.0, // render sibling content at native zoom; card_scale shrinks it below
+                    focus_ring,
+                    &mut |elem| {
+                        if let Some(wrapped) =
+                            scale_relocate_crop(elem, output_scale, effective_zoom, place.card_rect)
+                        {
+                            push(OutputRenderElements::CarouselCard(wrapped));
+                        }
+                    },
+                );
+            }
+        }
+        // ===== END carousel =====
+
         mon.render_workspace_shadows(ctx.renderer, &mut |elem| push(elem.into()));
 
         // Then the backdrop.
@@ -7331,6 +7360,10 @@ niri_render_elements! {
         RelocatedMemoryBuffer = RelocateRenderElement<MemoryRenderBufferRenderElement<R>>,
         GlobalShader = GlobalShaderElement,
         ScopedShader = ScopedShaderElement,
+        // Consolidated carousel: a sibling monitor composited as a tucked card.
+        CarouselCard = CropRenderElement<RelocateRenderElement<RescaleRenderElement<
+            MonitorRenderElement<R>
+        >>>,
     }
 }
 
