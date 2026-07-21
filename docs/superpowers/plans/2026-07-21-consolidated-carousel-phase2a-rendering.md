@@ -4,7 +4,7 @@
 
 **Goal:** Promote the validated scale-mismatch spike into real, correct carousel cards: sibling monitors rendered as tucked, dimmed, edge-faded previews around the focused output's overview — gated to the focused output, at a controlled zoom, scale-normalized across mixed-DPI outputs, with no offscreen buffers.
 
-**Architecture:** In `render_inner` (`src/niri.rs`), when the focused output is in the carousel regime, iterate the participating sibling monitors and composite each as a card. Each card renders the sibling's **active workspace** at a fixed zoom (a new `Monitor::render_active_workspace_at_zoom`, bypassing the inherited `overview_progress` double-zoom), positioned by a pure `carousel` layout module, wrapped with the existing `scale_relocate_crop` (hard crop) scaled by `sibling_scale / host_scale`, and softened with left/right gradient darken strips (`BorderRenderElement`, no offscreen). Pure logic (participation, geometry, scale factor) is unit-tested; the render glue is compiled green and hardware-verified.
+**Architecture:** In `render_inner` (`src/niri.rs`), when the focused output is in the carousel regime, iterate the participating sibling monitors and composite each as a card. Each card renders the sibling's **active workspace** at a fixed zoom (a new `Monitor::render_active_workspace_at_zoom`, bypassing the inherited `overview_progress` double-zoom), positioned by a pure `carousel` layout module, wrapped with the existing `scale_relocate_crop` (hard crop) scaled by `host_scale / sibling_scale`, and softened with left/right gradient darken strips (`BorderRenderElement`, no offscreen). Pure logic (participation, geometry, scale factor) is unit-tested; the render glue is compiled green and hardware-verified.
 
 **Tech Stack:** Rust (nightly via devshell, no `+nightly`). Smithay render elements: `RescaleRenderElement`, `RelocateRenderElement`, `CropRenderElement`, `BorderRenderElement`. `insta`/plain unit tests for the pure logic.
 
@@ -15,7 +15,7 @@
 - **No offscreen buffers** on the card render path (the NVIDIA per-frame-alloc latency cliff — `[[per-frame-gpu-alloc-latency]]`). The spike proved direct compositing; keep it.
 - Card **participation**: a sibling appears iff it is **not the host output**, **not `isolated`**, and **non-empty** (has ≥1 window). Empty/isolated outputs are skipped. No hard cap on count.
 - Card **containment**: each card is hard-cropped to its box (`CropRenderElement`); horizontal edges then softened by a gradient darken strip. No sibling content may bleed outside its card box.
-- **Scale-normalize** every card by `sibling_scale / host_scale` (fractional scales) so cards are size-consistent across mixed-DPI outputs.
+- **Scale-normalize** every card by `host_scale / sibling_scale` (fractional scales; the inverse of the observed error, which is ∝ `sibling_scale/host_scale`) so cards are size-consistent across mixed-DPI outputs.
 - **Gate**: render cards only when `self.layout.in_carousel_regime() && self.layout.active_output() == Some(output)` — the focused output only. Other physical outputs stay live/unchanged.
 - Reference: spike findings `docs/superpowers/specs/2026-07-20-consolidated-carousel-scale-spike.md`; design `docs/superpowers/specs/2026-07-20-consolidated-carousel-overview-design.md`.
 
@@ -359,7 +359,7 @@ Where the spike block is (after host workspaces, before `mon.render_workspace_sh
             for (sibling, place) in participants.iter().zip(placements) {
                 // Scale-normalize so mixed-DPI siblings render at a consistent size.
                 let sibling_scale = sibling.scale().fractional_scale();
-                let norm = (sibling_scale / host_scale) as f64;
+                let norm = host_scale / sibling_scale;
                 let effective_zoom = place.card_scale * norm;
                 sibling.render_active_workspace_at_zoom(
                     ctx.r(),
@@ -378,7 +378,7 @@ Where the spike block is (after host workspaces, before `mon.render_workspace_sh
         // ===== END carousel =====
 ```
 > `mon.view_size()` — if no pub accessor exists for `view_size` (`monitor.rs:53`), add `pub fn view_size(&self) -> Size<f64, Logical> { self.view_size }`.
-> Note the two-stage scale: the sibling renders at zoom 1.0 (native active workspace), and `scale_relocate_crop` applies `effective_zoom = card_scale * (sibling_scale/host_scale)` — the single place the card shrink and the DPI normalization combine.
+> Note the two-stage scale: the sibling renders at zoom 1.0 (native active workspace), and `scale_relocate_crop` applies `effective_zoom = card_scale * (host_scale/sibling_scale)` — the single place the card shrink and the DPI normalization combine. The ratio is host/sibling (the inverse of the observed error ∝ sibling/host).
 
 - [ ] **Step 3: Compile green**
 

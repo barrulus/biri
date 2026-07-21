@@ -66,11 +66,15 @@ scale. `scale_relocate_crop` then wraps and crops using the **host**
 differs from the host renders proportionally larger/smaller by roughly
 `sibling_scale / host_scale`.
 
-**Phase 2 correction:** normalize the card by that ratio — either multiply the
-card rescale factor by `sibling_scale / host_scale`, or render the sibling through
-a scale-aware path so the composited card is scale-invariant. This is a **bounded,
-known correction**, not a redesign. It is the single concrete thing the spike was
-run to determine.
+**Phase 2 correction:** the error above is proportional to `sibling_scale /
+host_scale`, so cancelling it means multiplying the card rescale factor by the
+**inverse**, `host_scale / sibling_scale` (or rendering the sibling through a
+scale-aware path so the composited card is scale-invariant). NOTE: an earlier draft
+of this doc mistakenly prescribed multiplying by `sibling_scale / host_scale` — that
+is the error direction, not the correction, and would *double* the mis-sizing; the
+correct factor is `host_scale / sibling_scale`. This is a **bounded, known
+correction**, not a redesign. It is the single concrete thing the spike was run to
+determine.
 
 ### 5. Siblings inherit the overview zoom → double-zoom (Phase-2 must control card zoom)
 
@@ -137,8 +141,8 @@ transparent over a bounded margin is the correct middle ground.)
    via `scale_relocate_crop`, **gated to the focused output** (finding 6).
 2. Render each sibling card at a **controlled zoom**, not the inherited overview
    progress (finding 5).
-3. **Normalize the card scale by `sibling_scale / host_scale`** so cards are
-   scale-invariant across mixed-DPI outputs (finding 4).
+3. **Normalize the card scale by `host_scale / sibling_scale`** (the inverse of the
+   observed error) so cards are scale-invariant across mixed-DPI outputs (finding 4).
 4. **Fade the card edges** with a gradient-alpha mask over the crop margin, not a
    bare hard `CropRenderElement` clip (finding 7).
 5. No offscreen buffers (findings 1–2).
