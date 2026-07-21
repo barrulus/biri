@@ -4027,6 +4027,7 @@ fn consolidated_mode_scopes_overview_to_active_output() {
     let mut options = Options::default();
     options.overview.consolidated_carousel = Some(niri_config::ConsolidatedCarousel {
         activation_zoom: 0.25,
+        expand_zoom: 0.1,
     });
 
     let mut layout = Layout::<TestWindow>::with_options(Clock::with_time(Duration::ZERO), options);
@@ -4077,6 +4078,7 @@ fn carousel_regime_tracks_zoom_threshold() {
     let mut options = Options::default();
     options.overview.consolidated_carousel = Some(niri_config::ConsolidatedCarousel {
         activation_zoom: 0.25,
+        expand_zoom: 0.1,
     });
 
     let mut layout = Layout::<TestWindow>::with_options(Clock::with_time(Duration::ZERO), options);
