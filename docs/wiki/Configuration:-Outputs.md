@@ -15,7 +15,7 @@ output "eDP-1" {
     variable-refresh-rate // on-demand=true
     focus-at-startup
     backdrop-color "#001100"
-    max-bpc 8
+    // max-bpc 8
 
     hot-corners {
         // off
@@ -285,8 +285,12 @@ output "HDMI-A-1" {
 <sup>Since: next release</sup>
 
 Set the maximum bits per channel (BPC) for this output.
-You *do not* need to set this option unless you hit bandwidth issues (can't set a monitor configuration that works on other compositor) or lower-than-expected color depth.
-Particularly, 10-bit color output may work even if max-bpc is 8.
+
+You *do not* need to set this option normally.
+It influences the encoding of the display signal on the wire and *is not* directly related to the color bitness or framebuffer format.
+
+Setting `max-bpc` to a low value may help if you hit a bandwidth issue (can't set a monitor configuration that works on other compositor).
+Otherwise, you're advised to leave it unset (keeping a default, usually high value) and let the GPU driver figure things out automatically.
 
 Valid values are `6`, `8`, `10`, `12`, `14`, `16`.
 
