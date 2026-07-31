@@ -5489,9 +5489,8 @@ impl<W: LayoutElement> Layout<W> {
 
         // Reset zoom to config default when closing overview.
         if !self.overview_open {
-            let default_zoom = self.options.overview.zoom;
             for monitor in self.monitors_mut() {
-                monitor.reset_overview_zoom(default_zoom);
+                monitor.reset_overview_zoom();
             }
 
             // Snap carousel rotation home instantly (no animation — the

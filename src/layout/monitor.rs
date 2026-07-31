@@ -1447,8 +1447,7 @@ impl<W: LayoutElement> Monitor<W> {
 
     /// Reset zoom to config default - call when overview closes.
     /// This is instant (no animation) since the overview is closing.
-    pub fn reset_overview_zoom(&mut self, default_zoom: f64) {
-        self.overview_zoom_target = self.clamp_zoom_target(default_zoom);
+    pub fn reset_overview_zoom(&mut self) {
         self.overview_zoom_anim = None;
         self.overview_zoom_preset_idx = 0;
     }
