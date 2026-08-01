@@ -17,6 +17,7 @@ use crate::render_helpers::blur::BlurProgram;
 
 pub struct Shaders {
     pub border: Option<ShaderProgram>,
+    pub panel: Option<ShaderProgram>,
     pub shadow: Option<ShaderProgram>,
     pub clipped_surface: Option<GlesTexProgram>,
     pub postprocess_and_clip: Option<GlesTexProgram>,
@@ -37,6 +38,7 @@ pub struct Shaders {
 #[derive(Debug, Clone, Copy)]
 pub enum ProgramType {
     Border,
+    Panel,
     Shadow,
     Resize,
     Close,
@@ -75,6 +77,20 @@ impl Shaders {
         )
         .map_err(|err| {
             warn!("error compiling border shader: {err:?}");
+        })
+        .ok();
+
+        let panel = ShaderProgram::compile(
+            renderer,
+            include_str!("panel.frag"),
+            &[
+                UniformName::new("niri_panel_inv", UniformType::Matrix3x3),
+                UniformName::new("niri_panel_dim", UniformType::_1f),
+            ],
+            &["niri_panel_tex"],
+        )
+        .map_err(|err| {
+            warn!("error compiling panel shader: {err:?}");
         })
         .ok();
 
@@ -171,6 +187,7 @@ impl Shaders {
 
         Self {
             border,
+            panel,
             shadow,
             clipped_surface,
             postprocess_and_clip,
@@ -224,6 +241,7 @@ impl Shaders {
     pub fn program(&self, program: ProgramType) -> Option<ShaderProgram> {
         match program {
             ProgramType::Border => self.border.clone(),
+            ProgramType::Panel => self.panel.clone(),
             ProgramType::Shadow => self.shadow.clone(),
             ProgramType::Resize => self
                 .custom_resize
