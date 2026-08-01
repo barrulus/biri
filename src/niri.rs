@@ -156,6 +156,7 @@ use crate::render_helpers::blur::BlurOptions;
 use crate::render_helpers::border::BorderRenderElement;
 use crate::render_helpers::debug::push_opaque_regions;
 use crate::render_helpers::global_shader_element::{GlobalPassState, GlobalShaderElement};
+use crate::render_helpers::panel::PanelRenderElement;
 use crate::render_helpers::primary_gpu_texture::PrimaryGpuTextureRenderElement;
 use crate::render_helpers::renderer::NiriRenderer;
 use crate::render_helpers::scoped_shader_element::{ScopedShaderElement, ScopedSource};
@@ -7546,6 +7547,7 @@ niri_render_elements! {
         >>>,
         // Consolidated carousel: gradient darken strip over a card edge.
         CarouselFade = BorderRenderElement,
+        Panel = PanelRenderElement,
     }
 }
 
