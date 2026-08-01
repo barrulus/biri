@@ -156,6 +156,7 @@ use crate::render_helpers::blur::BlurOptions;
 use crate::render_helpers::border::BorderRenderElement;
 use crate::render_helpers::debug::push_opaque_regions;
 use crate::render_helpers::global_shader_element::{GlobalPassState, GlobalShaderElement};
+use crate::render_helpers::offscreen::OffscreenBuffer;
 use crate::render_helpers::panel::PanelRenderElement;
 use crate::render_helpers::primary_gpu_texture::PrimaryGpuTextureRenderElement;
 use crate::render_helpers::renderer::NiriRenderer;
@@ -551,6 +552,13 @@ enum ThrottleAction {
     Arm(Duration),
 }
 
+/// Spike (NIRI_PANEL_SPIKE=1): gates the perspective panel experiment. Removed in the carousel
+/// redesign Gate B.
+fn panel_spike_enabled() -> bool {
+    static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ENABLED.get_or_init(|| std::env::var_os("NIRI_PANEL_SPIKE").is_some_and(|v| v == "1"))
+}
+
 pub struct OutputState {
     pub global: GlobalId,
     pub frame_clock: FrameClock,
@@ -610,6 +618,10 @@ pub struct OutputState {
     pub global_shader_chain: RefCell<GlobalShaderChain>,
     /// Damage tracker used for the debug damage visualization.
     pub debug_damage_tracker: OutputDamageTracker,
+    // Spike (NIRI_PANEL_SPIKE=1): retained offscreen + last texture for the
+    // perspective panel experiment. Removed in the carousel redesign Gate B.
+    pub panel_spike_offscreen: Rc<OffscreenBuffer>,
+    pub panel_spike_texture: RefCell<Option<GlesTexture>>,
 }
 
 #[derive(Debug, Default)]
@@ -3083,6 +3095,8 @@ impl Niri {
             global_shader_screen_result: Rc::new(RefCell::new(None)),
             global_shader_chain: RefCell::new(GlobalShaderChain::default()),
             debug_damage_tracker: OutputDamageTracker::from_output(&output),
+            panel_spike_offscreen: Rc::new(OffscreenBuffer::default()),
+            panel_spike_texture: RefCell::new(None),
         };
         let rv = self.output_state.insert(output.clone(), state);
         assert!(rv.is_none(), "output was already tracked");
@@ -4457,6 +4471,10 @@ impl Niri {
             }
         }
 
+        if panel_spike_enabled() {
+            self.update_panel_spike_texture(&mut ctx.as_gles(), output);
+        }
+
         self.fill_xray_elements(ctx.as_gles(), output);
 
         // Reborrow to shorten lifetime to be able to put in xray.
@@ -4842,6 +4860,27 @@ impl Niri {
             // Then, the Alt-Tab switcher.
             self.window_mru_ui
                 .render_output(self, output, ctx.r(), &mut |elem| push(elem.into()));
+        }
+
+        // Spike (NIRI_PANEL_SPIKE=1): draw the animated tilted panel showing this output's own
+        // overview. Removed in the carousel redesign Gate B.
+        if panel_spike_enabled() {
+            if let Some(texture) = state.panel_spike_texture.borrow().clone() {
+                let view = output_size(output);
+                // Oscillating yaw so panel motion is transform-only: content
+                // unchanged => offscreen must NOT re-render while it sweeps.
+                let yaw = (ctx.shader_time * 0.5).sin() as f64 * 0.9;
+                let corners = crate::render_helpers::panel_quad::tilted_panel_corners(
+                    (view.w / 2., view.h / 2.),
+                    (view.w * 0.6, view.h * 0.6),
+                    yaw,
+                    view.w * 1.5,
+                );
+                let scale = output.current_scale().fractional_scale();
+                if let Some(elem) = PanelRenderElement::new(corners, texture, 0.85, scale, 1.) {
+                    push(elem.into());
+                }
+            }
         }
 
         // Don't draw the focus ring on the workspaces while interactively moving above those
@@ -5257,6 +5296,33 @@ impl Niri {
         }
     }
 
+    /// Spike (NIRI_PANEL_SPIKE=1): render this output's overview into the retained offscreen and
+    /// stash the texture for the tilted-panel draw. Never touches layer maps.
+    fn update_panel_spike_texture(&self, ctx: &mut RenderCtx<GlesRenderer>, output: &Output) {
+        let _span = tracy_client::span!("Niri::update_panel_spike_texture");
+
+        let Some(mon) = self.layout.monitor_for_output(output) else {
+            return;
+        };
+        let state = self.output_state.get(output).unwrap();
+
+        let zoom = 0.5;
+        let mut elements: Vec<MonitorRenderElement<GlesRenderer>> = Vec::new();
+        mon.render_overview_at_zoom(ctx.r(), zoom, false, &mut |elem| {
+            elements.push(elem);
+        });
+
+        let scale = Scale::from(output.current_scale().fractional_scale());
+        match state.panel_spike_offscreen.render(ctx.renderer, scale, &elements) {
+            Ok((elem, _sync, _data)) => {
+                *state.panel_spike_texture.borrow_mut() = Some(elem.texture().clone());
+            }
+            Err(err) => {
+                warn!("panel spike offscreen render failed: {err:?}");
+            }
+        }
+    }
+
     pub fn clear_xray_elements(&self, output: &Output) {
         let state = self.output_state.get(output).unwrap();
         let xray = &state.xray;
@@ -5417,6 +5483,11 @@ impl Niri {
             state.unfinished_animations_remain |= self.screenshot_ui.are_animations_ongoing();
             state.unfinished_animations_remain |= self.window_mru_ui.are_animations_ongoing();
             state.unfinished_animations_remain |= state.screen_transition.is_some();
+
+            // Spike (NIRI_PANEL_SPIKE=1): the tilted panel's yaw is time-driven, so keep
+            // redrawing while the spike flag is on (mirrors the shader-animation redraw
+            // scheduling above). Removed in the carousel redesign Gate B.
+            state.unfinished_animations_remain |= panel_spike_enabled();
 
             // Also keep redrawing if the current cursor is animated.
             state.unfinished_animations_remain |= self
