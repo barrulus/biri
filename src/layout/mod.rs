@@ -2477,14 +2477,14 @@ impl<W: LayoutElement> Layout<W> {
             return false;
         };
         let zoom = self.overview_zoom();
-        self.overview_open && zoom <= cc.activation_zoom && zoom > cc.expand_zoom
+        self.overview_open && zoom <= cc.reveal_zoom && zoom > cc.assembled_zoom
     }
 
     pub fn in_carousel_lens(&self) -> bool {
         let Some(cc) = self.options.overview.consolidated_carousel else {
             return false;
         };
-        self.overview_open && self.overview_zoom() <= cc.expand_zoom
+        self.overview_open && self.overview_zoom() <= cc.assembled_zoom
     }
 
     #[cfg(test)]

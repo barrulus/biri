@@ -2560,21 +2560,21 @@ mod tests {
     fn consolidated_carousel_parses() {
         // Enabled with explicit threshold.
         let enabled = Config::parse_mem(
-            "overview {\n    consolidated-carousel {\n        activation-zoom 0.2\n    }\n}\n",
+            "overview {\n    consolidated-carousel {\n        reveal-zoom 0.2\n    }\n}\n",
         )
         .unwrap();
         let cc = enabled
             .overview
             .consolidated_carousel
             .expect("block present => Some");
-        assert_eq!(cc.activation_zoom, 0.2);
+        assert_eq!(cc.reveal_zoom, 0.2);
 
-        // Enabled, threshold omitted => default 0.25.
+        // Enabled, threshold omitted => default 0.4.
         let defaulted =
             Config::parse_mem("overview {\n    consolidated-carousel {}\n}\n").unwrap();
         assert_eq!(
-            defaulted.overview.consolidated_carousel.unwrap().activation_zoom,
-            0.25
+            defaulted.overview.consolidated_carousel.unwrap().reveal_zoom,
+            0.4
         );
 
         // Absent => None (default global overview unchanged).
@@ -2583,17 +2583,28 @@ mod tests {
     }
 
     #[test]
-    fn consolidated_carousel_expand_zoom_parses() {
+    fn consolidated_carousel_assembled_zoom_parses() {
         let cfg = Config::parse_mem(
-            "overview {\n    consolidated-carousel {\n        activation-zoom 0.25\n        expand-zoom 0.08\n    }\n}\n",
+            "overview {\n    consolidated-carousel {\n        reveal-zoom 0.5\n        assembled-zoom 0.2\n    }\n}\n",
         )
         .unwrap();
         let cc = cfg.overview.consolidated_carousel.unwrap();
-        assert_eq!(cc.activation_zoom, 0.25);
-        assert_eq!(cc.expand_zoom, 0.08);
+        assert_eq!(cc.reveal_zoom, 0.5);
+        assert_eq!(cc.assembled_zoom, 0.2);
 
-        // Omitted -> default 0.1.
+        // Omitted -> default 0.15.
         let d = Config::parse_mem("overview {\n    consolidated-carousel {}\n}\n").unwrap();
-        assert_eq!(d.overview.consolidated_carousel.unwrap().expand_zoom, 0.1);
+        assert_eq!(d.overview.consolidated_carousel.unwrap().assembled_zoom, 0.15);
+    }
+
+    #[test]
+    fn consolidated_carousel_invalid_band_falls_back() {
+        let cfg = Config::parse_mem(
+            "overview {\n    consolidated-carousel {\n        reveal-zoom 0.1\n        assembled-zoom 0.5\n    }\n}\n",
+        )
+        .unwrap();
+        let cc = cfg.overview.consolidated_carousel.unwrap();
+        assert_eq!(cc.reveal_zoom, 0.4);
+        assert_eq!(cc.assembled_zoom, 0.15);
     }
 }

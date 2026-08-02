@@ -126,7 +126,7 @@ pub struct Overview {
     /// Optional zoom presets for cycling. If None/empty, zoom cycling is disabled.
     pub zoom_presets: Option<Vec<f64>>,
     /// When Some, the consolidated carousel mode is enabled: the overview
-    /// applies to the focused output only, and zooming past `activation_zoom`
+    /// applies to the focused output only, and zooming past `reveal_zoom`
     /// reveals sibling outputs as a carousel.
     pub consolidated_carousel: Option<ConsolidatedCarousel>,
 }
@@ -150,16 +150,16 @@ pub struct ZoomPresets(#[knuffel(arguments)] pub Vec<f64>);
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ConsolidatedCarousel {
-    pub activation_zoom: f64,
-    pub expand_zoom: f64,
+    pub reveal_zoom: f64,
+    pub assembled_zoom: f64,
 }
 
 #[derive(knuffel::Decode, Debug, Clone, PartialEq)]
 pub struct ConsolidatedCarouselPart {
     #[knuffel(child, unwrap(argument))]
-    pub activation_zoom: Option<FloatOrInt<0, 1>>,
+    pub reveal_zoom: Option<FloatOrInt<0, 1>>,
     #[knuffel(child, unwrap(argument))]
-    pub expand_zoom: Option<FloatOrInt<0, 1>>,
+    pub assembled_zoom: Option<FloatOrInt<0, 1>>,
 }
 
 #[derive(knuffel::Decode, Debug, Clone, PartialEq)]
@@ -184,9 +184,21 @@ impl MergeWith<OverviewPart> for Overview {
             self.zoom_presets = Some(presets.0.clone());
         }
         if let Some(cc) = &part.consolidated_carousel {
+            let reveal = cc.reveal_zoom.map_or(0.4, |v| v.0);
+            let assembled = cc.assembled_zoom.map_or(0.15, |v| v.0);
+            let (reveal_zoom, assembled_zoom) =
+                if assembled > 0. && assembled < reveal && reveal < 1. {
+                    (reveal, assembled)
+                } else {
+                    warn!(
+                        "overview.consolidated-carousel requires 0 < assembled-zoom < reveal-zoom < 1 \
+                         (got assembled={assembled}, reveal={reveal}); using defaults 0.15 / 0.4"
+                    );
+                    (0.4, 0.15)
+                };
             self.consolidated_carousel = Some(ConsolidatedCarousel {
-                activation_zoom: cc.activation_zoom.map_or(0.25, |v| v.0),
-                expand_zoom: cc.expand_zoom.map_or(0.1, |v| v.0),
+                reveal_zoom,
+                assembled_zoom,
             });
         }
     }

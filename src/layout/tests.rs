@@ -4026,8 +4026,8 @@ fn consolidated_mode_scopes_overview_to_active_output() {
 
     let mut options = Options::default();
     options.overview.consolidated_carousel = Some(niri_config::ConsolidatedCarousel {
-        activation_zoom: 0.25,
-        expand_zoom: 0.1,
+        reveal_zoom: 0.25,
+        assembled_zoom: 0.1,
     });
 
     let mut layout = Layout::<TestWindow>::with_options(Clock::with_time(Duration::ZERO), options);
@@ -4077,8 +4077,8 @@ fn carousel_regime_tracks_zoom_threshold() {
 
     let mut options = Options::default();
     options.overview.consolidated_carousel = Some(niri_config::ConsolidatedCarousel {
-        activation_zoom: 0.25,
-        expand_zoom: 0.1,
+        reveal_zoom: 0.25,
+        assembled_zoom: 0.1,
     });
 
     let mut layout = Layout::<TestWindow>::with_options(Clock::with_time(Duration::ZERO), options);
@@ -4103,7 +4103,7 @@ fn carousel_regime_tracks_zoom_threshold() {
     layout.set_overview_zoom_for_test(0.2);
     assert!(layout.in_carousel_regime());
 
-    // Exact boundary: activation_zoom uses <=, so exactly-at-threshold is in-regime.
+    // Exact boundary: reveal_zoom uses <=, so exactly-at-threshold is in-regime.
     layout.set_overview_zoom_for_test(0.25);
     assert!(
         layout.in_carousel_regime(),
@@ -4144,8 +4144,8 @@ fn carousel_regime_and_lens_are_mutually_exclusive_bands() {
 
     let mut options = Options::default();
     options.overview.consolidated_carousel = Some(niri_config::ConsolidatedCarousel {
-        activation_zoom: 0.25,
-        expand_zoom: 0.1,
+        reveal_zoom: 0.25,
+        assembled_zoom: 0.1,
     });
 
     let mut layout = Layout::<TestWindow>::with_options(Clock::with_time(Duration::ZERO), options);
