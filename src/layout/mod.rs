@@ -2824,39 +2824,6 @@ impl<W: LayoutElement> Layout<W> {
         ((cc.reveal_zoom - zoom) / (cc.reveal_zoom - cc.assembled_zoom)).clamp(0., 1.)
     }
 
-    // GATE-B-TEMP: callers rewired in render/input tasks
-    pub fn in_carousel_regime(&self) -> bool {
-        self.carousel_reveal() > 0. && !self.in_carousel_lens()
-    }
-
-    // GATE-B-TEMP: callers rewired in render/input tasks. Thin wrapper
-    // preserving the old name/signature for input/mod.rs call sites; delegates
-    // to `rotate_carousel`.
-    pub fn slide_carousel(&mut self, delta: isize) {
-        self.rotate_carousel(delta);
-    }
-
-    // GATE-B-TEMP: callers rewired in render/input tasks. Maps the current
-    // rotation target back to an index into `carousel_outputs()` order, for
-    // niri.rs render call sites still expecting the old integer-index API.
-    // Note: `carousel_ring()`'s usize IS the `carousel_outputs()` index by
-    // construction, so there is no ordering mismatch to reconcile here.
-    pub fn carousel_centered_output_idx(&self) -> usize {
-        let ring = self.carousel_ring();
-        if ring.is_empty() {
-            return 0;
-        }
-        let target = self.carousel_rotation_target();
-        ring.iter()
-            .min_by(|a, b| {
-                (a.1 - target)
-                    .abs()
-                    .partial_cmp(&(b.1 - target).abs())
-                    .unwrap()
-            })
-            .map(|&(idx, _)| idx)
-            .unwrap_or(0)
-    }
 
     /// Overview is open, the carousel is configured, and the rotation has
     /// settled (no animation in flight) on a non-host output.
@@ -5660,6 +5627,14 @@ impl<W: LayoutElement> Layout<W> {
 
     pub fn is_overview_open(&self) -> bool {
         self.overview_open
+    }
+
+    /// Whether the consolidated carousel is configured (regardless of
+    /// overview state or output count). Used by input-intercept gates that
+    /// need to decide whether to fall through to normal focus-column
+    /// behavior before calling `carousel_request_rotate`.
+    pub fn carousel_configured(&self) -> bool {
+        self.options.overview.consolidated_carousel.is_some()
     }
 }
 
