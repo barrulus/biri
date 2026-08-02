@@ -1,5 +1,166 @@
 use smithay::utils::{Logical, Point, Rectangle, Size};
 
+/// Placement of one panel in the cover-flow ring, in host-view logical
+/// coordinates. Pure geometry: no texture/content concerns.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PanelPlacement {
+    /// Logical position of panel center on the host view.
+    pub center: (f64, f64),
+    /// Logical panel size before tilt.
+    pub size: (f64, f64),
+    /// Radians; positive recedes the RIGHT edge.
+    pub yaw: f64,
+    pub dim: f32,
+    /// Draw order: higher = nearer the viewer.
+    pub z: f64,
+}
+
+/// focal = FOCAL_FACTOR * view.w (used by the panel-quad projection consuming
+/// this module's placements; kept here as the tuned constant of record).
+pub const FOCAL_FACTOR: f64 = 1.5;
+/// Center panel height / view height at reveal = 1.
+const CENTER_FRACTION: f64 = 0.72;
+/// First side panel height / view height.
+const SIDE_FRACTION: f64 = 0.52;
+/// Per extra depth, side panel height shrinks by this scale.
+const SIDE_STEP_SCALE: f64 = 0.85;
+/// Radians, side panel yaw magnitude at depth 1.
+const SIDE_YAW: f64 = 0.9;
+const SIDE_YAW_STEP: f64 = 0.2;
+/// First side panel center offset, fraction of view.w.
+const SIDE_X: f64 = 0.36;
+const SIDE_X_STEP: f64 = 0.09;
+const SIDE_DIM: f32 = 0.78;
+const SIDE_DIM_STEP: f32 = 0.85;
+/// Beyond this depth, `panel_placement` returns `None`.
+const MAX_VISIBLE_DEPTH: f64 = 4.0;
+
+/// Signed ring position per output (same order as `positions`): host gets
+/// 0.0, outputs physically left of host get -1.0, -2.0... (nearest first),
+/// right likewise +1.0... Sort key: (x, y) of `Output::current_location()`.
+pub fn ring_positions(positions: &[(i32, i32)], host_idx: usize) -> Vec<f64> {
+    let mut order: Vec<usize> = (0..positions.len()).collect();
+    order.sort_by_key(|&i| positions[i]);
+
+    let host_sorted_idx = order.iter().position(|&i| i == host_idx).unwrap();
+
+    let mut ring = vec![0.0; positions.len()];
+    for (sorted_idx, &orig_idx) in order.iter().enumerate() {
+        let delta = sorted_idx as f64 - host_sorted_idx as f64;
+        ring[orig_idx] = delta;
+    }
+    ring
+}
+
+/// One side of the interpolation parameters at an integer depth (0 = center).
+struct SideParams {
+    height_frac: f64,
+    yaw: f64,
+    x_frac: f64,
+    dim: f32,
+}
+
+fn side_params_at_depth(depth: f64) -> SideParams {
+    // depth is a non-negative real (may be fractional via lerp callers, but
+    // here we only evaluate at integers >= 1; depth 0 is the center slot).
+    debug_assert!(depth >= 1.0);
+    let k = depth - 1.0; // 0-based extra steps beyond the first side slot
+    let height_frac = SIDE_FRACTION * SIDE_STEP_SCALE.powf(k);
+    let yaw = SIDE_YAW + SIDE_YAW_STEP * k;
+    let x_frac = SIDE_X + SIDE_X_STEP * k;
+    let dim = SIDE_DIM * SIDE_DIM_STEP.powf(k as f32);
+    SideParams {
+        height_frac,
+        yaw,
+        x_frac,
+        dim,
+    }
+}
+
+fn lerp(a: f64, b: f64, t: f64) -> f64 {
+    a + (b - a) * t
+}
+
+fn lerp_f32(a: f32, b: f32, t: f32) -> f32 {
+    a + (b - a) * t
+}
+
+/// Placement for one output at signed slot-delta d = ring_pos - rotation,
+/// assembled-ness `reveal` in [0,1]. `None` when fully off-screen.
+pub fn panel_placement(view: (f64, f64), d: f64, reveal: f64) -> Option<PanelPlacement> {
+    let ad = d.abs();
+    if ad > MAX_VISIBLE_DEPTH {
+        return None;
+    }
+
+    let (view_w, view_h) = view;
+
+    if ad == 0.0 {
+        // Center slot: flat, undimmed, ignores reveal (live-host rule).
+        return Some(PanelPlacement {
+            center: (view_w / 2.0, view_h / 2.0),
+            size: (view_w * CENTER_FRACTION, view_h * CENTER_FRACTION),
+            yaw: 0.0,
+            dim: 1.0,
+            z: 100.0,
+        });
+    }
+
+    let sign = d.signum();
+
+    // Bracket ad between two integer slots: slot 0 = center params, slot k>=1
+    // = side_params_at_depth(k).
+    let lo = ad.floor();
+    let hi = ad.ceil();
+    let t = ad - lo;
+
+    let (lo_h, lo_yaw, lo_x, lo_dim, lo_z) = if lo == 0.0 {
+        (CENTER_FRACTION, 0.0, 0.0, 1.0f32, 100.0)
+    } else {
+        let p = side_params_at_depth(lo);
+        (p.height_frac, p.yaw, p.x_frac, p.dim, 100.0 - lo)
+    };
+    let (hi_h, hi_yaw, hi_x, hi_dim, hi_z) = if hi == 0.0 {
+        (CENTER_FRACTION, 0.0, 0.0, 1.0f32, 100.0)
+    } else {
+        let p = side_params_at_depth(hi);
+        (p.height_frac, p.yaw, p.x_frac, p.dim, 100.0 - hi)
+    };
+
+    let height_frac = lerp(lo_h, hi_h, t);
+    let yaw_mag = lerp(lo_yaw, hi_yaw, t);
+    let x_frac = lerp(lo_x, hi_x, t);
+    let dim = lerp_f32(lo_dim, hi_dim, t as f32);
+    let z = lerp(lo_z, hi_z, t);
+
+    let panel_h = view_h * height_frac;
+    let panel_w = panel_h * (view_w / view_h);
+
+    // Settled (reveal = 1) placement.
+    let settled_center_x = view_w / 2.0 + sign * x_frac * view_w;
+    let settled_yaw = sign * yaw_mag; // LEFT panels (sign<0) get negative yaw.
+
+    // Off-screen start (reveal = 0): center.x at ±(view.w/2 + size.w) from
+    // the view center, yaw magnitude at its max over the visible depth range.
+    let start_center_x = view_w / 2.0 + sign * (view_w / 2.0 + panel_w);
+    let max_step = MAX_VISIBLE_DEPTH - 1.0;
+    let start_yaw_mag = SIDE_YAW + SIDE_YAW_STEP * max_step;
+    let start_yaw = sign * start_yaw_mag;
+
+    let r = reveal.clamp(0.0, 1.0);
+    let center_x = lerp(start_center_x, settled_center_x, r);
+    let yaw = lerp(start_yaw, settled_yaw, r);
+
+    Some(PanelPlacement {
+        center: (center_x, view_h / 2.0),
+        size: (panel_w, panel_h),
+        yaw,
+        dim,
+        z,
+    })
+}
+
+// GATE-B-TEMP: removed in render integration task
 /// A single sibling card's destination in the host overview.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CardPlacement {
@@ -9,42 +170,7 @@ pub struct CardPlacement {
     pub card_scale: f64,
 }
 
-/// Tuck up to `n_cards` sibling previews around the host overview: the first
-/// tucks against the left edge, the second against the right, further cards
-/// step inward, all vertically centered. Deterministic in card index.
-pub fn carousel_card_layout(view_size: Size<f64, Logical>, n_cards: usize) -> Vec<CardPlacement> {
-    if n_cards == 0 {
-        return Vec::new();
-    }
-    // A card occupies ~28% of the host width, vertically centered.
-    let card_scale = 0.28;
-    let card_w = view_size.w * card_scale;
-    let card_h = view_size.h * card_scale;
-    let y = (view_size.h - card_h) / 2.;
-    let margin = view_size.w * 0.02;
-
-    (0..n_cards)
-        .map(|i| {
-            // Alternate sides; each further pair steps inward by one card width.
-            let pair = (i / 2) as f64;
-            let step = (card_w + margin) * pair;
-            let x = if i % 2 == 0 {
-                margin + step
-            } else {
-                view_size.w - margin - card_w - step
-            };
-            // Guarantee containment for arbitrary n_cards: clamp so the whole
-            // card box stays within the host view (cards may pile up at the
-            // edges for very large counts, which is acceptable).
-            let x = x.clamp(0.0, (view_size.w - card_w).max(0.0));
-            CardPlacement {
-                card_rect: Rectangle::new(Point::from((x, y)), Size::from((card_w, card_h))),
-                card_scale,
-            }
-        })
-        .collect()
-}
-
+// GATE-B-TEMP: removed in render integration task
 /// Placements for a rotating carousel. Center card is large and centered; each
 /// step away from center tucks further out and (optionally) smaller, clamped
 /// on-screen.
@@ -99,76 +225,70 @@ pub fn carousel_centered_layout(
 
 #[cfg(test)]
 mod tests {
-    use smithay::utils::Size;
-
     use super::*;
 
     #[test]
-    fn zero_cards_is_empty() {
-        assert!(carousel_card_layout(Size::from((1920., 1080.)), 0).is_empty());
+    fn ring_orders_by_physical_x_host_zero() {
+        // outputs at x: 0 (host), -1920 (left), 1920 (right), 3840 (far right)
+        let pos = [(0, 0), (-1920, 0), (1920, 0), (3840, 0)];
+        let ring = ring_positions(&pos, 0);
+        assert_eq!(ring, vec![0.0, -1.0, 1.0, 2.0]);
     }
 
     #[test]
-    fn cards_are_tucked_left_and_right_and_stay_on_screen() {
-        let view = Size::from((1920., 1080.));
-        let cards = carousel_card_layout(view, 2);
-        assert_eq!(cards.len(), 2);
-        // First card tucks left, second tucks right.
-        assert!(cards[0].card_rect.loc.x < view.w / 2.);
-        assert!(cards[1].card_rect.loc.x > view.w / 2.);
-        // Every card box stays fully within the host view (no off-screen).
-        for c in &cards {
-            assert!(c.card_rect.loc.x >= 0.);
-            assert!(c.card_rect.loc.y >= 0.);
-            assert!(c.card_rect.loc.x + c.card_rect.size.w <= view.w);
-            assert!(c.card_rect.loc.y + c.card_rect.size.h <= view.h);
-            assert!(c.card_scale > 0. && c.card_scale < 1.);
+    fn ring_vertical_stack_degrades_by_y() {
+        // same x, stacked: above host -> one side, below -> other, by y order
+        let pos = [(0, 0), (0, -1080), (0, 1080)];
+        let ring = ring_positions(&pos, 0);
+        assert_eq!(ring[0], 0.0);
+        assert_eq!(ring[1], -1.0); // smaller y sorts first (left stack)
+        assert_eq!(ring[2], 1.0);
+    }
+
+    #[test]
+    fn center_slot_is_flat_and_undimmed() {
+        let p = panel_placement((1920., 1080.), 0.0, 1.0).unwrap();
+        assert_eq!(p.yaw, 0.0);
+        assert_eq!(p.dim, 1.0);
+        assert!((p.center.0 - 960.).abs() < 1e-6);
+        assert!((p.size.1 - 1080. * 0.72).abs() < 1e-6);
+    }
+
+    #[test]
+    fn side_slots_mirror_and_recede() {
+        let l = panel_placement((1920., 1080.), -1.0, 1.0).unwrap();
+        let r = panel_placement((1920., 1080.), 1.0, 1.0).unwrap();
+        assert!(l.yaw < 0. && r.yaw > 0., "yaws mirror: {} {}", l.yaw, r.yaw);
+        assert!((l.yaw + r.yaw).abs() < 1e-9);
+        assert!(l.center.0 < 960. && r.center.0 > 960.);
+        assert!(l.z < panel_placement((1920., 1080.), 0.0, 1.0).unwrap().z);
+        let r2 = panel_placement((1920., 1080.), 2.0, 1.0).unwrap();
+        assert!(r2.size.1 < r.size.1 && r2.z < r.z && r2.center.0 > r.center.0);
+    }
+
+    #[test]
+    fn reveal_slides_side_panels_in_from_their_edge() {
+        let assembled = panel_placement((1920., 1080.), 1.0, 1.0).unwrap();
+        let half = panel_placement((1920., 1080.), 1.0, 0.5).unwrap();
+        let start = panel_placement((1920., 1080.), 1.0, 0.0);
+        assert!(half.center.0 > assembled.center.0, "mid-reveal sits further right");
+        // at reveal 0 the panel is fully off-screen (or not placed at all)
+        if let Some(p) = start {
+            assert!(p.center.0 - p.size.0 / 2. >= 1920., "off-screen at reveal 0");
         }
     }
 
     #[test]
-    fn many_cards_stay_on_screen() {
-        let view = Size::from((1920., 1080.));
-        for c in carousel_card_layout(view, 8) {
-            assert!(c.card_rect.loc.x >= 0.);
-            assert!(c.card_rect.loc.x + c.card_rect.size.w <= view.w);
-            assert!(c.card_rect.loc.y >= 0.);
-            assert!(c.card_rect.loc.y + c.card_rect.size.h <= view.h);
-        }
+    fn fractional_rotation_interpolates_between_slots() {
+        let settled = panel_placement((1920., 1080.), 0.0, 1.0).unwrap();
+        let mid = panel_placement((1920., 1080.), -0.5, 1.0).unwrap();
+        let side = panel_placement((1920., 1080.), -1.0, 1.0).unwrap();
+        assert!(mid.yaw < 0. && mid.yaw > side.yaw);
+        assert!(mid.center.0 < settled.center.0 && mid.center.0 > side.center.0);
     }
 
     #[test]
-    fn centered_layout_makes_center_prominent_and_others_tucked() {
-        let view = Size::from((1920., 1080.));
-        let p = carousel_centered_layout(view, 3, 1); // center on index 1
-        assert_eq!(p.len(), 3);
-        // Center card is the largest and horizontally centered-ish.
-        assert!(p[1].card_scale > p[0].card_scale);
-        assert!(p[1].card_scale > p[2].card_scale);
-        let center_mid = p[1].card_rect.loc.x + p[1].card_rect.size.w / 2.;
-        assert!((center_mid - view.w / 2.).abs() < view.w * 0.15);
-        // Index 0 tucks left of center, index 2 tucks right.
-        assert!(p[0].card_rect.loc.x < p[1].card_rect.loc.x);
-        assert!(p[2].card_rect.loc.x > p[1].card_rect.loc.x);
-        // All on-screen.
-        for c in &p {
-            assert!(c.card_rect.loc.x >= 0.);
-            assert!(c.card_rect.loc.x + c.card_rect.size.w <= view.w);
-            assert!(c.card_rect.loc.y >= 0.);
-            assert!(c.card_rect.loc.y + c.card_rect.size.h <= view.h);
-        }
-    }
-
-    #[test]
-    fn centered_layout_many_outputs_stay_on_screen() {
-        let view = Size::from((1920., 1080.));
-        for centered in [0usize, 3, 7] {
-            for c in carousel_centered_layout(view, 8, centered) {
-                assert!(c.card_rect.loc.x >= 0.);
-                assert!(c.card_rect.loc.x + c.card_rect.size.w <= view.w);
-                assert!(c.card_rect.loc.y >= 0.);
-                assert!(c.card_rect.loc.y + c.card_rect.size.h <= view.h);
-            }
-        }
+    fn beyond_max_depth_is_none() {
+        assert!(panel_placement((1920., 1080.), 5.0, 1.0).is_none());
     }
 }
