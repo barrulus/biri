@@ -4518,6 +4518,170 @@ fn overview_close_snaps_carousel_rotation_home() {
     assert!(!layout.carousel_rotating());
 }
 
+fn pullback_test_layout() -> (Layout<TestWindow>, Output, Output) {
+    fn make_output(name: &str, x: i32) -> Output {
+        let output = Output::new(
+            name.to_owned(),
+            PhysicalProperties {
+                size: Size::from((1280, 720)),
+                subpixel: Subpixel::Unknown,
+                make: String::new(),
+                model: String::new(),
+                serial_number: String::new(),
+            },
+        );
+        output.change_current_state(
+            Some(Mode {
+                size: Size::from((1280, 720)),
+                refresh: 60000,
+            }),
+            None,
+            None,
+            Some(Point::from((x, 0))),
+        );
+        output.user_data().insert_if_missing(|| OutputName {
+            connector: name.to_owned(),
+            make: None,
+            model: None,
+            serial: None,
+        });
+        output
+    }
+
+    let mut options = Options::default();
+    options.overview.consolidated_carousel = Some(niri_config::ConsolidatedCarousel {
+        reveal_zoom: 0.4,
+        assembled_zoom: 0.15,
+    });
+
+    let mut layout = Layout::<TestWindow>::with_options(Clock::with_time(Duration::ZERO), options);
+
+    let a = make_output("A", 0);
+    let b = make_output("B", 1280);
+
+    layout.add_output(a.clone(), None, false);
+    layout.add_output(b.clone(), None, false);
+
+    layout.add_window(
+        TestWindow::new(TestWindowParams::new(0)),
+        AddWindowTarget::Output(&a),
+        None,
+        None,
+        false,
+        false,
+        ActivateWindow::default(),
+    );
+    layout.add_window(
+        TestWindow::new(TestWindowParams::new(1)),
+        AddWindowTarget::Output(&b),
+        None,
+        None,
+        false,
+        false,
+        ActivateWindow::default(),
+    );
+
+    (layout, a, b)
+}
+
+#[test]
+fn pullback_runs_three_phases() {
+    let (mut layout, _a, _b) = pullback_test_layout();
+
+    layout.toggle_overview(); // open
+
+    // Finish the overview-open animation.
+    layout.clock.set_complete_instantly(true);
+    layout.advance_animations();
+    layout.clock.set_complete_instantly(false);
+
+    // Zoom is parked above the reveal band (assembled_zoom is 0.15), so a
+    // rotate request must pull back: zoom out to assembled, rotate, zoom
+    // back in to 0.5.
+    layout.set_overview_zoom_for_test(0.5);
+
+    layout.carousel_request_rotate(1);
+
+    // Drive the choreography to completion. Each phase transition needs its
+    // own `advance_animations` call (mirrors how `overview_zoom_anim` /
+    // `carousel_rotation_anim` only clear themselves on the *next* pass
+    // after the animation that supersedes them is created), so loop with
+    // margin rather than hardcoding an exact call count.
+    layout.clock.set_complete_instantly(true);
+    for _ in 0..5 {
+        layout.advance_animations();
+    }
+    layout.clock.set_complete_instantly(false);
+
+    assert_eq!(layout.carousel_rotation_target(), 1.0);
+    assert_eq!(layout.carousel_rotation(), 1.0);
+    assert!(!layout.carousel_rotating());
+    assert!(!layout.carousel_pullback_is_active());
+    assert_eq!(
+        layout.active_monitor_ref().unwrap().overview_zoom_target(),
+        0.5
+    );
+}
+
+#[test]
+fn pullback_skipped_when_assembled() {
+    let (mut layout, _a, _b) = pullback_test_layout();
+
+    layout.toggle_overview(); // open
+
+    layout.clock.set_complete_instantly(true);
+    layout.advance_animations();
+    layout.clock.set_complete_instantly(false);
+
+    // Zoom is already at the assembled level, so `carousel_reveal() >= 1.`
+    // and the request should bypass the pull-back entirely.
+    layout.set_overview_zoom_for_test(0.15);
+
+    layout.carousel_request_rotate(1);
+
+    assert!(!layout.carousel_pullback_is_active());
+
+    layout.clock.set_complete_instantly(true);
+    layout.advance_animations();
+    layout.clock.set_complete_instantly(false);
+
+    assert_eq!(layout.carousel_rotation_target(), 1.0);
+    assert_eq!(layout.carousel_rotation(), 1.0);
+    assert!(!layout.carousel_pullback_is_active());
+}
+
+#[test]
+fn pullback_cancelled_by_overview_close() {
+    let (mut layout, _a, _b) = pullback_test_layout();
+
+    layout.toggle_overview(); // open
+
+    layout.clock.set_complete_instantly(true);
+    layout.advance_animations();
+    layout.clock.set_complete_instantly(false);
+
+    layout.set_overview_zoom_for_test(0.5);
+
+    layout.carousel_request_rotate(1);
+
+    // Settle only the zoom-out phase, moving the pullback into `Rotate`
+    // with the rotation animation now in flight (real clock, so it doesn't
+    // settle within this same call).
+    layout.clock.set_complete_instantly(true);
+    layout.advance_animations();
+    layout.clock.set_complete_instantly(false);
+
+    assert!(layout.carousel_pullback_is_active());
+    assert!(layout.carousel_rotating());
+
+    layout.toggle_overview(); // close, mid-Rotate
+
+    assert!(!layout.carousel_pullback_is_active());
+    assert_eq!(layout.carousel_rotation_target(), 0.0);
+    assert_eq!(layout.carousel_rotation(), 0.0);
+    assert!(!layout.carousel_rotating());
+}
+
 #[test]
 fn rotate_carousel_single_output_is_noop() {
     fn make_output(name: &str) -> Output {

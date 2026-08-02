@@ -1517,8 +1517,15 @@ impl<W: LayoutElement> Monitor<W> {
         }
     }
 
+    /// Whether the overview zoom animation is settled (no animation in
+    /// flight). Used by the carousel pull-back sequencer (`Layout`) to
+    /// observe zoom-animation completion from outside `monitor.rs`.
+    pub(super) fn overview_zoom_settled(&self) -> bool {
+        self.overview_zoom_anim.is_none()
+    }
+
     /// Start or retarget a zoom animation.
-    fn animate_zoom_to(&mut self, new_target: f64, config: niri_config::Animation) {
+    pub(super) fn animate_zoom_to(&mut self, new_target: f64, config: niri_config::Animation) {
         let current = self.overview_zoom_value();
         self.overview_zoom_target = new_target;
 

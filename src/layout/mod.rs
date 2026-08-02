@@ -373,8 +373,38 @@ pub struct Layout<W: LayoutElement> {
     /// In-flight animation from the previous rotation target to
     /// `carousel_rotation`. `None` once settled.
     carousel_rotation_anim: Option<Animation>,
+    /// In-flight pull-back choreography (zoom out to assembled, rotate,
+    /// zoom back in) driven when a rotation is requested while the carousel
+    /// hasn't reached the assembled band yet. `None` when idle.
+    carousel_pullback: Option<Pullback>,
     /// Configurable properties of the layout.
     options: Rc<Options>,
+}
+
+/// Phase of an in-flight `Pullback` choreography.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PullbackPhase {
+    /// Zooming the active monitor out to `assembled_zoom` so the whole ring
+    /// is visible before rotating.
+    ZoomOut,
+    /// Rotating the carousel to `Pullback::target`.
+    Rotate,
+    /// Zooming the active monitor back in to `Pullback::restore_zoom`.
+    ZoomIn,
+}
+
+/// State for an in-flight carousel pull-back: a rotation requested while
+/// not yet at the assembled zoom band first zooms out, then rotates, then
+/// zooms back in to where the user had parked their zoom.
+#[derive(Debug, Clone, Copy)]
+struct Pullback {
+    phase: PullbackPhase,
+    /// Ring-position target for the rotation step.
+    target: f64,
+    /// Zoom target to restore once the rotation settles. Captured at
+    /// request time (not the animated value), so repeated rotations return
+    /// to where the user parked their zoom.
+    restore_zoom: f64,
 }
 
 #[derive(Debug)]
@@ -716,6 +746,7 @@ impl<W: LayoutElement> Layout<W> {
             overview_progress: None,
             carousel_rotation: 0.,
             carousel_rotation_anim: None,
+            carousel_pullback: None,
             options: Rc::new(options),
         }
     }
@@ -743,6 +774,7 @@ impl<W: LayoutElement> Layout<W> {
             overview_progress: None,
             carousel_rotation: 0.,
             carousel_rotation_anim: None,
+            carousel_pullback: None,
             options: opts,
         }
     }
@@ -1896,9 +1928,21 @@ impl<W: LayoutElement> Layout<W> {
     /// the ring extent (cyclic wrap preserved from the old index-based
     /// semantics). No-op if fewer than 2 outputs are eligible.
     pub fn rotate_carousel(&mut self, delta: isize) {
+        let Some(new_target) = self.carousel_rotate_target(delta) else {
+            return;
+        };
+        self.retarget_carousel_rotation(new_target);
+    }
+
+    /// Computes the ring-position target `delta` steps away from the
+    /// current settled rotation target, without applying it. `None` if
+    /// fewer than 2 outputs are eligible. Shared by `rotate_carousel` and
+    /// the pull-back sequencer, which needs the target before it starts
+    /// animating.
+    fn carousel_rotate_target(&self, delta: isize) -> Option<f64> {
         let ring = self.carousel_ring();
         if ring.len() < 2 {
-            return;
+            return None;
         }
 
         let mut positions: Vec<f64> = ring.iter().map(|&(_, pos)| pos).collect();
@@ -1912,9 +1956,152 @@ impl<W: LayoutElement> Layout<W> {
 
         let len = positions.len() as isize;
         let new_idx = (cur_idx + delta).rem_euclid(len) as usize;
-        let new_target = positions[new_idx];
+        Some(positions[new_idx])
+    }
 
-        self.retarget_carousel_rotation(new_target);
+    /// Retargets the carousel rotation directly to `target`, an absolute
+    /// ring-position value (as opposed to `rotate_carousel`'s delta
+    /// stepping). No-op if fewer than 2 outputs are eligible. Used by the
+    /// pull-back sequencer, which already knows the absolute target it
+    /// computed at request time.
+    fn rotate_carousel_to(&mut self, target: f64) {
+        if self.carousel_ring().len() < 2 {
+            return;
+        }
+        self.retarget_carousel_rotation(target);
+    }
+
+    /// Entry point for a relative carousel rotation request (e.g. a
+    /// next/prev-output keybind). If the carousel is already in the
+    /// assembled band (`carousel_reveal() >= 1.`), rotates directly.
+    /// Otherwise starts (or retargets) a pull-back: zoom out to the
+    /// assembled band, rotate, zoom back in to where the user had parked
+    /// their zoom. No-op when the overview is closed, the carousel isn't
+    /// configured, or fewer than 2 outputs are eligible.
+    pub fn carousel_request_rotate(&mut self, delta: isize) {
+        if !self.overview_open || self.options.overview.consolidated_carousel.is_none() {
+            return;
+        }
+        if self.carousel_ring().len() <= 1 {
+            return;
+        }
+
+        if self.carousel_reveal() >= 1. {
+            self.rotate_carousel(delta);
+            return;
+        }
+
+        let Some(target) = self.carousel_rotate_target(delta) else {
+            return;
+        };
+        self.start_or_retarget_pullback(target);
+    }
+
+    /// Entry point for an absolute carousel rotation request (e.g. clicking
+    /// a specific ring card). Same bypass/pull-back semantics as
+    /// `carousel_request_rotate`, but takes the ring-position target
+    /// directly rather than a step delta.
+    pub fn carousel_request_rotate_to(&mut self, ring_target: f64) {
+        if !self.overview_open || self.options.overview.consolidated_carousel.is_none() {
+            return;
+        }
+        if self.carousel_ring().len() <= 1 {
+            return;
+        }
+
+        if self.carousel_reveal() >= 1. {
+            self.rotate_carousel_to(ring_target);
+            return;
+        }
+
+        self.start_or_retarget_pullback(ring_target);
+    }
+
+    /// Starts a new pull-back choreography targeting `target`, or — if one
+    /// is already in flight — just replaces its target (staying in the
+    /// current phase). If the in-flight pullback is already mid-`Rotate`,
+    /// also retargets the rotation animation immediately so it heads
+    /// straight for the new target instead of settling on the stale one
+    /// first.
+    fn start_or_retarget_pullback(&mut self, target: f64) {
+        if let Some(pullback) = &mut self.carousel_pullback {
+            pullback.target = target;
+            if pullback.phase == PullbackPhase::Rotate {
+                self.rotate_carousel_to(target);
+            }
+            return;
+        }
+
+        let restore_zoom = self
+            .active_monitor_ref()
+            .map(|m| m.overview_zoom_target())
+            .unwrap_or(self.options.overview.zoom);
+
+        self.carousel_pullback = Some(Pullback {
+            phase: PullbackPhase::ZoomOut,
+            target,
+            restore_zoom,
+        });
+
+        let Some(cc) = self.options.overview.consolidated_carousel else {
+            return;
+        };
+        self.retarget_active_monitor_zoom(cc.assembled_zoom);
+    }
+
+    /// Retargets the active monitor's overview zoom animation to `target`,
+    /// using the same animation config as `overview_zoom_in`/`_out`. Thin
+    /// `Layout`-level wrapper around `Monitor::animate_zoom_to`, which is
+    /// private to `monitor.rs`.
+    fn retarget_active_monitor_zoom(&mut self, target: f64) {
+        let config = self.options.animations.overview_open_close.0;
+        if let Some(mon) = self.active_monitor() {
+            mon.animate_zoom_to(target, config);
+        }
+    }
+
+    /// Drives the pull-back state machine by one step, observing animation
+    /// completion. Must run after monitor zoom animations have been
+    /// advanced (so `overview_zoom_settled()` reflects this frame) and
+    /// after the carousel rotation animation's own completion check.
+    fn advance_carousel_pullback(&mut self) {
+        let Some(mut pullback) = self.carousel_pullback.take() else {
+            return;
+        };
+
+        match pullback.phase {
+            PullbackPhase::ZoomOut => {
+                let zoom_settled = self
+                    .active_monitor_ref()
+                    .is_none_or(Monitor::overview_zoom_settled);
+                if zoom_settled {
+                    pullback.phase = PullbackPhase::Rotate;
+                    self.rotate_carousel_to(pullback.target);
+                }
+            }
+            PullbackPhase::Rotate => {
+                if self.carousel_rotation_anim.is_none() {
+                    pullback.phase = PullbackPhase::ZoomIn;
+                    self.retarget_active_monitor_zoom(pullback.restore_zoom);
+                }
+            }
+            PullbackPhase::ZoomIn => {
+                let zoom_settled = self
+                    .active_monitor_ref()
+                    .is_none_or(Monitor::overview_zoom_settled);
+                if zoom_settled {
+                    // Done; don't reinsert.
+                    return;
+                }
+            }
+        }
+
+        self.carousel_pullback = Some(pullback);
+    }
+
+    #[cfg(test)]
+    fn carousel_pullback_is_active(&self) -> bool {
+        self.carousel_pullback.is_some()
     }
 
     /// Start or retarget the rotation animation from the current animated
@@ -3001,6 +3188,11 @@ impl<W: LayoutElement> Layout<W> {
                 }
             }
         }
+
+        // Must run after the monitor loop above (which is what clears
+        // `overview_zoom_anim` when it finishes) and after the rotation
+        // anim completion check, so it observes both this frame.
+        self.advance_carousel_pullback();
     }
 
     pub fn are_animations_ongoing(&self, output: Option<&Output>) -> bool {
@@ -3033,6 +3225,10 @@ impl<W: LayoutElement> Layout<W> {
         }
 
         if self.carousel_rotation_anim.is_some() {
+            return true;
+        }
+
+        if self.carousel_pullback.is_some() {
             return true;
         }
 
@@ -4912,6 +5108,7 @@ impl<W: LayoutElement> Layout<W> {
             // rotation animation should run alongside it.
             self.carousel_rotation = 0.;
             self.carousel_rotation_anim = None;
+            self.carousel_pullback = None;
         }
 
         // Reset zoom to config default when closing overview.
@@ -4926,6 +5123,10 @@ impl<W: LayoutElement> Layout<W> {
             // never keeps painting its lens panel after the overview closes.
             self.carousel_rotation = 0.;
             self.carousel_rotation_anim = None;
+
+            // Cancel any in-flight pull-back choreography outright; there's
+            // nothing left for it to drive toward.
+            self.carousel_pullback = None;
         }
 
         let from = self.overview_progress.take().map_or(0., |p| p.value());
@@ -4984,6 +5185,10 @@ impl<W: LayoutElement> Layout<W> {
         // never keeps painting its lens panel after the overview closes.
         self.carousel_rotation = 0.;
         self.carousel_rotation_anim = None;
+
+        // Cancel any in-flight pull-back choreography outright; there's
+        // nothing left for it to drive toward.
+        self.carousel_pullback = None;
 
         let from = self.overview_progress.take().map_or(0., |p| p.value());
         self.overview_progress = Some(OverviewProgress::Animation(Animation::new(
