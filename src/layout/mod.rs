@@ -4920,6 +4920,12 @@ impl<W: LayoutElement> Layout<W> {
             for monitor in self.monitors_mut() {
                 monitor.reset_overview_zoom(default_zoom);
             }
+
+            // Snap carousel rotation home instantly (no animation — the
+            // overview close animation is the transition) so a remote output
+            // never keeps painting its lens panel after the overview closes.
+            self.carousel_rotation = 0.;
+            self.carousel_rotation_anim = None;
         }
 
         let from = self.overview_progress.take().map_or(0., |p| p.value());
@@ -4972,6 +4978,12 @@ impl<W: LayoutElement> Layout<W> {
         for monitor in self.monitors_mut() {
             monitor.reset_overview_zoom_preset_idx();
         }
+
+        // Snap carousel rotation home instantly (no animation — the
+        // overview close animation is the transition) so a remote output
+        // never keeps painting its lens panel after the overview closes.
+        self.carousel_rotation = 0.;
+        self.carousel_rotation_anim = None;
 
         let from = self.overview_progress.take().map_or(0., |p| p.value());
         self.overview_progress = Some(OverviewProgress::Animation(Animation::new(

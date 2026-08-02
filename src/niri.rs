@@ -4597,6 +4597,9 @@ impl Niri {
     /// false, the pre-carousel overview path draws with no prepass and no panel elements. See the
     /// drawing rule in the Gate B Task 6 brief.
     fn carousel_panels_needed(&self) -> bool {
+        if !self.layout.is_overview_open() {
+            return false;
+        }
         let reveal = self.layout.carousel_reveal();
         let rotation = self.layout.carousel_rotation();
         let settled_on_host = rotation == rotation.round() && rotation.round() == 0.;

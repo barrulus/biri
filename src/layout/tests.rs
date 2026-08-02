@@ -4423,6 +4423,102 @@ fn rotate_carousel_wraps_over_ring_positions() {
 }
 
 #[test]
+fn overview_close_snaps_carousel_rotation_home() {
+    // Regression test: closing the overview while the carousel is rotated
+    // onto a remote output must instantly snap rotation back to the host
+    // (ring position 0.0). Otherwise the compositor keeps painting that
+    // output's lens panel over the host desktop after the overview closes,
+    // with no way back (Gate B hardware checkpoint finding).
+    fn make_output(name: &str, x: i32) -> Output {
+        let output = Output::new(
+            name.to_owned(),
+            PhysicalProperties {
+                size: Size::from((1280, 720)),
+                subpixel: Subpixel::Unknown,
+                make: String::new(),
+                model: String::new(),
+                serial_number: String::new(),
+            },
+        );
+        output.change_current_state(
+            Some(Mode {
+                size: Size::from((1280, 720)),
+                refresh: 60000,
+            }),
+            None,
+            None,
+            Some(Point::from((x, 0))),
+        );
+        output.user_data().insert_if_missing(|| OutputName {
+            connector: name.to_owned(),
+            make: None,
+            model: None,
+            serial: None,
+        });
+        output
+    }
+
+    let mut options = Options::default();
+    options.overview.consolidated_carousel = Some(niri_config::ConsolidatedCarousel {
+        reveal_zoom: 0.4,
+        assembled_zoom: 0.15,
+    });
+
+    let mut layout = Layout::<TestWindow>::with_options(Clock::with_time(Duration::ZERO), options);
+
+    let a = make_output("A", 0);
+    let b = make_output("B", 1280);
+
+    layout.add_output(a.clone(), None, false);
+    layout.add_output(b.clone(), None, false);
+
+    layout.add_window(
+        TestWindow::new(TestWindowParams::new(0)),
+        AddWindowTarget::Output(&a),
+        None,
+        None,
+        false,
+        false,
+        ActivateWindow::default(),
+    );
+    layout.add_window(
+        TestWindow::new(TestWindowParams::new(1)),
+        AddWindowTarget::Output(&b),
+        None,
+        None,
+        false,
+        false,
+        ActivateWindow::default(),
+    );
+
+    layout.toggle_overview(); // open
+
+    // Finish the overview-open animation.
+    layout.clock.set_complete_instantly(true);
+    layout.advance_animations();
+    layout.clock.set_complete_instantly(false);
+
+    // Zoom into the revealed-carousel band.
+    layout.set_overview_zoom_for_test(0.15);
+
+    layout.rotate_carousel(1);
+
+    // Settle the rotation animation.
+    layout.clock.set_complete_instantly(true);
+    layout.advance_animations();
+    layout.clock.set_complete_instantly(false);
+
+    assert_eq!(layout.carousel_rotation_target(), 1.0);
+    assert_eq!(layout.carousel_rotation(), 1.0);
+
+    layout.toggle_overview(); // close
+
+    assert_eq!(layout.carousel_rotation(), 0.0);
+    assert_eq!(layout.carousel_rotation_target(), 0.0);
+    assert!(!layout.carousel_rotating());
+}
+
+#[test]
 fn rotate_carousel_single_output_is_noop() {
     fn make_output(name: &str) -> Output {
         let output = Output::new(
