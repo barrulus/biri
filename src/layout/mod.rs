@@ -2573,9 +2573,10 @@ impl<W: LayoutElement> Layout<W> {
     }
 
     // GATE-B-TEMP: callers rewired in render/input tasks. Maps the current
-    // rotation target back to an index into `carousel_outputs()` order (as
-    // opposed to `carousel_ring()`'s physical/ring order), for niri.rs render
-    // call sites still expecting the old integer-index API.
+    // rotation target back to an index into `carousel_outputs()` order, for
+    // niri.rs render call sites still expecting the old integer-index API.
+    // Note: `carousel_ring()`'s usize IS the `carousel_outputs()` index by
+    // construction, so there is no ordering mismatch to reconcile here.
     pub fn carousel_centered_output_idx(&self) -> usize {
         let ring = self.carousel_ring();
         if ring.is_empty() {
@@ -2746,15 +2747,25 @@ impl<W: LayoutElement> Layout<W> {
             );
 
             let consolidated = self.options.overview.consolidated_carousel.is_some();
-            // In consolidated mode the overview is a lens on the host output only.
-            // The host is the active monitor, which is also where the carousel
-            // rotation settles at 0.0 (`carousel_rotation_target() == 0.0`); this
-            // task doesn't move the host in response to rotation, so the check
-            // stays keyed on `active_monitor_idx`.
-            let expect_open = self.overview_open
-                && !monitor.isolated
-                && (!consolidated || idx == active_monitor_idx);
-            assert_eq!(expect_open, monitor.overview_open);
+            // In consolidated mode the overview is a lens on the host output only,
+            // and the host is the active monitor. But that only holds once the
+            // carousel has settled back at home (no in-flight animation and
+            // `carousel_rotation == 0.0`): mid-rotation, or settled on a remote
+            // output, the active monitor is not necessarily the host, so the
+            // consolidated host-monitor clause cannot be asserted. The
+            // isolated-output clause has no such dependency and still applies.
+            let carousel_settled_home =
+                self.carousel_rotation_anim.is_none() && self.carousel_rotation == 0.0;
+            if consolidated && !carousel_settled_home {
+                if monitor.isolated {
+                    assert!(!monitor.overview_open);
+                }
+            } else {
+                let expect_open = self.overview_open
+                    && !monitor.isolated
+                    && (!consolidated || idx == active_monitor_idx);
+                assert_eq!(expect_open, monitor.overview_open);
+            }
             assert_eq!(
                 self.overview_progress.as_ref().map(|p| p.value()),
                 monitor.overview_progress_value()
