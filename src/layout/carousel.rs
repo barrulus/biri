@@ -136,14 +136,20 @@ pub fn panel_placement(view: (f64, f64), d: f64, reveal: f64) -> Option<PanelPla
 
     // Settled (reveal = 1) placement.
     let settled_center_x = view_w / 2.0 + sign * x_frac * view_w;
-    let settled_yaw = sign * yaw_mag; // LEFT panels (sign<0) get negative yaw.
+    // Concave: viewer is inside the curve, so panels taper TOWARD the
+    // center (outer edge tall, inner edge short/receding). Per panel_quad's
+    // convention (positive yaw recedes the RIGHT edge), a right-side panel
+    // (sign>0) must recede its LEFT/inner edge, i.e. get negative yaw; a
+    // left-side panel (sign<0) recedes its RIGHT/inner edge, i.e. positive
+    // yaw. Hence the sign is inverted relative to `sign`.
+    let settled_yaw = -sign * yaw_mag;
 
     // Off-screen start (reveal = 0): center.x at ±(view.w/2 + size.w) from
     // the view center, yaw magnitude at its max over the visible depth range.
     let start_center_x = view_w / 2.0 + sign * (view_w / 2.0 + panel_w);
     let max_step = MAX_VISIBLE_DEPTH - 1.0;
     let start_yaw_mag = SIDE_YAW + SIDE_YAW_STEP * max_step;
-    let start_yaw = sign * start_yaw_mag;
+    let start_yaw = -sign * start_yaw_mag;
 
     let r = reveal.clamp(0.0, 1.0);
     let center_x = lerp(start_center_x, settled_center_x, r);
@@ -193,7 +199,9 @@ mod tests {
     fn side_slots_mirror_and_recede() {
         let l = panel_placement((1920., 1080.), -1.0, 1.0).unwrap();
         let r = panel_placement((1920., 1080.), 1.0, 1.0).unwrap();
-        assert!(l.yaw < 0. && r.yaw > 0., "yaws mirror: {} {}", l.yaw, r.yaw);
+        // Concave: right-side panels (inner/left edge recedes) get negative
+        // yaw; left-side panels (inner/right edge recedes) get positive yaw.
+        assert!(l.yaw > 0. && r.yaw < 0., "yaws mirror: {} {}", l.yaw, r.yaw);
         assert!((l.yaw + r.yaw).abs() < 1e-9);
         assert!(l.center.0 < 960. && r.center.0 > 960.);
         assert!(l.z < panel_placement((1920., 1080.), 0.0, 1.0).unwrap().z);
@@ -218,7 +226,8 @@ mod tests {
         let settled = panel_placement((1920., 1080.), 0.0, 1.0).unwrap();
         let mid = panel_placement((1920., 1080.), -0.5, 1.0).unwrap();
         let side = panel_placement((1920., 1080.), -1.0, 1.0).unwrap();
-        assert!(mid.yaw < 0. && mid.yaw > side.yaw);
+        // Left side (d<0): concave yaw is positive, growing with depth.
+        assert!(mid.yaw > 0. && mid.yaw < side.yaw);
         assert!(mid.center.0 < settled.center.0 && mid.center.0 > side.center.0);
     }
 
