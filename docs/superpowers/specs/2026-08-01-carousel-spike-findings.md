@@ -14,15 +14,25 @@ Nested winit session on sixseven, forced onto the RTX 5060 Laptop GPU via
 (default EGL device selection lands on the Intel iGPU — verify with nvtop
 whenever re-testing).
 
-- Static content: sweep perfectly smooth (transform-only frames; offscreen
-  not re-rendered).
+- Static content: sweep perfectly smooth.
 - Worst case (ticking-clock terminal → panel content damaged every frame):
   smooth sweep, niri at ~10% GPU / 106 MiB VRAM on the RTX, **no VRAM
-  growth**, no frame hitches. The `OffscreenBuffer` texture-uniqueness
-  recreation path (offscreen.rs:114, provoked deliberately by the retained
-  texture clone) did NOT reproduce the historical ~1 s NVIDIA latency cliff.
-- **Double-buffer ping-pong fallback: not needed.** Single retained
-  `OffscreenBuffer` per output is sufficient.
+  growth**, no frame hitches.
+- **Correction (final whole-branch review):** the spike's retained texture
+  clone (`panel_spike_texture`) defeats `is_unique_reference`
+  (offscreen.rs:114) on EVERY prepass from frame 2 onward, so the offscreen
+  did a full texture reallocation + full re-render **every frame in both
+  measurements — static content included**. There was never a
+  "transform-only" frame. This makes the result *stronger*, not weaker: the
+  NVIDIA driver was smooth under the maximal per-frame-realloc load, and the
+  flat 106 MiB VRAM shows the allocations are freed cleanly. The historical
+  ~1 s latency cliff did not reproduce even on this worst path.
+- **Consequence for Gate B (mandatory):** the spec's "re-renders only when
+  content changed" promise is NOT delivered by this handoff pattern. Gate B
+  must retain the `OffscreenRenderElement` (or drop the stash before
+  `render()`, or ping-pong buffers) so damage gating actually engages —
+  otherwise every settled-carousel frame pays a full per-panel re-render.
+- Double-buffer fallback for *correctness/smoothness*: not needed.
 - Incidental: the Intel iGPU path was also observed smooth (~67% Render/3D
   under continuous damage) before the offload vars were added.
 - Caveat: this was an EGL-Wayland nested session, not the DRM/TTY backend.
