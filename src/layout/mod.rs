@@ -2049,6 +2049,19 @@ impl<W: LayoutElement> Layout<W> {
         self.retarget_active_monitor_zoom(cc.assembled_zoom);
     }
 
+    /// Cancels any in-flight carousel pull-back choreography without
+    /// touching anything else: in-flight zoom/rotation animations just
+    /// finish wherever they already are. The user always wins — a pullback
+    /// yields to any other carousel/zoom input rather than fighting it.
+    ///
+    /// Call this at every user-initiated entry point that can retarget the
+    /// active monitor's overview zoom or change which monitor is active,
+    /// *except* the pull-back's own retargeting (`retarget_active_monitor_zoom`),
+    /// which must stay cancel-free so the choreography can drive itself.
+    pub fn cancel_carousel_pullback(&mut self) {
+        self.carousel_pullback = None;
+    }
+
     /// Retargets the active monitor's overview zoom animation to `target`,
     /// using the same animation config as `overview_zoom_in`/`_out`. Thin
     /// `Layout`-level wrapper around `Monitor::animate_zoom_to`, which is
@@ -2071,12 +2084,30 @@ impl<W: LayoutElement> Layout<W> {
 
         match pullback.phase {
             PullbackPhase::ZoomOut => {
+                let Some(cc) = self.options.overview.consolidated_carousel else {
+                    return;
+                };
                 let zoom_settled = self
                     .active_monitor_ref()
                     .is_none_or(Monitor::overview_zoom_settled);
                 if zoom_settled {
-                    pullback.phase = PullbackPhase::Rotate;
-                    self.rotate_carousel_to(pullback.target);
+                    // Belt-and-suspenders against Finding 1: a user zoom
+                    // action can also retarget the active monitor's zoom
+                    // animation, so "settled" alone doesn't prove *we*
+                    // drove it there. Only transition if it settled at the
+                    // target we asked for; otherwise something else won,
+                    // and the user always wins over the pullback.
+                    let at_assembled = self
+                        .active_monitor_ref()
+                        .map(|m| (m.overview_zoom_target() - cc.assembled_zoom).abs() < 0.0001)
+                        .unwrap_or(true);
+                    if at_assembled {
+                        pullback.phase = PullbackPhase::Rotate;
+                        self.rotate_carousel_to(pullback.target);
+                    } else {
+                        self.carousel_pullback = None;
+                        return;
+                    }
                 }
             }
             PullbackPhase::Rotate => {
@@ -2090,6 +2121,17 @@ impl<W: LayoutElement> Layout<W> {
                     .active_monitor_ref()
                     .is_none_or(Monitor::overview_zoom_settled);
                 if zoom_settled {
+                    let at_restore = self
+                        .active_monitor_ref()
+                        .map(|m| (m.overview_zoom_target() - pullback.restore_zoom).abs() < 0.0001)
+                        .unwrap_or(true);
+                    if !at_restore {
+                        // Settled at the wrong target: a user zoom action
+                        // hijacked the restore step. Cancel rather than
+                        // fight it — the user always wins.
+                        self.carousel_pullback = None;
+                        return;
+                    }
                     // Done; don't reinsert.
                     return;
                 }
@@ -3758,6 +3800,8 @@ impl<W: LayoutElement> Layout<W> {
     }
 
     pub fn focus_output(&mut self, output: &Output) {
+        let mut changed = false;
+
         if let MonitorSet::Normal {
             monitors,
             active_monitor_idx,
@@ -3766,10 +3810,23 @@ impl<W: LayoutElement> Layout<W> {
         {
             for (idx, mon) in monitors.iter().enumerate() {
                 if &mon.output == output {
+                    changed = idx != *active_monitor_idx;
                     *active_monitor_idx = idx;
-                    return;
+                    break;
                 }
             }
+        }
+
+        if changed {
+            // The pull-back's ZoomOut/ZoomIn phases watch the *active*
+            // monitor's zoom animation; switching which monitor is active
+            // out from under it would let it transition on the wrong
+            // monitor's settle, or leave the old one stuck at assembled
+            // zoom. Cancel rather than fight it.
+            //
+            // TODO(Gate C Task 5): rotation-home rebase belongs here too, at
+            // this same active-monitor-change choke point.
+            self.cancel_carousel_pullback();
         }
     }
 

@@ -4683,6 +4683,72 @@ fn pullback_cancelled_by_overview_close() {
 }
 
 #[test]
+fn pullback_cancelled_by_user_zoom() {
+    let (mut layout, _a, _b) = pullback_test_layout();
+
+    layout.toggle_overview(); // open
+
+    layout.clock.set_complete_instantly(true);
+    layout.advance_animations();
+    layout.clock.set_complete_instantly(false);
+
+    // Zoom is parked above the reveal band, so a rotate request pulls back.
+    layout.set_overview_zoom_for_test(0.5);
+
+    layout.carousel_request_rotate(1);
+
+    assert!(layout.carousel_pullback_is_active());
+
+    // Mimic the input path's zoom entry point (`Action::OverviewZoomIn` /
+    // `OverviewZoomOut` / `OverviewZoomCycle` all call this before doing
+    // anything else): the user's own zoom input must cancel the pullback
+    // rather than let the pullback hijack it, or vice versa.
+    layout.cancel_carousel_pullback();
+
+    assert!(!layout.carousel_pullback_is_active());
+
+    // Drive animations to completion; since the pullback was cancelled
+    // before it ever reached `Rotate`, no rotation should have happened.
+    layout.clock.set_complete_instantly(true);
+    for _ in 0..5 {
+        layout.advance_animations();
+    }
+    layout.clock.set_complete_instantly(false);
+
+    assert_eq!(layout.carousel_rotation_target(), 0.0);
+    assert_eq!(layout.carousel_rotation(), 0.0);
+    assert!(!layout.carousel_rotating());
+    assert!(!layout.carousel_pullback_is_active());
+}
+
+#[test]
+fn pullback_cancelled_by_active_monitor_change() {
+    let (mut layout, a, b) = pullback_test_layout();
+
+    layout.toggle_overview(); // open
+
+    layout.clock.set_complete_instantly(true);
+    layout.advance_animations();
+    layout.clock.set_complete_instantly(false);
+
+    layout.set_overview_zoom_for_test(0.5);
+
+    layout.carousel_request_rotate(1);
+
+    assert!(layout.carousel_pullback_is_active());
+
+    // Mimic the input path's monitor-focus entry point (`focus_output`,
+    // called from e.g. `Action::FocusMonitor*`): switching the active
+    // monitor mid-pullback must cancel it, since the phase driver re-resolves
+    // `active_monitor()` on every step.
+    let current = layout.active_output().cloned().unwrap();
+    let other = if current == a { &b } else { &a };
+    layout.focus_output(other);
+
+    assert!(!layout.carousel_pullback_is_active());
+}
+
+#[test]
 fn rotate_carousel_single_output_is_noop() {
     fn make_output(name: &str) -> Output {
         let output = Output::new(
