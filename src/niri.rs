@@ -156,7 +156,7 @@ use crate::render_helpers::blur::BlurOptions;
 use crate::render_helpers::border::BorderRenderElement;
 use crate::render_helpers::debug::push_opaque_regions;
 use crate::render_helpers::global_shader_element::{GlobalPassState, GlobalShaderElement};
-use crate::render_helpers::offscreen::OffscreenBuffer;
+use crate::render_helpers::offscreen::{OffscreenBuffer, OffscreenRenderElement};
 use crate::render_helpers::panel::PanelRenderElement;
 use crate::render_helpers::primary_gpu_texture::PrimaryGpuTextureRenderElement;
 use crate::render_helpers::renderer::NiriRenderer;
@@ -234,6 +234,11 @@ pub struct Niri {
     pub socket_name: Option<OsString>,
 
     pub start_time: Instant,
+
+    /// Frame stamp bumped once per `redraw_queued_outputs` cycle, so `update_panel_sources` can
+    /// tell whether a given content output's `PanelSource` was already refreshed this cycle (it
+    /// may be reached more than once, e.g. via a screencopy re-render) and skip redundant work.
+    panel_frame: Cell<u64>,
 
     /// Whether the at-startup=true window rules are active.
     pub is_at_startup: bool,
@@ -559,6 +564,74 @@ fn panel_spike_enabled() -> bool {
     *ENABLED.get_or_init(|| std::env::var_os("NIRI_PANEL_SPIKE").is_some_and(|v| v == "1"))
 }
 
+thread_local! {
+    /// Set for the duration of `Niri::render_inner`'s body. `update_panel_sources` asserts this
+    /// is *not* set at entry: it takes `layer_map_for_output()` locks for panel content outputs,
+    /// and running it while nested inside `render_inner` risks re-locking the same output's layer
+    /// map (the exact recursive-lock deadlock the consolidated-carousel lens block hit on a
+    /// single monitor). The prepass must always run before `render_inner` is entered.
+    static IN_RENDER_INNER: Cell<bool> = const { Cell::new(false) };
+}
+
+/// RAII guard flipping [`IN_RENDER_INNER`] for the duration of `render_inner`'s body, so it reads
+/// true for reentrant/nested calls too and is reliably cleared on early return or panic-unwind.
+struct InRenderInnerGuard;
+
+impl InRenderInnerGuard {
+    fn enter() -> Self {
+        let was_set = IN_RENDER_INNER.with(|c| c.replace(true));
+        debug_assert!(!was_set, "render_inner should not be reentrant");
+        Self
+    }
+}
+
+impl Drop for InRenderInnerGuard {
+    fn drop(&mut self) {
+        IN_RENDER_INNER.with(|c| c.set(false));
+    }
+}
+
+/// Retained damage-gated offscreen render of one output's panel content (its overview + Background
+/// and Bottom layer-shell surfaces + workspace backgrounds, at whatever zoom the current host asks
+/// for), stored on that CONTENT output's own [`OutputState`].
+///
+/// Ping-pongs between two [`OffscreenBuffer`]s rather than reusing one. `OffscreenBuffer::render`
+/// recreates its texture whenever the previously-returned `GlesTexture` is not
+/// `is_unique_reference()` (confirmed by reading `GlesTexture::is_unique_reference`, which is a
+/// plain `Arc::get_mut` check with no special-casing of the offscreen's own snapshot — see
+/// `render_helpers/offscreen.rs:114` and the identical reasoning already documented at
+/// `layout/tile.rs:1175` and `render_helpers/global_shader_element.rs:241`). Retaining `elem`
+/// (which owns a texture clone) across frames would therefore force a full-buffer recreate +
+/// full-content redraw on every single re-render, defeating damage gating. Alternating buffers
+/// means the buffer being rendered into this call is never the one backing the currently-displayed
+/// `elem`, so it stays unique and `OutputDamageTracker` can do incremental damage.
+pub struct PanelSource {
+    offscreen: [OffscreenBuffer; 2],
+    /// Which buffer index was written on the last successful render; the next render targets the
+    /// other one.
+    flip: bool,
+    /// The retained handle from the last successful render. Never clone the underlying
+    /// `GlesTexture` out of this into anything that outlives the frame it was read in.
+    pub elem: Option<OffscreenRenderElement>,
+    /// Frame stamp this source was last updated at (see `Niri::panel_frame`), making
+    /// `update_panel_sources` idempotent when reached more than once in the same redraw cycle
+    /// (e.g. via a screencopy re-render).
+    frame: u64,
+}
+
+impl Default for PanelSource {
+    fn default() -> Self {
+        Self {
+            offscreen: [OffscreenBuffer::default(), OffscreenBuffer::default()],
+            flip: false,
+            elem: None,
+            // Never equals a real stamp on first use: `Niri::panel_frame` starts at 0 and is
+            // bumped to 1 before the first `redraw_queued_outputs` cycle even begins iterating.
+            frame: 0,
+        }
+    }
+}
+
 pub struct OutputState {
     pub global: GlobalId,
     pub frame_clock: FrameClock,
@@ -618,10 +691,14 @@ pub struct OutputState {
     pub global_shader_chain: RefCell<GlobalShaderChain>,
     /// Damage tracker used for the debug damage visualization.
     pub debug_damage_tracker: OutputDamageTracker,
-    // Spike (NIRI_PANEL_SPIKE=1): retained offscreen + last texture for the
-    // perspective panel experiment. Removed in the carousel redesign Gate B.
-    pub panel_spike_offscreen: Rc<OffscreenBuffer>,
-    pub panel_spike_texture: RefCell<Option<GlesTexture>>,
+    /// This output's own damage-gated panel content source (populated when this output
+    /// participates in the carousel, as content for some host — possibly itself). See
+    /// `PanelSource` and `Niri::update_panel_sources`.
+    pub panel_source: RefCell<PanelSource>,
+    /// Retained per-ring-slot panel elements when this output is acting as a carousel HOST,
+    /// keyed by ring index. Entries are dropped when the ring shrinks. Built from `panel_source`
+    /// content (this output's own, or a sibling's) each frame; wired up in Gate B Task 6.
+    pub panel_elems: RefCell<HashMap<usize, PanelRenderElement>>,
 }
 
 #[derive(Debug, Default)]
@@ -2702,6 +2779,7 @@ impl Niri {
             display_handle,
             is_session_instance,
             start_time: Instant::now(),
+            panel_frame: Cell::new(0),
             is_at_startup: true,
             clock: animation_clock,
 
@@ -3095,8 +3173,8 @@ impl Niri {
             global_shader_screen_result: Rc::new(RefCell::new(None)),
             global_shader_chain: RefCell::new(GlobalShaderChain::default()),
             debug_damage_tracker: OutputDamageTracker::from_output(&output),
-            panel_spike_offscreen: Rc::new(OffscreenBuffer::default()),
-            panel_spike_texture: RefCell::new(None),
+            panel_source: RefCell::new(PanelSource::default()),
+            panel_elems: RefCell::new(HashMap::new()),
         };
         let rv = self.output_state.insert(output.clone(), state);
         assert!(rv.is_none(), "output was already tracked");
@@ -3961,6 +4039,11 @@ impl Niri {
     pub fn redraw_queued_outputs(&mut self, backend: &mut Backend) {
         let _span = tracy_client::span!("Niri::redraw_queued_outputs");
 
+        // One stamp for this whole cycle: every output redrawn below shares it, so
+        // `update_panel_sources` only refreshes each content output's `PanelSource` once even
+        // though `render()` may run for it more than once (e.g. a screencopy re-render).
+        self.panel_frame.set(self.panel_frame.get().wrapping_add(1));
+
         while let Some((output, _)) = self.output_state.iter().find(|(_, state)| {
             matches!(
                 state.redraw_state,
@@ -4472,7 +4555,7 @@ impl Niri {
         }
 
         if panel_spike_enabled() {
-            self.update_panel_spike_texture(&mut ctx.as_gles(), output);
+            self.update_panel_sources(&mut ctx.as_gles(), output, self.panel_frame.get());
         }
 
         self.fill_xray_elements(ctx.as_gles(), output);
@@ -4494,6 +4577,10 @@ impl Niri {
         include_pointer: bool,
         push: &mut dyn FnMut(OutputRenderElements<R>),
     ) {
+        // See `IN_RENDER_INNER` / `update_panel_sources`: panel content prepasses must run before
+        // this, never nested inside it.
+        let _in_render_inner = InRenderInnerGuard::enter();
+
         let state = self.output_state.get(output).unwrap();
         let output_scale = Scale::from(output.current_scale().fractional_scale());
 
@@ -4863,9 +4950,19 @@ impl Niri {
         }
 
         // Spike (NIRI_PANEL_SPIKE=1): draw the animated tilted panel showing this output's own
-        // overview. Removed in the carousel redesign Gate B.
+        // overview, sourced from the damage-gated `PanelSource` populated in `Niri::render`
+        // (before `render_inner` was entered — see `update_panel_sources`). Task 6 replaces this
+        // whole block with the real carousel wiring through `panel_elems`. This borrow is scoped
+        // to just the texture/commit read below; it is not held across the `push()` call.
         if panel_spike_enabled() {
-            if let Some(texture) = state.panel_spike_texture.borrow().clone() {
+            let demo = state.panel_source.borrow().elem.as_ref().map(|elem| {
+                (
+                    elem.texture().clone(),
+                    elem.current_commit(),
+                    elem.context_id(),
+                )
+            });
+            if let Some((texture, texture_commit, context_id)) = demo {
                 let view = output_size(output);
                 // Oscillating yaw so panel motion is transform-only: content
                 // unchanged => offscreen must NOT re-render while it sweeps.
@@ -4877,7 +4974,15 @@ impl Niri {
                     view.w * 1.5,
                 );
                 let scale = output.current_scale().fractional_scale();
-                if let Some(elem) = PanelRenderElement::new(corners, texture, 0.85, scale, 1.) {
+                if let Some(elem) = PanelRenderElement::new(
+                    corners,
+                    texture,
+                    texture_commit,
+                    context_id,
+                    0.85,
+                    scale,
+                    1.,
+                ) {
                     push(elem.into());
                 }
             }
@@ -5296,29 +5401,115 @@ impl Niri {
         }
     }
 
-    /// Spike (NIRI_PANEL_SPIKE=1): render this output's overview into the retained offscreen and
-    /// stash the texture for the tilted-panel draw. Never touches layer maps.
-    fn update_panel_spike_texture(&self, ctx: &mut RenderCtx<GlesRenderer>, output: &Output) {
-        let _span = tracy_client::span!("Niri::update_panel_spike_texture");
+    /// Damage-gated panel content prepass: for every output currently eligible for the carousel
+    /// ring (`Layout::carousel_outputs`, which includes `host` itself), refreshes that output's
+    /// own `PanelSource` if it hasn't already been refreshed this `frame` stamp.
+    ///
+    /// This MUST be called before `render_inner` is entered for `host` (see `IN_RENDER_INNER`):
+    /// each content output's `layer_map_for_output` lock is taken here, outside of any host
+    /// render scope, which is what avoids the recursive-lock deadlock the lens block hit when a
+    /// single monitor was both host and (self-)target (see project memory
+    /// `carousel-lens-layer-map-deadlock`).
+    ///
+    /// Content recipe (windows + Background/Bottom layer-shell + workspace backgrounds, at
+    /// `fill_zoom`) is the same one the LENS render block in `render_inner` uses, minus the
+    /// host-centering relocate: elements are rendered at the content output's own origin, not
+    /// shifted onto the host's view. `render_inner`'s lens/card blocks are untouched by this
+    /// change (Gate B Task 6 deletes them once `panel_elems` is wired into the real draw path).
+    fn update_panel_sources(&self, ctx: &mut RenderCtx<GlesRenderer>, host: &Output, frame: u64) {
+        let _span = tracy_client::span!("Niri::update_panel_sources");
+        debug_assert!(
+            !IN_RENDER_INNER.with(Cell::get),
+            "update_panel_sources must run before render_inner is entered for the host output"
+        );
 
-        let Some(mon) = self.layout.monitor_for_output(output) else {
+        let Some(host_mon) = self.layout.monitor_for_output(host) else {
             return;
         };
-        let state = self.output_state.get(output).unwrap();
+        let host_view = host_mon.view_size();
+        let host_scale = host.current_scale().fractional_scale();
+        let output_scale = Scale::from(host_scale);
 
-        let zoom = 0.5;
-        let mut elements: Vec<MonitorRenderElement<GlesRenderer>> = Vec::new();
-        mon.render_overview_at_zoom(ctx.r(), zoom, false, &mut |elem| {
-            elements.push(elem);
-        });
+        for m in self.layout.carousel_outputs() {
+            let target = m.output().clone();
+            let state = self.output_state.get(&target).unwrap();
 
-        let scale = Scale::from(output.current_scale().fractional_scale());
-        match state.panel_spike_offscreen.render(ctx.renderer, scale, &elements) {
-            Ok((elem, _sync, _data)) => {
-                *state.panel_spike_texture.borrow_mut() = Some(elem.texture().clone());
+            // Idempotent within one redraw cycle: the prepass may be reached more than once
+            // (e.g. a screencopy re-render of the same or a different host).
+            if state.panel_source.borrow().frame == frame {
+                continue;
             }
-            Err(err) => {
-                warn!("panel spike offscreen render failed: {err:?}");
+
+            let target_view = m.view_size();
+            let target_scale = m.scale().fractional_scale();
+            // Fit the target's overview into the host view (letterbox: min of the axis ratios),
+            // corrected for the host/target output-scale difference. Same formula as the lens
+            // block's `fill_zoom`.
+            let fit = (host_view.w / target_view.w).min(host_view.h / target_view.h);
+            let fill_zoom = fit * (host_scale / target_scale);
+
+            let mut elements: Vec<OutputRenderElements<GlesRenderer>> = Vec::new();
+            m.render_overview_at_zoom(ctx.r(), fill_zoom, false, &mut |elem| {
+                elements.push(OutputRenderElements::Monitor(elem));
+            });
+
+            // Background layer-shell surfaces + per-workspace solid background, drawn AFTER the
+            // windows above so they land behind them (niri renders earlier-pushed elements on
+            // top). No host-centering relocate: geo is the target's own, unshifted.
+            let target_layer_map = layer_map_for_output(&target);
+            for (ws, geo) in m.workspaces_with_render_geo_at_zoom(fill_zoom) {
+                self.render_layer_normal(
+                    ctx.r(),
+                    None,
+                    &target_layer_map,
+                    Layer::Bottom,
+                    XrayPos::default(),
+                    false,
+                    &mut |elem| {
+                        if let Some(w) = scale_relocate_crop(elem, output_scale, fill_zoom, geo) {
+                            elements.push(OutputRenderElements::RelocatedLayerSurface(w));
+                        }
+                    },
+                );
+                self.render_layer_normal(
+                    ctx.r(),
+                    None,
+                    &target_layer_map,
+                    Layer::Background,
+                    XrayPos::default(),
+                    false,
+                    &mut |elem| {
+                        if let Some(w) = scale_relocate_crop(elem, output_scale, fill_zoom, geo) {
+                            elements.push(OutputRenderElements::RelocatedLayerSurface(w));
+                        }
+                    },
+                );
+                if let Some(w) =
+                    scale_relocate_crop(ws.render_background(), output_scale, fill_zoom, geo)
+                {
+                    elements.push(OutputRenderElements::RelocatedColor(w));
+                }
+            }
+            drop(target_layer_map);
+
+            let mut source = state.panel_source.borrow_mut();
+            source.frame = frame;
+            let idx = usize::from(source.flip);
+            // Same GLES context as the eventual panel draw (single-GPU primary render path), and
+            // command ordering within one context is guaranteed, so the `SyncPoint` this returns
+            // is deliberately not threaded through. Revisit only if panels ever need to render
+            // cross-context (e.g. multi-GPU screencast of panel content).
+            match source.offscreen[idx].render(ctx.renderer, output_scale, &elements) {
+                Ok((elem, _sync, _data)) => {
+                    source.elem = Some(elem);
+                    source.flip = !source.flip;
+                }
+                Err(err) => {
+                    // Clear stale content rather than keep showing a frame that no longer
+                    // reflects this output.
+                    source.elem = None;
+                    warn!("error rendering panel source for output: {err:?}");
+                }
             }
         }
     }

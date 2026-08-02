@@ -215,6 +215,13 @@ impl OffscreenRenderElement {
         &self.texture
     }
 
+    /// Renderer context this element's texture was created against. Callers building their own
+    /// render elements from this texture (e.g. `PanelRenderElement`) need this to guard their own
+    /// `draw` against cross-context rendering, the same way `Self::draw` guards itself below.
+    pub fn context_id(&self) -> ContextId<GlesTexture> {
+        self.renderer_context_id.clone()
+    }
+
     pub fn offset(&self) -> Point<f64, Logical> {
         self.offset
     }
