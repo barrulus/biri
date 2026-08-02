@@ -187,14 +187,26 @@ mod tests {
         let quad = tilted_panel_corners((50., 50.), (60., 40.), 0.4, 200.);
         let m = sampling_matrix(&quad).unwrap();
         let (bx, by, bw, bh) = bounding_box(&quad);
-        // The quad's TL corner, bbox-normalized, must map to uv (0,0).
-        let p = glam::Vec3::new(
-            ((quad[0][0] - bx) / bw) as f32,
-            ((quad[0][1] - by) / bh) as f32,
-            1.0,
-        );
-        let s = m * p;
-        assert!((s.x / s.z).abs() < 1e-4);
-        assert!((s.y / s.z).abs() < 1e-4);
+        let expected = [(0., 0.), (1., 0.), (1., 1.), (0., 1.)];
+        for (i, (eu, ev)) in expected.iter().enumerate() {
+            let p = glam::Vec3::new(
+                ((quad[i][0] - bx) / bw) as f32,
+                ((quad[i][1] - by) / bh) as f32,
+                1.0,
+            );
+            let s = m * p;
+            assert!((s.x / s.z - eu).abs() < 1e-4, "corner {i} u");
+            assert!((s.y / s.z - ev).abs() < 1e-4, "corner {i} v");
+        }
+    }
+
+    #[test]
+    fn negative_yaw_recedes_left_edge() {
+        let c = tilted_panel_corners((0., 0.), (100., 60.), -0.5, 300.);
+        let left_h = c[3][1] - c[0][1];
+        let right_h = c[2][1] - c[1][1];
+        assert!(left_h < right_h, "left edge must be shorter: {left_h} vs {right_h}");
+        assert!(c[0][0] > -50., "left edge pulled toward center: {}", c[0][0]);
+        assert!(right_h > 60., "near (right) edge magnifies vertically: {right_h}");
     }
 }
