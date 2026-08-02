@@ -4618,6 +4618,42 @@ impl Niri {
         !settled_on_host || self.layout.carousel_rotating()
     }
 
+    /// Queues a redraw of the carousel host when `content_output`'s own commit-driven redraw
+    /// (queued by the caller, at its own call site) isn't enough to keep that content's panel
+    /// fresh.
+    ///
+    /// Panel content is only ever published from inside the active host's own `Niri::render`
+    /// (`update_panel_sources`, single-host gated). A sibling ring member's window commit queues
+    /// a redraw of *that sibling's own* output only — if the host itself is otherwise idle (no
+    /// unrelated damage of its own), a sibling animation resuming (e.g. a video unpausing) would
+    /// leave its panel frozen on the host until the host's next unrelated redraw. Callers should
+    /// invoke this alongside their existing `queue_redraw(content_output)` at every window/
+    /// surface-commit site.
+    ///
+    /// Bails out in one branch in the common (carousel not active) case to keep this cheap on
+    /// every commit.
+    pub fn queue_carousel_host_redraw_for_sibling(&mut self, content_output: &Output) {
+        if !self.carousel_panels_needed() {
+            return;
+        }
+        let Some(host) = self.layout.active_output().cloned() else {
+            return;
+        };
+        if &host == content_output {
+            // The committing surface's own output IS the host: its own queue_redraw already
+            // covers this (and the host's prepass re-publishes from its own render anyway).
+            return;
+        }
+        let is_ring_member = self
+            .layout
+            .carousel_outputs()
+            .into_iter()
+            .any(|m| m.output() == content_output);
+        if is_ring_member {
+            self.queue_redraw(&host);
+        }
+    }
+
     pub fn render<R: NiriRenderer>(
         &self,
         mut ctx: RenderCtx<R>,
@@ -5221,12 +5257,14 @@ impl Niri {
         // for free: rotation snaps to the target's ring position, so d == 0 there instead, and
         // it fills the center slot at CENTER_FRACTION while every other ring member (including
         // the host itself) recedes to the side as an ordinary panel.
-        if self.carousel_panels_needed() {
+        if self.layout.active_output() == Some(output) && self.carousel_panels_needed() {
             let view = mon.view_size();
             let scale = output.current_scale().fractional_scale();
             let rotation = self.layout.carousel_rotation();
             let reveal = self.layout.carousel_reveal();
-            let settled_on_host = rotation == rotation.round() && rotation.round() == 0.;
+            let settled_on_host = rotation == rotation.round()
+                && rotation.round() == 0.
+                && !self.layout.carousel_rotating();
             let outputs = self.layout.carousel_outputs();
 
             let mut visible: Vec<(usize, crate::layout::carousel::PanelPlacement)> = self
@@ -5543,6 +5581,18 @@ impl Niri {
             if keep.contains(output) {
                 continue;
             }
+
+            // Early-out for the common (carousel-unconfigured) case: nothing has ever published
+            // to this output's panel source, so there's no `elem`, no offscreen texture, and no
+            // retained host-side panel elements to sweep. Skip the borrows entirely so an idle
+            // compositor with the carousel never touched pays zero cost here.
+            let already_clear = state.panel_source.borrow().elem.is_none()
+                && state.panel_offscreen.iter().all(|buf| buf.is_empty())
+                && state.panel_elems.borrow().is_empty();
+            if already_clear {
+                continue;
+            }
+
             let mut source = state.panel_source.borrow_mut();
             if source.elem.is_some() {
                 source.clear();
@@ -5551,6 +5601,12 @@ impl Niri {
             for buf in &state.panel_offscreen {
                 buf.clear();
             }
+
+            // This output is no longer a carousel ring member (or the carousel closed
+            // entirely, `keep` == `[]`): release any panel elements it retained while acting as
+            // a HOST, so their `GlesTexture` clones don't stay pinned after close. See
+            // `OutputState::panel_elems`'s doc.
+            state.panel_elems.borrow_mut().clear();
         }
     }
 
@@ -5788,7 +5844,15 @@ impl Niri {
         // set (if at all) via interior mutability from inside the just-finished render, by
         // `update_panel_sources` mid-`Niri::render`, which cannot call `queue_redraw` itself. See
         // `OutputState::panel_redraw_pending`'s doc.
-        if self.output_state.get(output).unwrap().panel_redraw_pending.take() {
+        //
+        // Deliberately only consumed when the render actually happened (`res != Skipped`): the
+        // `Skipped` branch below unconditionally resets `redraw_state`, which would clobber the
+        // `Queued`/`...AndQueued` state `queue_redraw` just set here, silently dropping the
+        // deferred redraw. Leaving the flag SET on `Skipped` means it's picked up by this same
+        // check the next time this output actually renders.
+        if res != RenderResult::Skipped
+            && self.output_state.get(output).unwrap().panel_redraw_pending.take()
+        {
             self.queue_redraw(output);
         }
 
