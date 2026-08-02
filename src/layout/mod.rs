@@ -1569,32 +1569,45 @@ impl<W: LayoutElement> Layout<W> {
             }
         }
 
-        let MonitorSet::Normal {
-            monitors,
-            active_monitor_idx,
-            ..
-        } = &mut self.monitor_set
-        else {
-            return;
-        };
+        let mut monitor_changed = false;
 
-        for (monitor_idx, mon) in monitors.iter_mut().enumerate() {
-            for (workspace_idx, ws) in mon.workspaces.iter_mut().enumerate() {
-                if ws.activate_window(window) {
-                    *active_monitor_idx = monitor_idx;
+        {
+            let MonitorSet::Normal {
+                monitors,
+                active_monitor_idx,
+                ..
+            } = &mut self.monitor_set
+            else {
+                return;
+            };
 
-                    // If currently in the middle of a vertical swipe between the target workspace
-                    // and some other, don't switch the workspace.
-                    match &mon.workspace_switch {
-                        Some(WorkspaceSwitch::Gesture(gesture))
-                            if gesture.current_idx.floor() == workspace_idx as f64
-                                || gesture.current_idx.ceil() == workspace_idx as f64 => {}
-                        _ => mon.switch_workspace(workspace_idx),
+            'outer: for (monitor_idx, mon) in monitors.iter_mut().enumerate() {
+                for (workspace_idx, ws) in mon.workspaces.iter_mut().enumerate() {
+                    if ws.activate_window(window) {
+                        monitor_changed = *active_monitor_idx != monitor_idx;
+                        *active_monitor_idx = monitor_idx;
+
+                        // If currently in the middle of a vertical swipe between the target workspace
+                        // and some other, don't switch the workspace.
+                        match &mon.workspace_switch {
+                            Some(WorkspaceSwitch::Gesture(gesture))
+                                if gesture.current_idx.floor() == workspace_idx as f64
+                                    || gesture.current_idx.ceil() == workspace_idx as f64 => {}
+                            _ => mon.switch_workspace(workspace_idx),
+                        }
+
+                        break 'outer;
                     }
-
-                    return;
                 }
             }
+        }
+
+        if monitor_changed {
+            // The pull-back's phase driver re-resolves the *active* monitor
+            // on every step; changing which monitor is active out from under
+            // it would let it transition on the wrong monitor's settle.
+            // Cancel rather than fight it (mirrors `focus_output`).
+            self.cancel_carousel_pullback();
         }
     }
 
@@ -1605,32 +1618,45 @@ impl<W: LayoutElement> Layout<W> {
             }
         }
 
-        let MonitorSet::Normal {
-            monitors,
-            active_monitor_idx,
-            ..
-        } = &mut self.monitor_set
-        else {
-            return;
-        };
+        let mut monitor_changed = false;
 
-        for (monitor_idx, mon) in monitors.iter_mut().enumerate() {
-            for (workspace_idx, ws) in mon.workspaces.iter_mut().enumerate() {
-                if ws.activate_window_without_raising(window) {
-                    *active_monitor_idx = monitor_idx;
+        {
+            let MonitorSet::Normal {
+                monitors,
+                active_monitor_idx,
+                ..
+            } = &mut self.monitor_set
+            else {
+                return;
+            };
 
-                    // If currently in the middle of a vertical swipe between the target workspace
-                    // and some other, don't switch the workspace.
-                    match &mon.workspace_switch {
-                        Some(WorkspaceSwitch::Gesture(gesture))
-                            if gesture.current_idx.floor() == workspace_idx as f64
-                                || gesture.current_idx.ceil() == workspace_idx as f64 => {}
-                        _ => mon.switch_workspace(workspace_idx),
+            'outer: for (monitor_idx, mon) in monitors.iter_mut().enumerate() {
+                for (workspace_idx, ws) in mon.workspaces.iter_mut().enumerate() {
+                    if ws.activate_window_without_raising(window) {
+                        monitor_changed = *active_monitor_idx != monitor_idx;
+                        *active_monitor_idx = monitor_idx;
+
+                        // If currently in the middle of a vertical swipe between the target workspace
+                        // and some other, don't switch the workspace.
+                        match &mon.workspace_switch {
+                            Some(WorkspaceSwitch::Gesture(gesture))
+                                if gesture.current_idx.floor() == workspace_idx as f64
+                                    || gesture.current_idx.ceil() == workspace_idx as f64 => {}
+                            _ => mon.switch_workspace(workspace_idx),
+                        }
+
+                        break 'outer;
                     }
-
-                    return;
                 }
             }
+        }
+
+        if monitor_changed {
+            // The pull-back's phase driver re-resolves the *active* monitor
+            // on every step; changing which monitor is active out from under
+            // it would let it transition on the wrong monitor's settle.
+            // Cancel rather than fight it (mirrors `focus_output`).
+            self.cancel_carousel_pullback();
         }
     }
 

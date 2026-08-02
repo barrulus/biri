@@ -4749,6 +4749,33 @@ fn pullback_cancelled_by_active_monitor_change() {
 }
 
 #[test]
+fn pullback_cancelled_by_cross_output_window_activation() {
+    let (mut layout, _a, _b) = pullback_test_layout();
+
+    // Overview opens on the active monitor (A, since it was added first);
+    // window 1 lives on B.
+    layout.toggle_overview(); // open
+
+    layout.clock.set_complete_instantly(true);
+    layout.advance_animations();
+    layout.clock.set_complete_instantly(false);
+
+    layout.set_overview_zoom_for_test(0.5);
+
+    layout.carousel_request_rotate(1);
+
+    assert!(layout.carousel_pullback_is_active());
+
+    // Mimic the input path's window-focus entry points (`Action::FocusWindow`
+    // / `FocusWindowPrevious`): activating a window on another monitor
+    // mid-pullback must cancel it too, same as `focus_output`, since it also
+    // flips `active_monitor_idx` out from under the phase driver.
+    layout.activate_window(&1);
+
+    assert!(!layout.carousel_pullback_is_active());
+}
+
+#[test]
 fn rotate_carousel_single_output_is_noop() {
     fn make_output(name: &str) -> Output {
         let output = Output::new(
