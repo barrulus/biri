@@ -366,11 +366,13 @@ pub struct Layout<W: LayoutElement> {
     overview_open: bool,
     /// The overview zoom progress.
     overview_progress: Option<OverviewProgress>,
-    /// Which output the consolidated carousel is centered on. Initialized to 0;
-    /// Phase 2 sets it to the centered output when entering the carousel regime.
-    /// Meaningful only while in the carousel regime.
-    ///
-    carousel_centered_output_idx: usize,
+    /// Settled target rotation for the consolidated carousel, in ring-position
+    /// units (see `carousel::ring_positions`): 0.0 = centered on the host
+    /// (active) output. Initialized to 0.
+    carousel_rotation: f64,
+    /// In-flight animation from the previous rotation target to
+    /// `carousel_rotation`. `None` once settled.
+    carousel_rotation_anim: Option<Animation>,
     /// Configurable properties of the layout.
     options: Rc<Options>,
 }
@@ -712,7 +714,8 @@ impl<W: LayoutElement> Layout<W> {
             update_render_elements_time: Duration::ZERO,
             overview_open: false,
             overview_progress: None,
-            carousel_centered_output_idx: 0,
+            carousel_rotation: 0.,
+            carousel_rotation_anim: None,
             options: Rc::new(options),
         }
     }
@@ -738,7 +741,8 @@ impl<W: LayoutElement> Layout<W> {
             update_render_elements_time: Duration::ZERO,
             overview_open: false,
             overview_progress: None,
-            carousel_centered_output_idx: 0,
+            carousel_rotation: 0.,
+            carousel_rotation_anim: None,
             options: opts,
         }
     }
@@ -1822,38 +1826,108 @@ impl<W: LayoutElement> Layout<W> {
             .collect()
     }
 
-    /// Returns the index of the output the consolidated carousel is currently
-    /// centered on.
-    pub fn carousel_centered_output_idx(&self) -> usize {
-        self.carousel_centered_output_idx
+    /// Current animated rotation value, in ring-position units. Interpolates
+    /// while `carousel_rotation_anim` is in flight; equals
+    /// `carousel_rotation_target()` once settled.
+    pub fn carousel_rotation(&self) -> f64 {
+        self.carousel_rotation_anim
+            .as_ref()
+            .map_or(self.carousel_rotation, |anim| anim.value())
     }
 
-    /// Set the centered index to the active output's position in
-    /// `carousel_outputs()`. Called when the carousel/overview opens so the
-    /// carousel starts centered on the output the user is looking at. No-op if
-    /// the active output isn't in the set.
+    /// Settled rotation target, in ring-position units (0.0 = host/active
+    /// output).
+    pub fn carousel_rotation_target(&self) -> f64 {
+        self.carousel_rotation
+    }
+
+    /// Ring position (see `carousel::ring_positions`) for every monitor in
+    /// `carousel_outputs()`, paired with its index into that list. Positions
+    /// are read from `Output::current_location()`; the host is the active
+    /// output and always gets ring position 0.0. Empty if there's no active
+    /// output or it isn't in `carousel_outputs()`.
+    pub fn carousel_ring(&self) -> Vec<(usize, f64)> {
+        let outputs = self.carousel_outputs();
+        let Some(active) = self.active_output() else {
+            return Vec::new();
+        };
+        let Some(host_idx) = outputs.iter().position(|m| m.output() == active) else {
+            return Vec::new();
+        };
+
+        let positions: Vec<(i32, i32)> = outputs
+            .iter()
+            .map(|m| {
+                let loc = m.output().current_location();
+                (loc.x, loc.y)
+            })
+            .collect();
+
+        carousel::ring_positions(&positions, host_idx)
+            .into_iter()
+            .enumerate()
+            .collect()
+    }
+
+    /// Snap the rotation to 0.0 (host/active output), instantly, canceling any
+    /// in-flight animation. Called when the carousel/overview opens so it
+    /// starts centered on the output the user is looking at. No-op if the
+    /// active output isn't in `carousel_outputs()`.
     pub fn reset_carousel_center(&mut self) {
         let Some(active) = self.active_output().cloned() else {
             return;
         };
-        if let Some(idx) = self
-            .carousel_outputs()
-            .iter()
-            .position(|m| m.output() == &active)
-        {
-            self.carousel_centered_output_idx = idx;
+        if self.carousel_outputs().iter().any(|m| m.output() == &active) {
+            self.carousel_rotation = 0.;
+            self.carousel_rotation_anim = None;
         }
     }
 
-    /// Rotates the carousel's centered output by `delta` positions, wrapping
-    /// over `carousel_outputs()`. No-op if fewer than 2 outputs are eligible.
-    pub fn slide_carousel(&mut self, delta: isize) {
-        let len = self.carousel_outputs().len();
-        if len < 2 {
+    /// Retargets the carousel rotation by `delta` ring steps, wrapping over
+    /// the ring extent (cyclic wrap preserved from the old index-based
+    /// semantics). No-op if fewer than 2 outputs are eligible.
+    pub fn rotate_carousel(&mut self, delta: isize) {
+        let ring = self.carousel_ring();
+        if ring.len() < 2 {
             return;
         }
-        let idx = self.carousel_centered_output_idx as isize;
-        self.carousel_centered_output_idx = (idx + delta).rem_euclid(len as isize) as usize;
+
+        let mut positions: Vec<f64> = ring.iter().map(|&(_, pos)| pos).collect();
+        positions.sort_by(|a, b| a.partial_cmp(b).unwrap());
+
+        let current = self.carousel_rotation_target();
+        let cur_idx = positions
+            .iter()
+            .position(|&p| (p - current).abs() < 0.5)
+            .unwrap_or(0) as isize;
+
+        let len = positions.len() as isize;
+        let new_idx = (cur_idx + delta).rem_euclid(len) as usize;
+        let new_target = positions[new_idx];
+
+        self.retarget_carousel_rotation(new_target);
+    }
+
+    /// Start or retarget the rotation animation from the current animated
+    /// value to `new_target`. Mirrors `Monitor::animate_zoom_to`
+    /// (monitor.rs); uses the `overview_open_close` animation config, same as
+    /// `toggle_overview`.
+    fn retarget_carousel_rotation(&mut self, new_target: f64) {
+        let current = self.carousel_rotation();
+        let config = self.options.animations.overview_open_close.0;
+        self.carousel_rotation = new_target;
+
+        if config.off || (current - new_target).abs() < 0.0001 {
+            self.carousel_rotation_anim = None;
+        } else {
+            self.carousel_rotation_anim = Some(Animation::new(
+                self.clock.clone(),
+                current,
+                new_target,
+                0.,
+                config,
+            ));
+        }
     }
 
     pub fn monitors_mut(&mut self) -> impl Iterator<Item = &mut Monitor<W>> + '_ {
@@ -2472,19 +2546,62 @@ impl<W: LayoutElement> Layout<W> {
         compute_overview_zoom(target_zoom, progress)
     }
 
-    pub fn in_carousel_regime(&self) -> bool {
+    /// Carousel reveal progress: 0.0 when not configured, the overview is
+    /// closed, or zoom hasn't reached `reveal_zoom` yet; ramps to 1.0 as zoom
+    /// approaches `assembled_zoom`.
+    pub fn carousel_reveal(&self) -> f64 {
         let Some(cc) = self.options.overview.consolidated_carousel else {
-            return false;
+            return 0.;
         };
+        if !self.overview_open {
+            return 0.;
+        }
         let zoom = self.overview_zoom();
-        self.overview_open && zoom <= cc.reveal_zoom && zoom > cc.assembled_zoom
+        ((cc.reveal_zoom - zoom) / (cc.reveal_zoom - cc.assembled_zoom)).clamp(0., 1.)
     }
 
+    // GATE-B-TEMP: callers rewired in render/input tasks
+    pub fn in_carousel_regime(&self) -> bool {
+        self.carousel_reveal() > 0. && !self.in_carousel_lens()
+    }
+
+    // GATE-B-TEMP: callers rewired in render/input tasks. Thin wrapper
+    // preserving the old name/signature for input/mod.rs call sites; delegates
+    // to `rotate_carousel`.
+    pub fn slide_carousel(&mut self, delta: isize) {
+        self.rotate_carousel(delta);
+    }
+
+    // GATE-B-TEMP: callers rewired in render/input tasks. Maps the current
+    // rotation target back to an index into `carousel_outputs()` order (as
+    // opposed to `carousel_ring()`'s physical/ring order), for niri.rs render
+    // call sites still expecting the old integer-index API.
+    pub fn carousel_centered_output_idx(&self) -> usize {
+        let ring = self.carousel_ring();
+        if ring.is_empty() {
+            return 0;
+        }
+        let target = self.carousel_rotation_target();
+        ring.iter()
+            .min_by(|a, b| {
+                (a.1 - target)
+                    .abs()
+                    .partial_cmp(&(b.1 - target).abs())
+                    .unwrap()
+            })
+            .map(|&(idx, _)| idx)
+            .unwrap_or(0)
+    }
+
+    /// Overview is open, the carousel is configured, and the rotation has
+    /// settled (no animation in flight) on a non-host output.
     pub fn in_carousel_lens(&self) -> bool {
-        let Some(cc) = self.options.overview.consolidated_carousel else {
+        if self.options.overview.consolidated_carousel.is_none() {
             return false;
-        };
-        self.overview_open && self.overview_zoom() <= cc.assembled_zoom
+        }
+        self.overview_open
+            && self.carousel_rotation_anim.is_none()
+            && self.carousel_rotation_target() != 0.0
     }
 
     #[cfg(test)]
@@ -2629,6 +2746,11 @@ impl<W: LayoutElement> Layout<W> {
             );
 
             let consolidated = self.options.overview.consolidated_carousel.is_some();
+            // In consolidated mode the overview is a lens on the host output only.
+            // The host is the active monitor, which is also where the carousel
+            // rotation settles at 0.0 (`carousel_rotation_target() == 0.0`); this
+            // task doesn't move the host in response to rotation, so the check
+            // stays keyed on `active_monitor_idx`.
             let expect_open = self.overview_open
                 && !monitor.isolated
                 && (!consolidated || idx == active_monitor_idx);
@@ -2840,6 +2962,12 @@ impl<W: LayoutElement> Layout<W> {
             }
         }
 
+        if let Some(anim) = &self.carousel_rotation_anim {
+            if anim.is_done() {
+                self.carousel_rotation_anim = None;
+            }
+        }
+
         match &mut self.monitor_set {
             MonitorSet::Normal { monitors, .. } => {
                 for mon in monitors {
@@ -2881,6 +3009,10 @@ impl<W: LayoutElement> Layout<W> {
             .as_ref()
             .is_some_and(|p| p.is_animation())
         {
+            return true;
+        }
+
+        if self.carousel_rotation_anim.is_some() {
             return true;
         }
 
@@ -4755,7 +4887,11 @@ impl<W: LayoutElement> Layout<W> {
         self.overview_open = !self.overview_open;
 
         if self.overview_open {
-            self.reset_carousel_center();
+            // Instant snap to host (ring position 0.0), not `reset_carousel_center()`:
+            // the overview-open animation handles the visual transition, so no
+            // rotation animation should run alongside it.
+            self.carousel_rotation = 0.;
+            self.carousel_rotation_anim = None;
         }
 
         // Reset zoom to config default when closing overview.

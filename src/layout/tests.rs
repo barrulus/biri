@@ -4045,7 +4045,7 @@ fn consolidated_mode_scopes_overview_to_active_output() {
 }
 
 #[test]
-fn carousel_regime_tracks_zoom_threshold() {
+fn carousel_reveal_tracks_zoom_threshold() {
     fn make_output(name: &str) -> Output {
         let output = Output::new(
             name.to_owned(),
@@ -4077,8 +4077,8 @@ fn carousel_regime_tracks_zoom_threshold() {
 
     let mut options = Options::default();
     options.overview.consolidated_carousel = Some(niri_config::ConsolidatedCarousel {
-        reveal_zoom: 0.25,
-        assembled_zoom: 0.1,
+        reveal_zoom: 0.4,
+        assembled_zoom: 0.15,
     });
 
     let mut layout = Layout::<TestWindow>::with_options(Clock::with_time(Duration::ZERO), options);
@@ -4095,24 +4095,24 @@ fn carousel_regime_tracks_zoom_threshold() {
     layout.advance_animations();
     layout.clock.set_complete_instantly(false);
 
-    // Above threshold: single-output overview, not carousel.
+    // Above reveal-zoom: no reveal yet.
     layout.set_overview_zoom_for_test(0.5);
-    assert!(!layout.in_carousel_regime());
+    assert_eq!(layout.carousel_reveal(), 0.);
 
-    // At/below threshold: carousel regime.
-    layout.set_overview_zoom_for_test(0.2);
-    assert!(layout.in_carousel_regime());
+    // Halfway between reveal_zoom (0.4) and assembled_zoom (0.15).
+    layout.set_overview_zoom_for_test(0.275);
+    assert!((layout.carousel_reveal() - 0.5).abs() < 1e-9);
 
-    // Exact boundary: reveal_zoom uses <=, so exactly-at-threshold is in-regime.
-    layout.set_overview_zoom_for_test(0.25);
-    assert!(
-        layout.in_carousel_regime(),
-        "zoom exactly at threshold is in-regime (<=)"
-    );
+    // At/below assembled_zoom: fully revealed.
+    layout.set_overview_zoom_for_test(0.15);
+    assert_eq!(layout.carousel_reveal(), 1.);
+
+    layout.set_overview_zoom_for_test(0.05);
+    assert_eq!(layout.carousel_reveal(), 1.);
 }
 
 #[test]
-fn carousel_regime_and_lens_are_mutually_exclusive_bands() {
+fn carousel_lens_false_while_rotation_is_zero() {
     fn make_output(name: &str) -> Output {
         let output = Output::new(
             name.to_owned(),
@@ -4144,8 +4144,8 @@ fn carousel_regime_and_lens_are_mutually_exclusive_bands() {
 
     let mut options = Options::default();
     options.overview.consolidated_carousel = Some(niri_config::ConsolidatedCarousel {
-        reveal_zoom: 0.25,
-        assembled_zoom: 0.1,
+        reveal_zoom: 0.4,
+        assembled_zoom: 0.15,
     });
 
     let mut layout = Layout::<TestWindow>::with_options(Clock::with_time(Duration::ZERO), options);
@@ -4157,19 +4157,19 @@ fn carousel_regime_and_lens_are_mutually_exclusive_bands() {
 
     layout.toggle_overview();
 
-    // Finish the overview-open animation so overview_zoom() reflects the target zoom.
     layout.clock.set_complete_instantly(true);
     layout.advance_animations();
     layout.clock.set_complete_instantly(false);
 
-    layout.set_overview_zoom_for_test(0.5); // above activation
-    assert!(!layout.in_carousel_regime() && !layout.in_carousel_lens());
+    // Rotation starts at 0.0 (host) on open -- never in lens regardless of zoom.
+    layout.set_overview_zoom_for_test(0.5);
+    assert!(!layout.in_carousel_lens());
 
-    layout.set_overview_zoom_for_test(0.2); // carousel band
-    assert!(layout.in_carousel_regime() && !layout.in_carousel_lens());
+    layout.set_overview_zoom_for_test(0.2);
+    assert!(!layout.in_carousel_lens());
 
-    layout.set_overview_zoom_for_test(0.05); // lens band
-    assert!(!layout.in_carousel_regime() && layout.in_carousel_lens());
+    layout.set_overview_zoom_for_test(0.05);
+    assert!(!layout.in_carousel_lens());
 }
 
 #[test]
@@ -4333,12 +4333,14 @@ fn carousel_outputs_includes_host_and_reset_centers_on_active() {
     ); // host included
 
     layout.reset_carousel_center();
-    assert_eq!(layout.carousel_centered_output_idx(), 0); // centered on active host "A"
+    assert_eq!(layout.carousel_rotation_target(), 0.0); // centered (rotation snapped to host) on active host "A"
 }
 
 #[test]
-fn slide_carousel_wraps_over_outputs() {
-    fn make_output(name: &str) -> Output {
+fn rotate_carousel_wraps_over_ring_positions() {
+    // Outputs positioned left-to-right by `x`, same order as added, so ring
+    // position equals the old monitor-list index (host "A" is at x=0 -> ring 0).
+    fn make_output(name: &str, x: i32) -> Output {
         let output = Output::new(
             name.to_owned(),
             PhysicalProperties {
@@ -4356,7 +4358,7 @@ fn slide_carousel_wraps_over_outputs() {
             }),
             None,
             None,
-            None,
+            Some(Point::from((x, 0))),
         );
         output.user_data().insert_if_missing(|| OutputName {
             connector: name.to_owned(),
@@ -4367,12 +4369,12 @@ fn slide_carousel_wraps_over_outputs() {
         output
     }
 
-    // 3 outputs, centered idx starts at 0.
+    // 3 outputs, rotation starts at 0.0 (host).
     let mut layout = Layout::<TestWindow>::default();
 
-    let a = make_output("A");
-    let b = make_output("B");
-    let c = make_output("C");
+    let a = make_output("A", 0);
+    let b = make_output("B", 1280);
+    let c = make_output("C", 2560);
 
     layout.add_output(a.clone(), None, false);
     layout.add_output(b.clone(), None, false);
@@ -4408,18 +4410,20 @@ fn slide_carousel_wraps_over_outputs() {
 
     layout.reset_carousel_center();
 
-    layout.slide_carousel(1);
-    assert_eq!(layout.carousel_centered_output_idx(), 1);
-    layout.slide_carousel(1);
-    assert_eq!(layout.carousel_centered_output_idx(), 2);
-    layout.slide_carousel(1);
-    assert_eq!(layout.carousel_centered_output_idx(), 0); // wrapped
-    layout.slide_carousel(-1);
-    assert_eq!(layout.carousel_centered_output_idx(), 2); // wrapped backward
+    // Settle each retarget instantly so `carousel_rotation_target()` reflects it
+    // right away (animation config aside, the target field updates synchronously).
+    layout.rotate_carousel(1);
+    assert_eq!(layout.carousel_rotation_target(), 1.0);
+    layout.rotate_carousel(1);
+    assert_eq!(layout.carousel_rotation_target(), 2.0);
+    layout.rotate_carousel(1);
+    assert_eq!(layout.carousel_rotation_target(), 0.0); // wrapped to leftmost
+    layout.rotate_carousel(-1);
+    assert_eq!(layout.carousel_rotation_target(), 2.0); // wrapped backward to rightmost
 }
 
 #[test]
-fn slide_carousel_single_output_is_noop() {
+fn rotate_carousel_single_output_is_noop() {
     fn make_output(name: &str) -> Output {
         let output = Output::new(
             name.to_owned(),
@@ -4449,7 +4453,7 @@ fn slide_carousel_single_output_is_noop() {
         output
     }
 
-    // Single eligible output -- slide_carousel's `len < 2` guard must make this a no-op.
+    // Single eligible output -- rotate_carousel's ring-len < 2 guard must make this a no-op.
     let mut layout = Layout::<TestWindow>::default();
 
     let a = make_output("A");
@@ -4466,13 +4470,13 @@ fn slide_carousel_single_output_is_noop() {
     );
 
     layout.reset_carousel_center();
-    assert_eq!(layout.carousel_centered_output_idx(), 0);
+    assert_eq!(layout.carousel_rotation_target(), 0.0);
 
-    layout.slide_carousel(1);
-    assert_eq!(layout.carousel_centered_output_idx(), 0);
+    layout.rotate_carousel(1);
+    assert_eq!(layout.carousel_rotation_target(), 0.0);
 
-    layout.slide_carousel(-1);
-    assert_eq!(layout.carousel_centered_output_idx(), 0);
+    layout.rotate_carousel(-1);
+    assert_eq!(layout.carousel_rotation_target(), 0.0);
 }
 
 #[test]
@@ -4544,10 +4548,10 @@ fn reset_carousel_center_noop_when_active_not_in_set() {
         .collect();
     assert_eq!(names, vec!["B".to_string(), "C".to_string()]); // "A" excluded (empty)
 
-    // Directly set a known, non-default centered index (private field, accessible from
-    // this child module) to prove reset_carousel_center() leaves it untouched.
-    layout.carousel_centered_output_idx = 1;
+    // Directly set a known, non-default rotation target (private field, accessible
+    // from this child module) to prove reset_carousel_center() leaves it untouched.
+    layout.carousel_rotation = 1.0;
 
     layout.reset_carousel_center();
-    assert_eq!(layout.carousel_centered_output_idx(), 1); // unchanged: active "A" not in set
+    assert_eq!(layout.carousel_rotation_target(), 1.0); // unchanged: active "A" not in set
 }
