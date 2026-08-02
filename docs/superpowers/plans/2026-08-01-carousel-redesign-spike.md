@@ -65,8 +65,11 @@ mod tests {
         let right_h = c[2][1] - c[1][1];
         assert!(right_h < left_h, "right edge must be shorter: {right_h} vs {left_h}");
         assert!(c[1][0] < 50., "right edge pulled toward center: {}", c[1][0]);
-        // Left edge is nearer, so it grows and extends further out.
-        assert!(c[0][0] < -50., "near edge extends outward: {}", c[0][0]);
+        // Left edge is nearer to the camera: it magnifies (taller), though its
+        // x still pulls inward because cos-foreshortening dominates at this yaw.
+        assert!(c[0][0] > -50., "near edge x pulls inward: {}", c[0][0]);
+        let left_h = c[3][1] - c[0][1];
+        assert!(left_h > 60., "near edge magnifies vertically: {left_h}");
     }
 
     #[test]
