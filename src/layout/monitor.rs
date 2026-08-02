@@ -2049,54 +2049,6 @@ impl<W: LayoutElement> Monitor<W> {
         }
     }
 
-    /// Render this monitor's ACTIVE workspace tiles at a fixed `zoom`, ignoring
-    /// overview progress. Elements are rescaled by `zoom` about the origin; the
-    /// caller positions/crops them. Used for consolidated carousel cards.
-    ///
-    /// Renders a sibling monitor's active workspace at a fixed zoom for consolidated
-    /// carousel cards.
-    pub fn render_active_workspace_at_zoom<R: NiriRenderer>(
-        &self,
-        mut ctx: RenderCtx<R>,
-        zoom: f64,
-        focus_ring: bool,
-        push: &mut dyn FnMut(MonitorRenderElement<R>),
-    ) {
-        let _span = tracy_client::span!("Monitor::render_active_workspace_at_zoom");
-
-        let scale = self.scale.fractional_scale();
-        // Ceil the height in physical pixels.
-        let height = (self.view_size.h * scale).ceil() as i32;
-
-        let crop_bounds = Rectangle::new(
-            Point::from((-i32::MAX / 2, 0)),
-            Size::from((i32::MAX, height)),
-        );
-
-        let ws = self.active_workspace_ref();
-        let xray_pos = XrayPos::new(Point::from((0., 0.)), zoom);
-
-        let scale_relocate = move |elem| {
-            let elem = RescaleRenderElement::from_element(elem, Point::from((0, 0)), zoom);
-            RelocateRenderElement::from_element(elem, Point::from((0, 0)), Relocate::Relative)
-        };
-
-        macro_rules! push {
-            () => {{
-                &mut |elem| {
-                    let elem = CropRenderElement::from_element(elem, scale, crop_bounds);
-                    if let Some(elem) = elem {
-                        let elem = MonitorInnerRenderElement::from(elem);
-                        push(scale_relocate(elem));
-                    }
-                }
-            }};
-        }
-
-        ws.render_floating(ctx.r(), xray_pos, focus_ring, push!());
-        ws.render_scrolling(ctx.r(), xray_pos, focus_ring, push!());
-    }
-
     pub fn render_workspace_shadows<R: NiriRenderer>(
         &self,
         renderer: &mut R,

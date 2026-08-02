@@ -1,5 +1,3 @@
-use smithay::utils::{Logical, Point, Rectangle, Size};
-
 /// Placement of one panel in the cover-flow ring, in host-view logical
 /// coordinates. Pure geometry: no texture/content concerns.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -158,69 +156,6 @@ pub fn panel_placement(view: (f64, f64), d: f64, reveal: f64) -> Option<PanelPla
         dim,
         z,
     })
-}
-
-// GATE-B-TEMP: removed in render integration task
-/// A single sibling card's destination in the host overview.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct CardPlacement {
-    /// Destination box in HOST logical coords (also the crop box).
-    pub card_rect: Rectangle<f64, Logical>,
-    /// Shrink factor applied to the sibling before scale-normalization.
-    pub card_scale: f64,
-}
-
-// GATE-B-TEMP: removed in render integration task
-/// Placements for a rotating carousel. Center card is large and centered; each
-/// step away from center tucks further out and (optionally) smaller, clamped
-/// on-screen.
-pub fn carousel_centered_layout(
-    view_size: Size<f64, Logical>,
-    n_outputs: usize,
-    centered_idx: usize,
-) -> Vec<CardPlacement> {
-    if n_outputs == 0 {
-        return Vec::new();
-    }
-    let center_scale = 0.42;
-    let tuck_scale = 0.24;
-    let center_w = view_size.w * center_scale;
-    let center_h = view_size.h * center_scale;
-    let tuck_w = view_size.w * tuck_scale;
-    let tuck_h = view_size.h * tuck_scale;
-    let margin = view_size.w * 0.02;
-
-    (0..n_outputs)
-        .map(|i| {
-            if i == centered_idx {
-                let x = (view_size.w - center_w) / 2.;
-                let y = (view_size.h - center_h) / 2.;
-                CardPlacement {
-                    card_rect: Rectangle::new(
-                        Point::from((x, y)),
-                        Size::from((center_w, center_h)),
-                    ),
-                    card_scale: center_scale,
-                }
-            } else {
-                let dist = i as isize - centered_idx as isize; // <0 left, >0 right
-                let step = (tuck_w + margin) * (dist.unsigned_abs() as f64 - 1.);
-                let x = if dist < 0 {
-                    // left of center
-                    ((view_size.w - center_w) / 2. - margin - tuck_w - step).max(margin)
-                } else {
-                    // right of center
-                    ((view_size.w + center_w) / 2. + margin + step)
-                        .min(view_size.w - tuck_w - margin)
-                };
-                let y = (view_size.h - tuck_h) / 2.;
-                CardPlacement {
-                    card_rect: Rectangle::new(Point::from((x, y)), Size::from((tuck_w, tuck_h))),
-                    card_scale: tuck_scale,
-                }
-            }
-        })
-        .collect()
 }
 
 #[cfg(test)]

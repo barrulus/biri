@@ -48,7 +48,11 @@ struct Parameters {
 }
 
 /// A texture drawn as a perspective-tilted quad (carousel panel).
-#[derive(Debug)]
+///
+/// `Clone` (cheap: `ShaderRenderElement`'s texture map holds `GlesTexture`s, which are
+/// `Rc`-backed) so a retained instance in `OutputState::panel_elems` can be pushed into the
+/// render element list while the original stays in the map for next frame's `update()` call.
+#[derive(Debug, Clone)]
 pub struct PanelRenderElement {
     inner: ShaderRenderElement,
     params: Parameters,
@@ -110,6 +114,11 @@ impl PanelRenderElement {
     /// changed; when they are equal, the source did not publish, so the incoming `texture` is a
     /// clone of the very same published texture our retained clone points at, and keeping the
     /// old clone is exact (not stale). See `PanelSource` in `niri.rs` for the ownership trace.
+    ///
+    /// While `corners` stays degenerate (`sampling_matrix` returns `None`, e.g. mid-flip through
+    /// exact edge-on yaw), `params` is still updated but `self.inner` is not: the element keeps
+    /// showing its last-good pinned texture clone (not the fresh `texture` passed in, which is
+    /// simply dropped) until `corners` becomes non-degenerate again.
     #[allow(clippy::too_many_arguments)]
     pub fn update(
         &mut self,

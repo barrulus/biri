@@ -973,6 +973,10 @@ impl LayoutElement for Mapped {
                 // multiple layers of offscreen (e.g. resize animation + alpha animation).
                 existing.id = data.id;
                 existing.states.states.extend(data.states.states);
+                // A later layer reporting damage means the composed result changed, even if an
+                // earlier layer in this same frame did not; OR rather than overwrite so no layer's
+                // damage is lost.
+                existing.damaged |= data.damaged;
             }
         }
     }

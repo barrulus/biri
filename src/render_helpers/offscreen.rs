@@ -210,6 +210,13 @@ impl OffscreenBuffer {
 
         Ok((elem, res.sync, data))
     }
+
+    /// Drops the cached texture (if any), releasing its GPU memory. The next `render` call
+    /// recreates it from scratch (full damage). Used to release a carousel content output's
+    /// panel buffers once it stops participating in the ring.
+    pub fn clear(&self) {
+        *self.inner.borrow_mut() = None;
+    }
 }
 
 impl Default for OffscreenBuffer {

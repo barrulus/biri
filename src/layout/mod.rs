@@ -1841,6 +1841,15 @@ impl<W: LayoutElement> Layout<W> {
         self.carousel_rotation
     }
 
+    /// Whether the rotation animation is currently in flight (as opposed to
+    /// settled at its target). Used by the render drawing rule to decide
+    /// whether the host's live workspace strip must stay suppressed even
+    /// while `carousel_rotation()` is transiently at an integer/zero value
+    /// mid-animation.
+    pub fn carousel_rotating(&self) -> bool {
+        self.carousel_rotation_anim.is_some()
+    }
+
     /// Ring position (see `carousel::ring_positions`) for every monitor in
     /// `carousel_outputs()`, paired with its index into that list. Positions
     /// are read from `Output::current_location()`; the host is the active
