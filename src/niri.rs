@@ -595,24 +595,66 @@ impl Drop for InRenderInnerGuard {
 /// and Bottom layer-shell surfaces + workspace backgrounds, at whatever zoom the current host asks
 /// for), stored on that CONTENT output's own [`OutputState`].
 ///
-/// Ping-pongs between two [`OffscreenBuffer`]s rather than reusing one. `OffscreenBuffer::render`
-/// recreates its texture whenever the previously-returned `GlesTexture` is not
-/// `is_unique_reference()` (confirmed by reading `GlesTexture::is_unique_reference`, which is a
-/// plain `Arc::get_mut` check with no special-casing of the offscreen's own snapshot — see
-/// `render_helpers/offscreen.rs:114` and the identical reasoning already documented at
-/// `layout/tile.rs:1175` and `render_helpers/global_shader_element.rs:241`). Retaining `elem`
-/// (which owns a texture clone) across frames would therefore force a full-buffer recreate +
-/// full-content redraw on every single re-render, defeating damage gating. Alternating buffers
-/// means the buffer being rendered into this call is never the one backing the currently-displayed
-/// `elem`, so it stays unique and `OutputDamageTracker` can do incremental damage.
+/// # Publish-on-damage over ping-pong buffers: the ownership invariant
+///
+/// The two backing [`OffscreenBuffer`]s live in [`OutputState::panel_offscreen`], OUTSIDE this
+/// struct's `RefCell`, so the GPU render call is never made while a `panel_source` borrow is held
+/// (`OffscreenBuffer::render` takes `&self`). `OffscreenBuffer::render` recreates its texture
+/// whenever the previously-returned `GlesTexture` is not `is_unique_reference()` (a plain
+/// `Arc::get_mut` check — see `render_helpers/offscreen.rs` and the identical reasoning at
+/// `layout/tile.rs:1175` and `render_helpers/global_shader_element.rs:241`), so a buffer whose
+/// texture clone is retained across frames gets a full recreate + full redraw on its next render,
+/// defeating damage gating.
+///
+/// `flip` names the buffer the NEXT render targets (the scratch buffer). `elem` is replaced — and
+/// `flip` toggled, and `generation` bumped — ONLY when a render actually produced damage
+/// ([`crate::render_helpers::offscreen::OffscreenData::damaged`]). This maintains the invariant:
+///
+/// > The published `elem` (if any) only ever holds a texture clone of the buffer `flip` does NOT
+/// > name. The scratch buffer named by `flip` has no live clone held by this struct, so across
+/// > static frames it stays unique and its `OutputDamageTracker` diffs incrementally instead of
+/// > recreating.
+///
+/// Two-frame trace (buffers A/B, `flip` = scratch):
+///
+/// * **Static frame** (`flip` = A, `elem` = Some(B-texture)): render into A diffs element states
+///   against A's tracker → no damage → the fresh `OffscreenRenderElement` (holding a clone of
+///   A's texture) is dropped immediately; `elem`, `generation` and `flip` are untouched. The
+///   published texture identity is therefore stable across static frames, so a host-side
+///   [`PanelRenderElement::update`] compare on `(source id, generation)` early-returns keeping
+///   its old clone — which is exactly the still-published B texture, not a stale one. A remains
+///   unique for the next render. Repeat indefinitely: zero publishes, zero host damage.
+/// * **Damaged frame** (`flip` = A, `elem` = Some(B-texture)): render into A produces damage
+///   (incremental, since A stayed unique) → publish `elem` = Some(A-texture), `generation` += 1,
+///   `flip` → B; the old B clone held here drops. The next render targets B, whose tracker last
+///   saw states from one publish earlier, so it produces catch-up damage and publishes again
+///   (one redundant publish per content change; the render after that targets the now up-to-date
+///   buffer and settles into the static case). During continuous animation this degenerates to
+///   the plain alternate-every-frame ping-pong, which is optimal anyway.
+///
+/// A host's retained [`PanelRenderElement`] may still hold a clone of the previously published
+/// texture until the host next redraws and `update()` swaps it (params differ via `generation`).
+/// If the host has NOT redrawn by the time a render targets that buffer again, the buffer is
+/// recreated (one full redraw) — sound, merely unoptimal; the Task 6 wiring should queue a host
+/// redraw whenever a source it displays publishes, so retained clones are refreshed promptly.
+///
+/// The first-ever render and any buffer recreation (size growth, lost uniqueness, renderer
+/// context change) report full damage and therefore always publish, so `generation` bumps
+/// whenever texture identity or contents change — which is why the host-side compare keys on
+/// `(source Id, generation)` and never on the per-buffer damage-bag `CommitCounter`s (those are
+/// independent between A and B and reset to default on recreation).
 pub struct PanelSource {
-    offscreen: [OffscreenBuffer; 2],
-    /// Which buffer index was written on the last successful render; the next render targets the
-    /// other one.
+    /// Scratch buffer index in [`OutputState::panel_offscreen`] that the next render targets.
+    /// Toggled only on publish, so it never names the buffer backing `elem`.
     flip: bool,
-    /// The retained handle from the last successful render. Never clone the underlying
-    /// `GlesTexture` out of this into anything that outlives the frame it was read in.
+    /// The retained handle from the last published (damage-producing) render. Clones of its
+    /// texture may be retained across frames (e.g. by a host's `PanelRenderElement`) provided
+    /// they are refreshed whenever `generation` changes — see the invariant above.
     pub elem: Option<OffscreenRenderElement>,
+    /// Bumped on every publish, i.e. exactly when `elem`'s texture identity/contents change.
+    /// Together with the published elem's `Id`, this is the identity `PanelRenderElement`
+    /// compares to decide whether to rebuild.
+    pub generation: u64,
     /// Frame stamp this source was last updated at (see `Niri::panel_frame`), making
     /// `update_panel_sources` idempotent when reached more than once in the same redraw cycle
     /// (e.g. via a screencopy re-render).
@@ -622,9 +664,9 @@ pub struct PanelSource {
 impl Default for PanelSource {
     fn default() -> Self {
         Self {
-            offscreen: [OffscreenBuffer::default(), OffscreenBuffer::default()],
             flip: false,
             elem: None,
+            generation: 0,
             // Never equals a real stamp on first use: `Niri::panel_frame` starts at 0 and is
             // bumped to 1 before the first `redraw_queued_outputs` cycle even begins iterating.
             frame: 0,
@@ -695,6 +737,10 @@ pub struct OutputState {
     /// participates in the carousel, as content for some host — possibly itself). See
     /// `PanelSource` and `Niri::update_panel_sources`.
     pub panel_source: RefCell<PanelSource>,
+    /// Ping-pong offscreen buffers backing `panel_source`, indexed by `PanelSource::flip`. Kept
+    /// OUTSIDE the `RefCell` (`OffscreenBuffer::render` takes `&self`) so the GPU render call in
+    /// `update_panel_sources` never runs while a `panel_source` borrow is held.
+    pub panel_offscreen: [OffscreenBuffer; 2],
     /// Retained per-ring-slot panel elements when this output is acting as a carousel HOST,
     /// keyed by ring index. Entries are dropped when the ring shrinks. Built from `panel_source`
     /// content (this output's own, or a sibling's) each frame; wired up in Gate B Task 6.
@@ -3174,6 +3220,7 @@ impl Niri {
             global_shader_chain: RefCell::new(GlobalShaderChain::default()),
             debug_damage_tracker: OutputDamageTracker::from_output(&output),
             panel_source: RefCell::new(PanelSource::default()),
+            panel_offscreen: [OffscreenBuffer::default(), OffscreenBuffer::default()],
             panel_elems: RefCell::new(HashMap::new()),
         };
         let rv = self.output_state.insert(output.clone(), state);
@@ -4955,14 +5002,19 @@ impl Niri {
         // whole block with the real carousel wiring through `panel_elems`. This borrow is scoped
         // to just the texture/commit read below; it is not held across the `push()` call.
         if panel_spike_enabled() {
-            let demo = state.panel_source.borrow().elem.as_ref().map(|elem| {
-                (
-                    elem.texture().clone(),
-                    elem.current_commit(),
-                    elem.context_id(),
-                )
-            });
-            if let Some((texture, texture_commit, context_id)) = demo {
+            let demo = {
+                let source = state.panel_source.borrow();
+                let generation = source.generation;
+                source.elem.as_ref().map(|elem| {
+                    (
+                        elem.texture().clone(),
+                        elem.id().clone(),
+                        generation,
+                        elem.context_id(),
+                    )
+                })
+            };
+            if let Some((texture, source_id, generation, context_id)) = demo {
                 let view = output_size(output);
                 // Oscillating yaw so panel motion is transform-only: content
                 // unchanged => offscreen must NOT re-render while it sweeps.
@@ -4977,7 +5029,8 @@ impl Niri {
                 if let Some(elem) = PanelRenderElement::new(
                     corners,
                     texture,
-                    texture_commit,
+                    source_id,
+                    generation,
                     context_id,
                     0.85,
                     scale,
@@ -5492,17 +5545,36 @@ impl Niri {
             }
             drop(target_layer_map);
 
-            let mut source = state.panel_source.borrow_mut();
-            source.frame = frame;
-            let idx = usize::from(source.flip);
+            // Scoped borrow: only read which ping-pong slot to render into. The GPU render below
+            // must not run while a `panel_source` borrow is held — that is why the offscreen
+            // buffers live outside the `RefCell`, directly on `OutputState`.
+            let idx = usize::from(state.panel_source.borrow().flip);
+
             // Same GLES context as the eventual panel draw (single-GPU primary render path), and
             // command ordering within one context is guaranteed, so the `SyncPoint` this returns
             // is deliberately not threaded through. Revisit only if panels ever need to render
             // cross-context (e.g. multi-GPU screencast of panel content).
-            match source.offscreen[idx].render(ctx.renderer, output_scale, &elements) {
-                Ok((elem, _sync, _data)) => {
-                    source.elem = Some(elem);
-                    source.flip = !source.flip;
+            let result = state.panel_offscreen[idx].render(ctx.renderer, output_scale, &elements);
+
+            let mut source = state.panel_source.borrow_mut();
+            source.frame = frame;
+            match result {
+                Ok((elem, _sync, data)) => {
+                    // Publish-on-damage: replace the published elem (and toggle the scratch slot,
+                    // and bump the content generation) only when this render actually changed the
+                    // texture contents. `OffscreenData::damaged` reports exactly that — it is the
+                    // inner `OutputDamageTracker`'s damage result, and buffer (re)creation always
+                    // reports full damage, so recreation always publishes too. On a no-damage
+                    // render the fresh `elem` (holding a clone of the scratch buffer's texture)
+                    // is dropped right here, keeping the scratch buffer unique for the next call,
+                    // while the previously published elem keeps a stable texture identity — which
+                    // is what makes the host-side `PanelRenderElement` `(source id, generation)`
+                    // compare sound. See `PanelSource`'s doc for the full ownership trace.
+                    if data.damaged {
+                        source.elem = Some(elem);
+                        source.flip = !source.flip;
+                        source.generation = source.generation.wrapping_add(1);
+                    }
                 }
                 Err(err) => {
                     // Clear stale content rather than keep showing a frame that no longer

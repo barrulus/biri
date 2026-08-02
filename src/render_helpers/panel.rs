@@ -22,10 +22,26 @@ use crate::render_helpers::renderer::AsGlesFrame as _;
 #[derive(Debug, Clone, PartialEq)]
 struct Parameters {
     corners: [[f64; 2]; 4],
-    // Texture *contents* are compared via the source `OffscreenRenderElement`'s commit counter
-    // rather than the `GlesTexture` itself (textures aren't comparable, and a fresh clone is
-    // handed in every frame regardless of whether the underlying pixels changed).
-    texture_commit: CommitCounter,
+    /// Identity of the publishing source: the published `OffscreenRenderElement`'s `Id` (stable
+    /// per `OffscreenBuffer`). Distinguishes panels fed from different `PanelSource`s / buffers,
+    /// so two sources' `generation` counters (or two buffers' textures) can never alias each
+    /// other in the comparison below.
+    source_id: Id,
+    /// `PanelSource::generation`: bumped exactly when the source published new content
+    /// (publish-on-damage). Texture *contents and identity* are both keyed by this. The
+    /// per-buffer damage-bag `CommitCounter`s are deliberately NOT used here: they are
+    /// independent between a source's two ping-pong buffers and reset to default whenever a
+    /// buffer is recreated (see `offscreen.rs`), so equal counters would not imply equal
+    /// content. `generation` is per-source and monotone, so equal `(source_id, generation)`
+    /// really does mean "same published texture, same pixels".
+    generation: u64,
+    /// Renderer context the texture was created against, checked in `draw` the same way
+    /// `OffscreenRenderElement::draw` guards against cross-context textures (`GlesTexture`
+    /// carries no such id itself, so the caller must supply it). A context change forces
+    /// offscreen buffer recreation, which reports full damage and thus publishes with a
+    /// `generation` bump — so this can never change while the other params compare equal;
+    /// keeping it in `Parameters` makes that assumption checked rather than assumed.
+    context_id: ContextId<GlesTexture>,
     dim: f32,
     scale: f64,
     alpha: f32,
@@ -35,10 +51,6 @@ struct Parameters {
 #[derive(Debug)]
 pub struct PanelRenderElement {
     inner: ShaderRenderElement,
-    /// Renderer context the current texture was created against, checked in `draw` the same way
-    /// `OffscreenRenderElement::draw` guards against cross-context textures (spike review finding
-    /// 2). `GlesTexture` carries no such id itself, so the caller must supply it.
-    context_id: ContextId<GlesTexture>,
     params: Parameters,
 }
 
@@ -47,7 +59,8 @@ impl PanelRenderElement {
     pub fn new(
         corners: [[f64; 2]; 4],
         texture: GlesTexture,
-        texture_commit: CommitCounter,
+        source_id: Id,
+        generation: u64,
         context_id: ContextId<GlesTexture>,
         dim: f32,
         scale: f64,
@@ -73,10 +86,11 @@ impl PanelRenderElement {
         .with_location(Point::from((bx, by)));
         Some(Self {
             inner: elem,
-            context_id,
             params: Parameters {
                 corners,
-                texture_commit,
+                source_id,
+                generation,
+                context_id,
                 dim,
                 scale,
                 alpha,
@@ -86,33 +100,44 @@ impl PanelRenderElement {
 
     /// Refreshes this retained element in place, keeping its stable `Id` (and thus damage
     /// tracking) across frames. Rebuilds the shader uniforms + texture map only if `corners`,
-    /// the texture's commit counter, `dim`, `scale` or `alpha` actually changed since the last
-    /// call — mirrors `BorderRenderElement::update`'s params-compare-then-rebuild pattern.
-    /// Returns whether a rebuild happened.
+    /// the source's `(source_id, generation)` identity, `dim`, `scale` or `alpha` actually
+    /// changed since the last call — mirrors `BorderRenderElement::update`'s
+    /// params-compare-then-rebuild pattern. Returns whether a rebuild happened.
+    ///
+    /// No "swap texture without bumping the inner commit" hook on `ShaderRenderElement` is
+    /// needed under publish-on-damage: when the params differ, the rebuild below bumps the inner
+    /// commit — warranted, because a `generation` change means the source's pixels genuinely
+    /// changed; when they are equal, the source did not publish, so the incoming `texture` is a
+    /// clone of the very same published texture our retained clone points at, and keeping the
+    /// old clone is exact (not stale). See `PanelSource` in `niri.rs` for the ownership trace.
     #[allow(clippy::too_many_arguments)]
     pub fn update(
         &mut self,
         corners: [[f64; 2]; 4],
         texture: GlesTexture,
-        texture_commit: CommitCounter,
+        source_id: Id,
+        generation: u64,
         context_id: ContextId<GlesTexture>,
         dim: f32,
         scale: f64,
         alpha: f32,
     ) -> bool {
-        // The context id is cheap to store and is not itself damage-relevant (a context change
-        // always accompanies a fresh texture, i.e. a commit-counter change), so always refresh it
-        // rather than folding it into the `Parameters` comparison.
-        self.context_id = context_id;
-
         let params = Parameters {
             corners,
-            texture_commit,
+            source_id,
+            generation,
+            context_id,
             dim,
             scale,
             alpha,
         };
         if self.params == params {
+            // Keeping the previously retained texture clone here is sound: equal
+            // `(source_id, generation)` means the source has not published since our last
+            // rebuild, so that clone is of the still-published texture — and the source only
+            // renders into its *other* (scratch) ping-pong buffer while its generation is
+            // stable, so this clone never blocks the scratch buffer's uniqueness either.
+            drop(texture);
             return false;
         }
 
@@ -210,7 +235,7 @@ impl RenderElement<GlesRenderer> for PanelRenderElement {
         opaque_regions: &[Rectangle<i32, Physical>],
         cache: Option<&UserDataMap>,
     ) -> Result<(), GlesError> {
-        if frame.context_id() != self.context_id {
+        if frame.context_id() != self.params.context_id {
             warn!("trying to render panel texture from different renderer");
             return Ok(());
         }
