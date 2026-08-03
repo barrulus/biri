@@ -651,6 +651,18 @@ pub struct PanelSource {
     /// `update_panel_sources` idempotent when reached more than once in the same redraw cycle
     /// (e.g. via a screencopy re-render).
     frame: u64,
+    /// The workspace-geo union (`target_mon.workspaces_with_render_geo_at_zoom(fill_zoom)`,
+    /// reduced via `Rectangle::merge`) that produced the currently published `elem`, i.e. the
+    /// same bbox `Layout::carousel_focus_jump` computes to map its uv. `update_panel_sources`
+    /// compares each refresh's freshly-computed union against this (with a small epsilon — see
+    /// its call site) and, on a real change, resets this source's offscreen buffers via
+    /// `Self::clear`/`OffscreenBuffer::clear` BEFORE rendering, forcing recreation at the new
+    /// extent. Needed because `OffscreenBuffer` only recreates on GROWTH: without this, a
+    /// SHRINK (fewer/narrower workspaces, or window count changes at a fixed `fill_zoom`) would
+    /// leave stale content in a sub-rect of an oversized allocation while the panel samples the
+    /// full texture, i.e. a persistent (steady-state, window-content-driven) skew — not a
+    /// transient sub-pixel artifact.
+    last_extent: Option<Rectangle<f64, Logical>>,
 }
 
 impl Default for PanelSource {
@@ -662,6 +674,7 @@ impl Default for PanelSource {
             // Never equals a real stamp on first use: `Niri::panel_frame` starts at 0 and is
             // bumped to 1 before the first `redraw_queued_outputs` cycle even begins iterating.
             frame: 0,
+            last_extent: None,
         }
     }
 }
@@ -5495,9 +5508,48 @@ impl Niri {
             let fit = (host_view.w / target_view.w).min(host_view.h / target_view.h);
             let fill_zoom = fit * (host_scale / target_scale);
 
+            // Same union `Layout::carousel_focus_jump` computes to map its uv: the workspace-geo
+            // boxes at `fill_zoom`, reduced to their bounding box. With the per-workspace crop in
+            // `render_overview_at_zoom` above (see its doc), this bbox now equals the baked
+            // texture's encompassing extent exactly.
+            let bbox = m
+                .workspaces_with_render_geo_at_zoom(fill_zoom)
+                .map(|(_ws, geo)| geo)
+                .reduce(|a, b| a.merge(b));
+
+            // Extent-change reset. `OffscreenBuffer` only recreates its texture on GROWTH (see
+            // its doc on `render`'s size check), so a SHRINK of this union (fewer/narrower
+            // workspaces, or a window layout change, at an unchanged `fill_zoom`) would otherwise
+            // leave stale content in a sub-rect of an oversized allocation while the panel
+            // samples the full texture — a persistent, steady-state, window-content-driven skew,
+            // not a transient sub-pixel artifact. Compare with a small epsilon so float jitter
+            // across frames at an unchanged layout doesn't force a needless recreation (full
+            // damage, one dropped frame of content) on every redraw.
+            const EXTENT_EPSILON: f64 = 1e-3;
+            let prev_extent = state.panel_source.borrow().last_extent;
+            let extent_changed = match (prev_extent, bbox) {
+                (Some(prev), Some(cur)) => {
+                    (prev.loc.x - cur.loc.x).abs() > EXTENT_EPSILON
+                        || (prev.loc.y - cur.loc.y).abs() > EXTENT_EPSILON
+                        || (prev.size.w - cur.size.w).abs() > EXTENT_EPSILON
+                        || (prev.size.h - cur.size.h).abs() > EXTENT_EPSILON
+                }
+                (None, None) => false,
+                _ => true,
+            };
+            if extent_changed {
+                let mut source = state.panel_source.borrow_mut();
+                source.clear();
+                source.last_extent = bbox;
+                drop(source);
+                for buf in &state.panel_offscreen {
+                    buf.clear();
+                }
+            }
+
             let mut elements: Vec<OutputRenderElements<GlesRenderer>> = Vec::new();
             m.render_overview_at_zoom(ctx.r(), fill_zoom, false, &mut |elem| {
-                elements.push(OutputRenderElements::Monitor(elem));
+                elements.push(OutputRenderElements::PanelMonitor(elem));
             });
 
             // Background layer-shell surfaces + per-workspace solid background, drawn AFTER the
@@ -7912,6 +7964,12 @@ niri_render_elements! {
 niri_render_elements! {
     OutputRenderElements<R> => {
         Monitor = MonitorRenderElement<R>,
+        // Cropped per-workspace to its render-geo box by `render_overview_at_zoom` (its only
+        // caller, the carousel panel prepass below) — see that method's doc. A distinct variant
+        // from `Monitor` (rather than changing `Monitor`'s payload type) because `Monitor` is
+        // also reached generically via `.into()` from `render_workspaces` et al. (the REAL
+        // overview render), which must keep emitting plain, uncropped `MonitorRenderElement<R>`.
+        PanelMonitor = CropRenderElement<MonitorRenderElement<R>>,
         RescaledTile = RescaleRenderElement<TileRenderElement<R>>,
         LayerSurface = LayerSurfaceRenderElement<R>,
         RelocatedLayerSurface = CropRenderElement<RelocateRenderElement<RescaleRenderElement<

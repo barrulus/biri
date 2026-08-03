@@ -4882,6 +4882,39 @@ fn focus_jump_to_focused_uses_targets_active_window_skipping_uv() {
 }
 
 #[test]
+fn focus_jump_miss_returns_false() {
+    let (mut layout, a, _b) = pullback_test_layout();
+
+    // Deliberately do NOT call `set_window_size_and_communicate`: the default `TestWindow` bbox
+    // (100x200) stays small, leaving backdrop/gap around it within the workspace's render-geo
+    // box that a uv can land on and miss.
+    layout.toggle_overview(); // open
+
+    layout.clock.set_complete_instantly(true);
+    layout.advance_animations();
+    layout.clock.set_complete_instantly(false);
+
+    layout.set_overview_zoom_for_test(0.15);
+    layout.carousel_request_rotate(1);
+
+    layout.clock.set_complete_instantly(true);
+    layout.advance_animations();
+    layout.clock.set_complete_instantly(false);
+
+    assert!(layout.in_carousel_lens());
+
+    // Near a corner of the settled panel's quad: the small default-sized window doesn't reach
+    // there, so this lands on backdrop/gap, not a window.
+    assert!(!layout.carousel_focus_jump((0.01, 0.99)));
+
+    // No-op on a miss: overview stays open, active output unchanged (still A, the host — a
+    // successful jump would have moved it to B, see
+    // `focus_jump_activates_window_on_settled_remote_output`).
+    assert!(layout.is_overview_open());
+    assert_eq!(layout.active_output(), Some(&a));
+}
+
+#[test]
 fn rotate_carousel_single_output_is_noop() {
     fn make_output(name: &str) -> Output {
         let output = Output::new(

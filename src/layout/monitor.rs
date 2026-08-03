@@ -2001,12 +2001,22 @@ impl<W: LayoutElement> Monitor<W> {
     /// Render this monitor's full overview (all workspaces stacked) at a fixed `zoom`,
     /// ignoring its inherited overview zoom. Elements are positioned in this monitor's
     /// own view space; the caller relocates/crops them onto the host output.
+    ///
+    /// Every pushed element is additionally cropped to ITS OWN workspace's render-geo box (see
+    /// the per-workspace crop below). This is the sole caller-visible difference from
+    /// `render_workspaces`, and is safe only because this method has exactly one caller
+    /// (`Niri::update_panel_sources`, the carousel panel prepass): the prepass needs the baked
+    /// texture's encompassing extent to equal the union of workspace render-geo boxes exactly
+    /// (that union is what `carousel_focus_jump`'s uv mapping and the panel shader's sampling
+    /// both assume), so off-view scrolling columns and any other content that would otherwise
+    /// overflow a workspace's box must not be allowed to inflate the `OffscreenBuffer`'s
+    /// encompassing-extent sizing.
     pub fn render_overview_at_zoom<R: NiriRenderer>(
         &self,
         mut ctx: RenderCtx<R>,
         zoom: f64,
         focus_ring: bool,
-        push: &mut dyn FnMut(MonitorRenderElement<R>),
+        push: &mut dyn FnMut(CropRenderElement<MonitorRenderElement<R>>),
     ) {
         let _span = tracy_client::span!("Monitor::render_overview_at_zoom");
 
@@ -2053,6 +2063,11 @@ impl<W: LayoutElement> Monitor<W> {
         };
 
         for (ws, geo) in self.workspaces_with_render_geo_at_zoom(zoom) {
+            // This workspace's own render-geo box, in the same physical coordinate space the
+            // element lands in after `scale_relocate` below (mirrors `scale_relocate_crop` in
+            // niri.rs, which crops layer-shell/background elements the same way).
+            let geo_phys = geo.to_physical_precise_round(scale);
+
             // Macro instead of closure because ws and insert hint have different elem types.
             macro_rules! push {
                 () => {{
@@ -2060,7 +2075,11 @@ impl<W: LayoutElement> Monitor<W> {
                         let elem = CropRenderElement::from_element(elem, scale, crop_bounds);
                         if let Some(elem) = elem {
                             let elem = MonitorInnerRenderElement::from(elem);
-                            push(scale_relocate(geo, elem));
+                            let elem = scale_relocate(geo, elem);
+                            if let Some(elem) = CropRenderElement::from_element(elem, scale, geo_phys)
+                            {
+                                push(elem);
+                            }
                         }
                     }
                 }};

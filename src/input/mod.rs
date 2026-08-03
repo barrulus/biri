@@ -567,7 +567,10 @@ impl State {
                         // priority over the ordinary Escape/Return -> ToggleOverview hardcoded
                         // bind below, which would otherwise just close the overview back onto
                         // the (still-focused) host output.
-                        if raw == Some(Keysym::Return) && this.niri.layout.in_carousel_lens() {
+                        if raw == Some(Keysym::Return)
+                            && modifiers_from_state(*mods).is_empty()
+                            && this.niri.layout.in_carousel_lens()
+                        {
                             this.niri.layout.carousel_focus_jump_to_focused();
                             // FIXME: granular.
                             this.niri.queue_redraw_all();
