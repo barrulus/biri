@@ -4775,6 +4775,112 @@ fn pullback_cancelled_by_cross_output_window_activation() {
     assert!(!layout.carousel_pullback_is_active());
 }
 
+/// Forces a `TestWindow`'s size and applies it to its `bbox` (mirroring what the fuzz harness's
+/// `Op::SetForcedSize` + `Op::Communicate` do for a real client's configure ack), so its tile's
+/// activation region actually covers a sane chunk of the workspace. `TestWindow`'s default `bbox`
+/// is a small fixed 100x200 placeholder — nowhere near big enough to be hit-tested against a
+/// point near the workspace center, and `communicate()` alone is a no-op until either
+/// `forced_size` or `requested_size` (the latter only set once the real column-width layout pass
+/// runs) is populated.
+fn set_window_size_and_communicate(layout: &mut Layout<TestWindow>, id: usize, size: Size<i32, Logical>) {
+    if let Some((_, w)) = layout.windows().find(|(_, w)| *w.id() == id) {
+        w.0.forced_size.set(Some(size));
+    }
+    let changed = layout
+        .windows()
+        .find(|(_, w)| *w.id() == id)
+        .map(|(_, w)| w.communicate())
+        .unwrap_or(false);
+    if changed {
+        layout.update_window(&id, None);
+    }
+}
+
+#[test]
+fn focus_jump_activates_window_on_settled_remote_output() {
+    let (mut layout, _a, b) = pullback_test_layout();
+    set_window_size_and_communicate(&mut layout, 0, Size::from((1280, 720)));
+    set_window_size_and_communicate(&mut layout, 1, Size::from((1280, 720)));
+
+    // Overview opens on the active monitor (A, since it was added first);
+    // window 1 lives on B.
+    layout.toggle_overview(); // open
+
+    layout.clock.set_complete_instantly(true);
+    layout.advance_animations();
+    layout.clock.set_complete_instantly(false);
+
+    // Assembled zoom skips the pull-back choreography (mirrors
+    // `pullback_skipped_when_assembled`), so a single `advance_animations`
+    // pass after the rotate request settles the ring on B.
+    layout.set_overview_zoom_for_test(0.15);
+
+    layout.carousel_request_rotate(1);
+
+    layout.clock.set_complete_instantly(true);
+    layout.advance_animations();
+    layout.clock.set_complete_instantly(false);
+
+    assert_eq!(layout.carousel_rotation_target(), 1.0);
+    assert!(!layout.carousel_rotating());
+    assert!(layout.in_carousel_lens());
+
+    // Center of the settled panel's quad should land on B's only window.
+    assert!(layout.carousel_focus_jump((0.5, 0.5)));
+
+    assert!(!layout.is_overview_open());
+    assert_eq!(layout.active_output(), Some(&b));
+    assert_eq!(
+        layout.active_monitor_ref().and_then(|m| m.active_window()).map(|w| *w.id()),
+        Some(1)
+    );
+}
+
+#[test]
+fn focus_jump_is_noop_outside_carousel_lens() {
+    let (mut layout, a, _b) = pullback_test_layout();
+
+    layout.toggle_overview(); // open, settled at rotation 0 (host)
+
+    layout.clock.set_complete_instantly(true);
+    layout.advance_animations();
+    layout.clock.set_complete_instantly(false);
+
+    assert!(!layout.in_carousel_lens());
+    assert!(!layout.carousel_focus_jump((0.5, 0.5)));
+
+    assert!(layout.is_overview_open());
+    assert_eq!(layout.active_output(), Some(&a));
+}
+
+#[test]
+fn focus_jump_to_focused_uses_targets_active_window_skipping_uv() {
+    let (mut layout, _a, b) = pullback_test_layout();
+
+    layout.toggle_overview(); // open
+
+    layout.clock.set_complete_instantly(true);
+    layout.advance_animations();
+    layout.clock.set_complete_instantly(false);
+
+    layout.set_overview_zoom_for_test(0.15);
+    layout.carousel_request_rotate(1);
+
+    layout.clock.set_complete_instantly(true);
+    layout.advance_animations();
+    layout.clock.set_complete_instantly(false);
+
+    assert!(layout.in_carousel_lens());
+    assert!(layout.carousel_focus_jump_to_focused());
+
+    assert!(!layout.is_overview_open());
+    assert_eq!(layout.active_output(), Some(&b));
+    assert_eq!(
+        layout.active_monitor_ref().and_then(|m| m.active_window()).map(|w| *w.id()),
+        Some(1)
+    );
+}
+
 #[test]
 fn rotate_carousel_single_output_is_noop() {
     fn make_output(name: &str) -> Output {

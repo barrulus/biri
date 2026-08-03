@@ -562,6 +562,19 @@ impl State {
                 if matches!(res, FilterResult::Forward) {
                     // If we didn't find any bind, try other hardcoded keys.
                     if this.niri.keyboard_focus.is_overview() && pressed {
+                        // Enter on the settled-remote carousel lens confirms the jump to that
+                        // output's currently-focused window, same as clicking the lens — takes
+                        // priority over the ordinary Escape/Return -> ToggleOverview hardcoded
+                        // bind below, which would otherwise just close the overview back onto
+                        // the (still-focused) host output.
+                        if raw == Some(Keysym::Return) && this.niri.layout.in_carousel_lens() {
+                            this.niri.layout.carousel_focus_jump_to_focused();
+                            // FIXME: granular.
+                            this.niri.queue_redraw_all();
+                            this.niri.suppressed_keys.insert(key_code);
+                            return FilterResult::Intercept(None);
+                        }
+
                         if let Some(bind) = raw.and_then(|raw| hardcoded_overview_bind(raw, *mods))
                         {
                             this.niri.suppressed_keys.insert(key_code);
@@ -3001,12 +3014,19 @@ impl State {
 
             let is_overview_open = self.niri.layout.is_overview_open();
 
-            // Carousel side-panel click-to-rotate. Must run BEFORE the regular overview click
-            // handling below (window activate-and-close, workspace click-to-focus): a panel
-            // click should rotate the ring rather than being interpreted as a click on whatever
-            // window/workspace happens to be under the same screen point. Falls through (does
-            // nothing here) when the hit panel is already the settled center — that's the lens
-            // case, owned by the regular handling below.
+            // Carousel side-panel click-to-rotate, and settled-remote-lens focus-jump. Must run
+            // BEFORE the regular overview click handling below (window activate-and-close,
+            // workspace click-to-focus): a panel click should rotate the ring (or jump focus)
+            // rather than being interpreted as a click on whatever window/workspace happens to
+            // be under the same screen point.
+            //
+            // On a settled-center hit (the lens case) this consumes the click unconditionally —
+            // via `Layout::carousel_focus_jump` — whether or not a window was actually under the
+            // point: falling through to the regular handling below would activate whatever real
+            // (invisible, behind the lens) host-window/workspace happens to occupy that screen
+            // position, which is exactly the confusing pre-Gate-C behavior the lens is meant to
+            // replace. A miss on the lens (backdrop/gaps) is a deliberate no-op, not a
+            // fall-through.
             if is_overview_open && !pointer.is_grabbed() && button == Some(MouseButton::Left) {
                 let location = pointer.current_location();
                 if let Some((output, pos_within_output)) = self.niri.output_under(location) {
@@ -3021,12 +3041,12 @@ impl State {
                         .unwrap_or_default();
 
                     let p = (pos_within_output.x, pos_within_output.y);
-                    let hit_ring_pos = hits.iter().find_map(|(ring_pos, corners)| {
+                    let hit = hits.iter().find_map(|(ring_pos, corners)| {
                         crate::render_helpers::panel_quad::point_in_quad_uv(corners, p)
-                            .map(|_uv| *ring_pos)
+                            .map(|uv| (*ring_pos, uv))
                     });
 
-                    if let Some(ring_pos) = hit_ring_pos {
+                    if let Some((ring_pos, uv)) = hit {
                         let rotation = self.niri.layout.carousel_rotation();
                         let settled = rotation == rotation.round()
                             && !self.niri.layout.carousel_rotating();
@@ -3038,7 +3058,13 @@ impl State {
                             self.niri.queue_redraw_all();
                             return;
                         }
-                        // Else: settled center hit — fall through to the lens click handling.
+
+                        // Settled center hit — the lens. Consume regardless of whether a window
+                        // was actually found under `uv` (see comment above).
+                        self.niri.layout.carousel_focus_jump(uv);
+                        // FIXME: granular.
+                        self.niri.queue_redraw_all();
+                        return;
                     }
                 }
             }

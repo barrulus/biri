@@ -1689,7 +1689,8 @@ impl<W: LayoutElement> Monitor<W> {
 
     /// Verbatim copy of [`Self::workspaces_render_geo`] with the internal overview zoom
     /// replaced by the passed-in `zoom`. Used to render a monitor's full overview at a
-    /// caller-forced zoom (removed once Task 4 wires up its caller).
+    /// caller-forced zoom: the carousel panel prepass (`Niri::update_panel_sources`) and the
+    /// lens focus-jump hit-test (`Self::window_under_at_zoom`) both key off this.
     fn workspaces_render_geo_at_zoom(
         &self,
         zoom: f64,
@@ -1797,6 +1798,30 @@ impl<W: LayoutElement> Monitor<W> {
             let (win, hit) = ws.window_under(pos_within_output - geo.loc)?;
             Some((win, hit.offset_win_pos(geo.loc)))
         }
+    }
+
+    /// Like [`Self::window_under`], but resolves the workspace/window hit at a caller-supplied
+    /// `zoom` (via [`Self::workspaces_with_render_geo_at_zoom`]) instead of this monitor's own
+    /// live `overview_zoom()`. Used for the carousel lens focus-jump, which hit-tests a *remote*
+    /// monitor's content baked at the panel prepass's `fill_zoom`, not this monitor's local
+    /// overview state.
+    pub fn window_under_at_zoom(
+        &self,
+        zoom: f64,
+        pos: Point<f64, Logical>,
+    ) -> Option<(&W, HitType)> {
+        let (ws, geo) = self.workspaces_with_render_geo_at_zoom(zoom).find_map(|(ws, geo)| {
+            // Extend width to entire output, mirroring `Self::workspace_under`.
+            let loc = Point::from((0., geo.loc.y));
+            let size = Size::from((self.view_size.w, geo.size.h));
+            let bounds = Rectangle::new(loc, size);
+
+            bounds.contains(pos).then_some((ws, geo))
+        })?;
+
+        let pos_within_workspace = (pos - geo.loc).downscale(zoom);
+        let (win, hit) = ws.window_under(pos_within_workspace)?;
+        Some((win, hit.to_activate()))
     }
 
     pub fn resize_edges_under(&self, pos_within_output: Point<f64, Logical>) -> Option<ResizeEdge> {

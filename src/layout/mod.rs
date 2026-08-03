@@ -2836,6 +2836,108 @@ impl<W: LayoutElement> Layout<W> {
             && self.carousel_rotation_target() != 0.0
     }
 
+    /// Focus-jump from the settled-remote carousel lens: maps `uv` (normalized `[0,1]^2` over
+    /// the centered panel's quad, as produced by `point_in_quad_uv`) to a window on the target
+    /// output, activates it, focuses the target output, and closes the overview. Returns `false`
+    /// (no-op) when `in_carousel_lens()` doesn't hold, or when no window is found under the
+    /// mapped point (a click on the panel's backdrop/gaps).
+    ///
+    /// uv -> content-point mapping mirrors `Niri::update_panel_sources`'s recipe exactly: the
+    /// panel's texture is the target's own overview baked at `fill_zoom` (same
+    /// `min(host_view/target_view axis ratios) * host_scale/target_scale` letterbox formula, computed
+    /// against `host`'s own view — `host` is `active_output()`, matching the prepass's call-site
+    /// gate) over the target's own workspace geometry
+    /// (`Monitor::workspaces_with_render_geo_at_zoom`), rendered unshifted (target's own origin,
+    /// no host-centering relocate). The panel shader then samples that whole texture across
+    /// `[0,1]^2` with no further letterbox/crop of its own (see `PanelRenderElement::new`, which
+    /// wires `niri_panel_tex` straight to the quad's homography-derived UV, and
+    /// `OffscreenBuffer::render`, whose texture IS the encompassing bounding box of the baked
+    /// elements — background, layer-shell, and windows all get cropped or sized to their
+    /// workspace's render-geo box, so that bounding box is exactly the union of the visible
+    /// workspaces' `workspaces_with_render_geo_at_zoom(fill_zoom)` rectangles, NOT the target's
+    /// full view box, which the two differ whenever `fill_zoom != 1`).
+    ///
+    /// So: `content_point = bbox.loc + uv * bbox.size`, where `bbox` is that union — NOT the
+    /// naive `uv * target_view` (which only agrees with this at `uv == (0.5, 0.5)`, since the
+    /// workspace box is centered within the target's view).
+    pub fn carousel_focus_jump(&mut self, uv: (f64, f64)) -> bool {
+        self.carousel_focus_jump_at(Some(uv))
+    }
+
+    /// Enter-confirm variant: jumps to the target's currently-focused window, skipping the `uv`
+    /// hit-test entirely. Same gating/activation/close-overview behavior as
+    /// [`Self::carousel_focus_jump`].
+    pub fn carousel_focus_jump_to_focused(&mut self) -> bool {
+        self.carousel_focus_jump_at(None)
+    }
+
+    fn carousel_focus_jump_at(&mut self, uv: Option<(f64, f64)>) -> bool {
+        if !self.in_carousel_lens() {
+            return false;
+        }
+
+        let Some(host) = self.active_output().cloned() else {
+            return false;
+        };
+        let Some(host_mon) = self.monitor_for_output(&host) else {
+            return false;
+        };
+        let host_view = host_mon.view_size();
+        let host_scale = host.current_scale().fractional_scale();
+
+        let rotation = self.carousel_rotation_target();
+        let ring = self.carousel_ring();
+        let outputs = self.carousel_outputs();
+        let Some(&(target_idx, _)) = ring.iter().find(|(_, ring_pos)| {
+            ring_pos.round() == rotation.round()
+        }) else {
+            return false;
+        };
+        let Some(target_mon) = outputs.get(target_idx) else {
+            return false;
+        };
+
+        let target_output = target_mon.output().clone();
+
+        let window_id = match uv {
+            Some((u, v)) => {
+                let target_view = target_mon.view_size();
+                let target_scale = target_mon.scale().fractional_scale();
+
+                let fit = (host_view.w / target_view.w).min(host_view.h / target_view.h);
+                let fill_zoom = fit * (host_scale / target_scale);
+
+                let bbox = target_mon
+                    .workspaces_with_render_geo_at_zoom(fill_zoom)
+                    .map(|(_ws, geo)| geo)
+                    .reduce(|a, b| a.merge(b));
+                let Some(bbox) = bbox else {
+                    return false;
+                };
+
+                let point = Point::from((
+                    bbox.loc.x + u * bbox.size.w,
+                    bbox.loc.y + v * bbox.size.h,
+                ));
+                let Some((win, _hit)) = target_mon.window_under_at_zoom(fill_zoom, point) else {
+                    return false;
+                };
+                win.id().clone()
+            }
+            None => {
+                let Some(win) = target_mon.active_window() else {
+                    return false;
+                };
+                win.id().clone()
+            }
+        };
+
+        self.activate_window(&window_id);
+        self.focus_output(&target_output);
+        self.close_overview();
+        true
+    }
+
     #[cfg(test)]
     fn set_overview_zoom_for_test(&mut self, target: f64) {
         if let Some(monitor) = self.active_monitor() {
