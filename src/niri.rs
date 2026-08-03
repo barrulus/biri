@@ -646,6 +646,9 @@ pub struct PanelSource {
     /// Bumped on every publish, i.e. exactly when `elem`'s texture identity/contents change.
     /// Together with the published elem's `Id`, this is the identity `PanelRenderElement`
     /// compares to decide whether to rebuild.
+    ///
+    /// Monotone across resets; identity must never repeat for a given buffer `Id`. `clear()`
+    /// preserves this counter rather than zeroing it — see `clear()`'s doc for why.
     pub generation: u64,
     /// Frame stamp this source was last updated at (see `Niri::panel_frame`), making
     /// `update_panel_sources` idempotent when reached more than once in the same redraw cycle
@@ -685,8 +688,20 @@ impl PanelSource {
     /// ring does not keep GPU memory pinned. Callers must also clear the backing
     /// `OutputState::panel_offscreen` buffers (see `OffscreenBuffer::clear`) — this only resets
     /// the published-element side of the pair.
+    ///
+    /// `generation` is deliberately carried over rather than zeroed by this reset. The backing
+    /// `panel_offscreen` buffers (and their `OffscreenRenderElement`'s smithay `Id`s) live outside
+    /// this struct on `OutputState` and survive a `clear()`, so an extent-change reset immediately
+    /// followed by a re-render can republish under the SAME buffer `Id`. If `generation` also went
+    /// back to 0 here, that republish would present `(source_id, generation)` == `(same Id, 0)` —
+    /// identical to what a host's retained `PanelRenderElement` already cached from before the
+    /// reset — and `PanelRenderElement::update`'s equality check would keep its stale texture
+    /// clone instead of rebuilding. Preserving the counter across every reset means a post-reset
+    /// publish always bumps to a value the host has never seen for that Id, so it can never alias.
     pub fn clear(&mut self) {
+        let generation = self.generation;
         *self = Self::default();
+        self.generation = generation;
     }
 }
 
@@ -5502,6 +5517,14 @@ impl Niri {
 
             let target_view = m.view_size();
             let target_scale = m.scale().fractional_scale();
+            // Physical space for the background/layer-shell crop below: the SAME convention
+            // `render_overview_at_zoom` uses for `geo_phys` (windows/`PanelMonitor`) — the
+            // target's own scale, not the host's. `geo` (from `workspaces_with_render_geo_at_zoom`
+            // just below) is the target's unshifted logical render-geo; baking its physical crop
+            // rect and relocate offset with `output_scale` (host) instead would only agree with
+            // the windows path's baked physical space when host_scale == target_scale, producing
+            // mixed-DPI misalignment between panel content types otherwise.
+            let target_output_scale = Scale::from(target_scale);
             // Fit the target's overview into the host view (letterbox: min of the axis ratios),
             // corrected for the host/target output-scale difference. Same formula as the lens
             // block's `fill_zoom`.
@@ -5510,8 +5533,12 @@ impl Niri {
 
             // Same union `Layout::carousel_focus_jump` computes to map its uv: the workspace-geo
             // boxes at `fill_zoom`, reduced to their bounding box. With the per-workspace crop in
-            // `render_overview_at_zoom` above (see its doc), this bbox now equals the baked
-            // texture's encompassing extent exactly.
+            // `render_overview_at_zoom` above (see its doc), this bbox equals the baked texture's
+            // encompassing extent exactly — including on mixed-DPI host/target pairs, PROVIDED the
+            // background/layer-shell crop below bakes its physical crop bounds with `target_scale`
+            // (via `target_output_scale`), matching the windows path's convention. See
+            // `render_overview_at_zoom`'s doc for why a scale mismatch between the two content
+            // types would inflate this beyond the workspace-geo union.
             let bbox = m
                 .workspaces_with_render_geo_at_zoom(fill_zoom)
                 .map(|(_ws, geo)| geo)
@@ -5565,7 +5592,9 @@ impl Niri {
                     XrayPos::default(),
                     false,
                     &mut |elem| {
-                        if let Some(w) = scale_relocate_crop(elem, output_scale, fill_zoom, geo) {
+                        if let Some(w) =
+                            scale_relocate_crop(elem, target_output_scale, fill_zoom, geo)
+                        {
                             elements.push(OutputRenderElements::RelocatedLayerSurface(w));
                         }
                     },
@@ -5578,14 +5607,19 @@ impl Niri {
                     XrayPos::default(),
                     false,
                     &mut |elem| {
-                        if let Some(w) = scale_relocate_crop(elem, output_scale, fill_zoom, geo) {
+                        if let Some(w) =
+                            scale_relocate_crop(elem, target_output_scale, fill_zoom, geo)
+                        {
                             elements.push(OutputRenderElements::RelocatedLayerSurface(w));
                         }
                     },
                 );
-                if let Some(w) =
-                    scale_relocate_crop(ws.render_background(), output_scale, fill_zoom, geo)
-                {
+                if let Some(w) = scale_relocate_crop(
+                    ws.render_background(),
+                    target_output_scale,
+                    fill_zoom,
+                    geo,
+                ) {
                     elements.push(OutputRenderElements::RelocatedColor(w));
                 }
             }
@@ -8051,5 +8085,45 @@ mod shader_throttle_tests {
             }
             ShaderFrameDecision::Due => panic!("elapsed clamped to 0, so not due"),
         }
+    }
+}
+
+#[cfg(test)]
+mod panel_source_tests {
+    use super::PanelSource;
+
+    #[test]
+    fn clear_preserves_generation() {
+        let mut source = PanelSource::default();
+        assert_eq!(source.generation, 0);
+
+        // Simulate a few publishes bumping the counter, the way `update_panel_sources` does on
+        // a damaged render.
+        source.generation = 3;
+
+        source.clear();
+
+        // The whole point of this test: `clear()` must NOT reset `generation` to 0. Doing so
+        // would let a post-reset publish republish under `(source_id, 0, context_id)` — a value
+        // the host's retained `PanelRenderElement` may have already cached from before the
+        // reset (aliasing, since the ping-pong buffers and their `Id`s outlive `clear()`).
+        assert_eq!(source.generation, 3);
+
+        // Everything else resets to the fresh (never-rendered) state.
+        assert!(source.elem.is_none());
+        assert_eq!(source.frame, 0);
+        assert_eq!(source.last_extent, None);
+    }
+
+    #[test]
+    fn clear_is_idempotent_on_generation() {
+        let mut source = PanelSource::default();
+        source.generation = 5;
+
+        source.clear();
+        source.clear();
+        source.clear();
+
+        assert_eq!(source.generation, 5);
     }
 }

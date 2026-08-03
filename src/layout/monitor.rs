@@ -2011,6 +2011,13 @@ impl<W: LayoutElement> Monitor<W> {
     /// both assume), so off-view scrolling columns and any other content that would otherwise
     /// overflow a workspace's box must not be allowed to inflate the `OffscreenBuffer`'s
     /// encompassing-extent sizing.
+    ///
+    /// This crop uses `self.scale` (the TARGET monitor's own scale, this method's `self`) to bake
+    /// `geo_phys`'s physical crop bounds below. The prepass's background/layer-shell elements
+    /// (baked separately, in `Niri::update_panel_sources` via `scale_relocate_crop`) must bake
+    /// their crop bounds with that SAME target scale, not the host's — otherwise, on mixed-DPI
+    /// host/target pairs, the two content types' physical crop rects disagree and the extent
+    /// equality claim above breaks for the background/layer contribution.
     pub fn render_overview_at_zoom<R: NiriRenderer>(
         &self,
         mut ctx: RenderCtx<R>,
