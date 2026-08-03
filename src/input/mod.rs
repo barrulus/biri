@@ -3001,6 +3001,48 @@ impl State {
 
             let is_overview_open = self.niri.layout.is_overview_open();
 
+            // Carousel side-panel click-to-rotate. Must run BEFORE the regular overview click
+            // handling below (window activate-and-close, workspace click-to-focus): a panel
+            // click should rotate the ring rather than being interpreted as a click on whatever
+            // window/workspace happens to be under the same screen point. Falls through (does
+            // nothing here) when the hit panel is already the settled center — that's the lens
+            // case, owned by the regular handling below.
+            if is_overview_open && !pointer.is_grabbed() && button == Some(MouseButton::Left) {
+                let location = pointer.current_location();
+                if let Some((output, pos_within_output)) = self.niri.output_under(location) {
+                    let output = output.clone();
+                    // Clone out of the RefCell before calling into `self.niri.layout` below —
+                    // the hits cache read must not hold a borrow across the layout call.
+                    let hits: Vec<(f64, [[f64; 2]; 4])> = self
+                        .niri
+                        .output_state
+                        .get(&output)
+                        .map(|state| state.panel_hits.borrow().clone())
+                        .unwrap_or_default();
+
+                    let p = (pos_within_output.x, pos_within_output.y);
+                    let hit_ring_pos = hits.iter().find_map(|(ring_pos, corners)| {
+                        crate::render_helpers::panel_quad::point_in_quad_uv(corners, p)
+                            .map(|_uv| *ring_pos)
+                    });
+
+                    if let Some(ring_pos) = hit_ring_pos {
+                        let rotation = self.niri.layout.carousel_rotation();
+                        let settled = rotation == rotation.round()
+                            && !self.niri.layout.carousel_rotating();
+                        let target = self.niri.layout.carousel_rotation_target();
+
+                        if !(settled && ring_pos.round() == target.round()) {
+                            self.niri.layout.carousel_request_rotate_to(ring_pos.round());
+                            // FIXME: granular.
+                            self.niri.queue_redraw_all();
+                            return;
+                        }
+                        // Else: settled center hit — fall through to the lens click handling.
+                    }
+                }
+            }
+
             if is_overview_open && !pointer.is_grabbed() && button == Some(MouseButton::Right) {
                 if let Some((output, ws)) = self.niri.workspace_under_cursor(true) {
                     let ws_id = ws.id();

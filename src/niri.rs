@@ -757,6 +757,12 @@ pub struct OutputState {
     /// this flag plus deferred consumption is the mirror of the `shader_throttle_timer` deferred
     /// re-borrow pattern used just below in `redraw()`.
     pub panel_redraw_pending: Cell<bool>,
+    /// Click hit-test geometry for the carousel panel stack drawn on this output, refreshed by
+    /// the panel-stack block in `render_inner` every frame panels are drawn (nearest/highest-z
+    /// panel first, matching draw order and thus hit priority), and cleared whenever panels
+    /// aren't drawn so a stale cache can't eat clicks after the carousel closes (see
+    /// `clear_stale_panel_sources`). Each entry is `(ring_pos, corners)` for one drawn panel.
+    pub panel_hits: RefCell<Vec<(f64, [[f64; 2]; 4])>>,
 }
 
 #[derive(Debug, Default)]
@@ -3235,6 +3241,7 @@ impl Niri {
             panel_offscreen: [OffscreenBuffer::default(), OffscreenBuffer::default()],
             panel_elems: RefCell::new(HashMap::new()),
             panel_redraw_pending: Cell::new(false),
+            panel_hits: RefCell::new(Vec::new()),
         };
         let rv = self.output_state.insert(output.clone(), state);
         assert!(rv.is_none(), "output was already tracked");
@@ -5270,7 +5277,7 @@ impl Niri {
                 && !self.layout.carousel_rotating();
             let outputs = self.layout.carousel_outputs();
 
-            let mut visible: Vec<(usize, crate::layout::carousel::PanelPlacement)> = self
+            let mut visible: Vec<(usize, f64, crate::layout::carousel::PanelPlacement)> = self
                 .layout
                 .carousel_ring()
                 .into_iter()
@@ -5281,17 +5288,19 @@ impl Niri {
                     }
                     let placement =
                         crate::layout::carousel::panel_placement((view.w, view.h), d, reveal)?;
-                    Some((idx, placement))
+                    Some((idx, ring_pos, placement))
                 })
                 .collect();
 
             // Nearer panels first: z is highest (100.0) at the center and decreases with depth,
             // so sorting descending by z and pushing in that order puts nearer panels on top
-            // (niri renders earlier-pushed elements in front).
-            visible.sort_by(|a, b| b.1.z.partial_cmp(&a.1.z).unwrap());
+            // (niri renders earlier-pushed elements in front). This is also hit-test priority
+            // order for `panel_hits` below.
+            visible.sort_by(|a, b| b.2.z.partial_cmp(&a.2.z).unwrap());
 
+            let mut hits: Vec<(f64, [[f64; 2]; 4])> = Vec::with_capacity(visible.len());
             let mut panel_elems = state.panel_elems.borrow_mut();
-            for (idx, placement) in &visible {
+            for (idx, ring_pos, placement) in &visible {
                 let Some(m) = outputs.get(*idx) else {
                     continue;
                 };
@@ -5314,6 +5323,7 @@ impl Niri {
                     placement.yaw,
                     view.w * crate::layout::carousel::FOCAL_FACTOR,
                 );
+                hits.push((*ring_pos, corners));
 
                 match panel_elems.entry(*idx) {
                     std::collections::hash_map::Entry::Occupied(mut o) => {
@@ -5349,14 +5359,18 @@ impl Niri {
             // (the ring got smaller, or that member scrolled beyond MAX_VISIBLE_DEPTH) don't
             // belong in the retained map anymore.
             let visible_idx: std::collections::HashSet<usize> =
-                visible.iter().map(|(idx, _)| *idx).collect();
+                visible.iter().map(|(idx, _, _)| *idx).collect();
             panel_elems.retain(|idx, _| visible_idx.contains(idx));
 
-            for (idx, _) in &visible {
+            for (idx, _, _) in &visible {
                 if let Some(elem) = panel_elems.get(idx) {
                     push(OutputRenderElements::Panel(elem.clone()));
                 }
             }
+
+            *state.panel_hits.borrow_mut() = hits;
+        } else {
+            state.panel_hits.borrow_mut().clear();
         }
         // ===== END panel stack =====
 
@@ -5591,7 +5605,8 @@ impl Niri {
             // compositor with the carousel never touched pays zero cost here.
             let already_clear = state.panel_source.borrow().elem.is_none()
                 && state.panel_offscreen.iter().all(|buf| buf.is_empty())
-                && state.panel_elems.borrow().is_empty();
+                && state.panel_elems.borrow().is_empty()
+                && state.panel_hits.borrow().is_empty();
             if already_clear {
                 continue;
             }
@@ -5610,6 +5625,9 @@ impl Niri {
             // a HOST, so their `GlesTexture` clones don't stay pinned after close. See
             // `OutputState::panel_elems`'s doc.
             state.panel_elems.borrow_mut().clear();
+            // Stale hit geometry would otherwise let a click land on where a panel used to be
+            // after this output stops hosting the carousel ring — see `OutputState::panel_hits`.
+            state.panel_hits.borrow_mut().clear();
         }
     }
 
