@@ -99,6 +99,7 @@ impl State {
         if surface != &root_surface {
             // This is an unsync layer-shell subsurface.
             self.niri.queue_redraw(&output);
+            self.niri.queue_carousel_host_redraw_for_sibling(&output);
             return true;
         }
 

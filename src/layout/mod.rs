@@ -959,6 +959,16 @@ impl<W: LayoutElement> Layout<W> {
             self.carousel_rotation_anim = None;
             self.carousel_pullback = None;
         }
+
+        // If the removed output was the active one, active_monitor_idx above
+        // silently shifted onto whichever monitor now sits at that index.
+        // Per-monitor overview participation (`Monitor::overview_open`) is
+        // keyed off the active monitor in consolidated mode, so it needs to
+        // be recomputed for the new active monitor, same as focus_output's
+        // active-change path does.
+        if self.overview_open {
+            self.set_monitors_overview_state();
+        }
     }
 
     pub fn add_column_by_idx(
@@ -3929,6 +3939,13 @@ impl<W: LayoutElement> Layout<W> {
         }
 
         if changed {
+            // Note: `activate_window`-mediated flows (e.g. the carousel lens
+            // focus-jump) pre-mutate `active_monitor_idx` directly before
+            // calling into `focus_output`, so `changed` is already false by
+            // the time we get here and this block does not fire for them.
+            // Those flows instead get the equivalent rotation/overview-state
+            // reset from `close_overview()`.
+            //
             // The pull-back's ZoomOut/ZoomIn phases watch the *active*
             // monitor's zoom animation; switching which monitor is active
             // out from under it would let it transition on the wrong

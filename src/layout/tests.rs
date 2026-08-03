@@ -4045,6 +4045,83 @@ fn consolidated_mode_scopes_overview_to_active_output() {
 }
 
 #[test]
+fn removing_active_output_refreshes_overview_state() {
+    fn make_output(name: &str) -> Output {
+        let output = Output::new(
+            name.to_owned(),
+            PhysicalProperties {
+                size: Size::from((1280, 720)),
+                subpixel: Subpixel::Unknown,
+                make: String::new(),
+                model: String::new(),
+                serial_number: String::new(),
+            },
+        );
+        output.change_current_state(
+            Some(Mode {
+                size: Size::from((1280, 720)),
+                refresh: 60000,
+            }),
+            None,
+            None,
+            None,
+        );
+        output.user_data().insert_if_missing(|| OutputName {
+            connector: name.to_owned(),
+            make: None,
+            model: None,
+            serial: None,
+        });
+        output
+    }
+
+    let mut options = Options::default();
+    options.overview.consolidated_carousel = Some(niri_config::ConsolidatedCarousel {
+        reveal_zoom: 0.25,
+        assembled_zoom: 0.1,
+    });
+
+    let mut layout = Layout::<TestWindow>::with_options(Clock::with_time(Duration::ZERO), options);
+
+    let first = make_output("first");
+    let second = make_output("second");
+    let third = make_output("third");
+    layout.add_output(first.clone(), None, false);
+    layout.add_output(second.clone(), None, false);
+    layout.add_output(third.clone(), None, false);
+
+    // Explicitly make the middle output the active one, so removing it
+    // exercises the index-shift path in `remove_output`.
+    layout.focus_output(&second);
+    assert_eq!(layout.active_output(), Some(&second));
+
+    layout.toggle_overview(); // open
+
+    let mons = layout.monitors().collect::<Vec<_>>();
+    assert!(!mons[0].overview_open, "first (inactive) stays live");
+    assert!(mons[1].overview_open, "second (active) enters overview");
+    assert!(!mons[2].overview_open, "third (inactive) stays live");
+
+    layout.remove_output(&second);
+    layout.verify_invariants();
+
+    assert_eq!(layout.carousel_rotation(), 0.0);
+
+    // Active monitor shifted (index-shift in `remove_output`); overview
+    // participation must have been recomputed for whichever monitor is
+    // active now, not left stale from before the removal.
+    let active = layout.active_output().cloned().expect("an output remains active");
+    for mon in layout.monitors() {
+        let should_be_open = mon.output() == &active;
+        assert_eq!(
+            mon.overview_open, should_be_open,
+            "overview_open for {:?} should match whether it is now active",
+            mon.output_name()
+        );
+    }
+}
+
+#[test]
 fn carousel_reveal_tracks_zoom_threshold() {
     fn make_output(name: &str) -> Output {
         let output = Output::new(
