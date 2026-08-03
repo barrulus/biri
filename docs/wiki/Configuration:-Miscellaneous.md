@@ -259,6 +259,33 @@ overview {
 }
 ```
 
+#### `consolidated-carousel`
+
+On a multi-monitor setup, enables a single-screen carousel overview instead of niri's default per-output overview: zooming any one output's overview out far enough reveals the *other* outputs as a cover-flow style stack of panels receding to the sides, so you can browse and jump between every monitor's workspaces without leaving the output you're on.
+
+`reveal-zoom` is the overview zoom level at which sibling outputs start to appear as panels (default `0.48`). `assembled-zoom` is the zoom level at which the reveal is complete and the whole ring is fully assembled (default `0.22`). Zooming out continuously between the two ramps the reveal from 0 to 1 — there's no snap or threshold, panels fade and slide in as you zoom. `assembled-zoom` must be smaller than `reveal-zoom`, and both must be strictly between 0 and 1; invalid values fall back to the defaults with a warning.
+
+```kdl
+overview {
+    consolidated-carousel {
+        reveal-zoom 0.48
+        assembled-zoom 0.22
+    }
+}
+```
+
+Once revealed, rotate the ring (bring a different sibling output to the center) with:
+
+- The normal focus-column-left/right binds (`Mod+Left`/`Mod+Right` by default)
+- `Shift` + scroll wheel over the overview
+- Clicking a side panel to bring it to the center
+
+All three work at any overview zoom level — if you're zoomed in past `reveal-zoom`, triggering a rotation first pulls the zoom back out to `reveal-zoom` so the ring is visible, then rotates.
+
+Rotating all the way onto a sibling output settles into the "lens": that output's own workspace strip takes over the center, live and interactive, while every other output (including the one you started on) recedes to the sides as ordinary panels. From the lens, clicking a window brings it to focus and closes the overview, jumping you straight to that window on its real output; pressing `Enter` does the same for whichever window is currently focused/hovered.
+
+`activation-zoom` and `expand-zoom`, used by earlier iterations of this feature, have been removed — `reveal-zoom`/`assembled-zoom` replace them with the continuous ramp described above.
+
 ### `xwayland-satellite`
 
 <sup>Since: 25.08</sup>

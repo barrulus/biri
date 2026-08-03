@@ -1885,20 +1885,8 @@ impl<W: LayoutElement> Layout<W> {
         monitors.iter()
     }
 
-    /// Sibling outputs to show as cards for `host`: every monitor that is not
-    /// `host`, not isolated, and has at least one window. Deterministic order
-    /// (layout monitor order).
-    pub fn carousel_participants(&self, host: &Output) -> Vec<&Monitor<W>> {
-        self.monitors()
-            .filter(|m| m.output() != host)
-            .filter(|m| !m.is_isolated())
-            .filter(|m| m.has_windows())
-            .collect()
-    }
-
     /// Every monitor eligible for the carousel — not isolated, non-empty — in layout
-    /// order. The HOST is included (this is the full carousel set, unlike
-    /// `carousel_participants` which excludes the host).
+    /// order. The HOST is included (this is the full carousel set).
     pub fn carousel_outputs(&self) -> Vec<&Monitor<W>> {
         self.monitors()
             .filter(|m| !m.is_isolated())

@@ -4637,7 +4637,9 @@ impl Niri {
         }
         let reveal = self.layout.carousel_reveal();
         let rotation = self.layout.carousel_rotation();
-        let settled_on_host = rotation == rotation.round() && rotation.round() == 0.;
+        let settled_on_host = rotation == rotation.round()
+            && rotation.round() == 0.
+            && !self.layout.carousel_rotating();
         !(reveal == 0. && settled_on_host)
     }
 
