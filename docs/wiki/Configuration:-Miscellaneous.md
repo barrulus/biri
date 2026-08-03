@@ -280,7 +280,7 @@ Once revealed, rotate the ring (bring a different sibling output to the center) 
 - `Shift` + scroll wheel over the overview
 - Clicking a side panel to bring it to the center
 
-All three work at any overview zoom level — if you're zoomed in past `reveal-zoom`, triggering a rotation first pulls the zoom back out to `reveal-zoom` so the ring is visible, then rotates.
+All three work at any overview zoom level — if you're zoomed in past `reveal-zoom`, triggering a rotation first pulls the zoom out to `assembled-zoom` so the ring is visible, then rotates, then returns to your previous zoom level.
 
 Rotating all the way onto a sibling output settles into the "lens": that output's own workspace strip takes over the center, live and interactive, while every other output (including the one you started on) recedes to the sides as ordinary panels. From the lens, clicking a window brings it to focus and closes the overview, jumping you straight to that window on its real output; pressing `Enter` does the same for whichever window is currently focused/hovered.
 

@@ -333,8 +333,8 @@ animations {
 //     // a separate overview per monitor. Rotate the ring with the normal
 //     // focus-column-left/right binds (Mod+Left/Right by default),
 //     // Shift+scroll over the overview, or by clicking a side panel — any
-//     // of these work at any overview zoom level, pulling the zoom back to
-//     // reveal-zoom first if you're zoomed in past it. Clicking a window
+//     // of these work at any overview zoom level, pulling out to
+//     // assembled-zoom then returning to your previous zoom. Clicking a window
 //     // inside a rotated-in panel (the "lens") or pressing Enter
 //     // focus-jumps straight to that window on its real output, closing
 //     // the overview.
