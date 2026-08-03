@@ -1625,11 +1625,16 @@ impl<W: LayoutElement> Layout<W> {
         }
 
         if monitor_changed {
-            // The pull-back's phase driver re-resolves the *active* monitor
-            // on every step; changing which monitor is active out from under
-            // it would let it transition on the wrong monitor's settle.
-            // Cancel rather than fight it (mirrors `focus_output`).
-            self.cancel_carousel_pullback();
+            // Mirrors `focus_output`: cancel any in-flight pull-back (its
+            // phase driver re-resolves the *active* monitor on every step,
+            // so changing which monitor is active out from under it would
+            // let it transition on the wrong monitor's settle), and — since
+            // this can happen while the overview is open (e.g. a
+            // `FocusWindow` bind to a window on another output, or the
+            // carousel lens focus-jump) — rebase the rotation home and
+            // recompute per-monitor overview participation for the new
+            // active monitor so it doesn't go stale.
+            self.on_active_monitor_changed();
         }
     }
 
@@ -1674,11 +1679,16 @@ impl<W: LayoutElement> Layout<W> {
         }
 
         if monitor_changed {
-            // The pull-back's phase driver re-resolves the *active* monitor
-            // on every step; changing which monitor is active out from under
-            // it would let it transition on the wrong monitor's settle.
-            // Cancel rather than fight it (mirrors `focus_output`).
-            self.cancel_carousel_pullback();
+            // Mirrors `focus_output`: cancel any in-flight pull-back (its
+            // phase driver re-resolves the *active* monitor on every step,
+            // so changing which monitor is active out from under it would
+            // let it transition on the wrong monitor's settle), and — since
+            // this can happen while the overview is open (e.g. a
+            // `FocusWindow` bind to a window on another output, or the
+            // carousel lens focus-jump) — rebase the rotation home and
+            // recompute per-monitor overview participation for the new
+            // active monitor so it doesn't go stale.
+            self.on_active_monitor_changed();
         }
     }
 
@@ -2054,16 +2064,36 @@ impl<W: LayoutElement> Layout<W> {
     }
 
     /// Starts a new pull-back choreography targeting `target`, or — if one
-    /// is already in flight — just replaces its target (staying in the
-    /// current phase). If the in-flight pullback is already mid-`Rotate`,
-    /// also retargets the rotation animation immediately so it heads
-    /// straight for the new target instead of settling on the stale one
-    /// first.
+    /// is already in flight — just replaces its target. Behavior depends on
+    /// the in-flight pullback's phase:
+    ///
+    /// - `Rotate`: retargets the rotation animation immediately so it heads
+    ///   straight for the new target instead of settling on the stale one
+    ///   first.
+    /// - `ZoomIn`: the zoom is already heading back down to `restore_zoom`,
+    ///   past the point where a rotation could still happen. Reset the
+    ///   phase to `ZoomOut` (keeping the original `restore_zoom` so it still
+    ///   returns to where the user parked their zoom) and retarget the zoom
+    ///   back out to `assembled_zoom`, otherwise the request would be
+    ///   silently dropped once the ZoomIn leg completes.
+    /// - `ZoomOut`: already heading the right way; nothing else to do.
     fn start_or_retarget_pullback(&mut self, target: f64) {
-        if let Some(pullback) = &mut self.carousel_pullback {
+        if let Some(pullback) = self.carousel_pullback.as_mut() {
             pullback.target = target;
-            if pullback.phase == PullbackPhase::Rotate {
-                self.rotate_carousel_to(target);
+            let phase = pullback.phase;
+            match phase {
+                PullbackPhase::Rotate => {
+                    self.rotate_carousel_to(target);
+                }
+                PullbackPhase::ZoomIn => {
+                    if let Some(pullback) = self.carousel_pullback.as_mut() {
+                        pullback.phase = PullbackPhase::ZoomOut;
+                    }
+                    if let Some(cc) = self.options.overview.consolidated_carousel {
+                        self.retarget_active_monitor_zoom(cc.assembled_zoom);
+                    }
+                }
+                PullbackPhase::ZoomOut => {}
             }
             return;
         }
@@ -3322,6 +3352,30 @@ impl<W: LayoutElement> Layout<W> {
             }
         }
 
+        // The ring can shrink without going through `remove_output` (e.g.
+        // the settled-remote's only window closes and `carousel_outputs()`
+        // filters it out via `has_windows`, or it becomes isolated via a
+        // config reload). `remove_output` already snaps the rotation home
+        // when an output physically disappears; this covers the remaining
+        // case where the output is still connected but no longer eligible.
+        // Cheap to gate: only bother recomputing the ring when there's
+        // actually a non-home rotation target to validate.
+        if self.overview_open
+            && self.options.overview.consolidated_carousel.is_some()
+            && self.carousel_rotation_target() != 0.0
+        {
+            let target = self.carousel_rotation_target();
+            let on_ring = self
+                .carousel_ring()
+                .iter()
+                .any(|&(_, pos)| pos.round() == target.round());
+            if !on_ring {
+                self.carousel_rotation = 0.;
+                self.carousel_rotation_anim = None;
+                self.carousel_pullback = None;
+            }
+        }
+
         match &mut self.monitor_set {
             MonitorSet::Normal { monitors, .. } => {
                 for mon in monitors {
@@ -3904,6 +3958,33 @@ impl<W: LayoutElement> Layout<W> {
         workspace.move_floating_window(id, x, y, animate);
     }
 
+    /// Reconciles carousel/overview state after the active monitor changes,
+    /// regardless of which flow caused it (`focus_output`, or an
+    /// `activate_window`/`activate_window_without_raising`-mediated jump to
+    /// a window on another output). Cancels any in-flight pull-back (its
+    /// ZoomOut/ZoomIn phases watch the *active* monitor's zoom animation;
+    /// leaving it running would let it transition on the wrong monitor's
+    /// settle), then — since the carousel ring is host-relative (ring
+    /// position 0.0 = the active output) — rebases the rotation home and
+    /// recomputes per-monitor overview participation for the new active
+    /// monitor.
+    ///
+    /// Returns the cancelled pull-back, if any, so a caller that needs to
+    /// restore a stranded zoom on the *previous* monitor (currently only
+    /// `focus_output`, which knows the previous monitor's index) can do so.
+    /// Callers that don't need that can just drop the return value.
+    fn on_active_monitor_changed(&mut self) -> Option<Pullback> {
+        let pullback = self.carousel_pullback.take();
+
+        if self.overview_open {
+            self.carousel_rotation = 0.;
+            self.carousel_rotation_anim = None;
+            self.set_monitors_overview_state();
+        }
+
+        pullback
+    }
+
     pub fn focus_output(&mut self, output: &Output) {
         let mut changed = false;
         let mut prev_idx = None;
@@ -3927,24 +4008,28 @@ impl<W: LayoutElement> Layout<W> {
         }
 
         if changed {
-            // Note: `activate_window`-mediated flows (e.g. the carousel lens
-            // focus-jump) pre-mutate `active_monitor_idx` directly before
-            // calling into `focus_output`, so `changed` is already false by
-            // the time we get here and this block does not fire for them.
-            // Those flows instead get the equivalent rotation/overview-state
-            // reset from `close_overview()`.
+            // Note: `activate_window`/`activate_window_without_raising`
+            // -mediated flows (e.g. the carousel lens focus-jump, or a plain
+            // `FocusWindow` bind to a window on another output) don't route
+            // through `focus_output` at all when they change the active
+            // monitor — they mutate `active_monitor_idx` directly and call
+            // `on_active_monitor_changed` themselves. So this block only
+            // ever fires for genuine `focus_output` callers (e.g.
+            // `Action::FocusMonitor*`), and the carousel lens focus-jump's
+            // subsequent `focus_output` call below is always a no-op
+            // (`changed` is already false by the time it runs).
             //
-            // The pull-back's ZoomOut/ZoomIn phases watch the *active*
-            // monitor's zoom animation; switching which monitor is active
-            // out from under it would let it transition on the wrong
-            // monitor's settle, or leave the old one stuck at assembled
-            // zoom. Cancel rather than fight it — but if a pullback was
-            // actually mid-flight, the previous monitor's zoom would be
-            // left stranded at the assembled zoom (or wherever the
-            // choreography had gotten to) instead of back where the user
-            // had it parked. Restore it instantly (no animation; the
-            // previous monitor isn't even visible during this transition).
-            if let Some(pullback) = self.carousel_pullback.take() {
+            // `on_active_monitor_changed` cancels any in-flight pull-back and
+            // (if the overview is open) rebases the rotation home and
+            // recomputes per-monitor overview participation — but if a
+            // pullback was actually mid-flight, the previous monitor's zoom
+            // would be left stranded at the assembled zoom (or wherever the
+            // choreography had gotten to) instead of back where the user had
+            // it parked. That restore is specific to `focus_output` (the
+            // only caller that still has the previous monitor's index handy
+            // and cares about its zoom being visible again), so it's kept
+            // here rather than folded into the shared helper.
+            if let Some(pullback) = self.on_active_monitor_changed() {
                 if let Some(prev_idx) = prev_idx {
                     if let MonitorSet::Normal { monitors, .. } = &mut self.monitor_set {
                         if let Some(mon) = monitors.get_mut(prev_idx) {
@@ -3952,17 +4037,6 @@ impl<W: LayoutElement> Layout<W> {
                         }
                     }
                 }
-            }
-
-            // The carousel ring is host-relative (ring position 0.0 = the
-            // active output); switching which output is active invalidates
-            // any in-flight or settled rotation, so rebase home and let
-            // per-output overview participation be recomputed for the new
-            // host.
-            if self.overview_open {
-                self.carousel_rotation = 0.;
-                self.carousel_rotation_anim = None;
-                self.set_monitors_overview_state();
             }
         }
     }

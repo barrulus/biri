@@ -4773,6 +4773,144 @@ fn pullback_cancelled_by_cross_output_window_activation() {
 }
 
 #[test]
+fn lens_recenters_when_target_leaves_ring() {
+    let (mut layout, _a, _b) = pullback_test_layout();
+
+    layout.toggle_overview(); // open
+
+    layout.clock.set_complete_instantly(true);
+    layout.advance_animations();
+    layout.clock.set_complete_instantly(false);
+
+    // Zoom is already at the assembled level for `pullback_test_layout`'s
+    // `assembled_zoom` (0.15), so a direct rotate settles without a
+    // pull-back.
+    layout.set_overview_zoom_for_test(0.15);
+    layout.rotate_carousel(1);
+
+    layout.clock.set_complete_instantly(true);
+    layout.advance_animations();
+    layout.clock.set_complete_instantly(false);
+
+    // Settled on B's ring position.
+    assert_eq!(layout.carousel_rotation_target(), 1.0);
+    assert_eq!(layout.carousel_rotation(), 1.0);
+    assert!(!layout.carousel_rotating());
+
+    // B's only window closes, dropping B out of `carousel_outputs()`
+    // (filtered by `has_windows`). The rotation target (1.0) no longer
+    // corresponds to any ring position — a plain `advance_animations` pass
+    // must notice and snap the rotation home rather than leave it wedged.
+    layout.remove_window(&1, Transaction::new());
+
+    layout.advance_animations();
+
+    assert_eq!(layout.carousel_rotation_target(), 0.0);
+    assert_eq!(layout.carousel_rotation(), 0.0);
+    assert!(!layout.carousel_rotating());
+    assert!(!layout.carousel_pullback_is_active());
+}
+
+#[test]
+fn pullback_rerequest_during_zoom_in_rotates_again() {
+    let (mut layout, _a, _b) = pullback_test_layout();
+
+    layout.toggle_overview(); // open
+
+    layout.clock.set_complete_instantly(true);
+    layout.advance_animations();
+    layout.clock.set_complete_instantly(false);
+
+    // Zoom is parked above the reveal band, so a rotate request pulls back.
+    layout.set_overview_zoom_for_test(0.5);
+
+    layout.carousel_request_rotate(1);
+    assert!(layout.carousel_pullback_is_active());
+
+    // Drive ZoomOut to completion, which starts Rotate.
+    layout.clock.set_complete_instantly(true);
+    layout.advance_animations();
+    layout.clock.set_complete_instantly(false);
+
+    // Drive Rotate to completion, which starts ZoomIn.
+    layout.clock.set_complete_instantly(true);
+    layout.advance_animations();
+    layout.clock.set_complete_instantly(false);
+
+    assert_eq!(layout.carousel_rotation_target(), 1.0);
+    assert!(layout.carousel_pullback_is_active());
+
+    // Re-request a rotation mid-ZoomIn (pressing -> twice in normal
+    // succession). Before the fix, `start_or_retarget_pullback` only
+    // re-rotated when the existing pullback's phase was `Rotate`; a request
+    // during `ZoomIn` would store the new target but the ZoomIn leg would
+    // complete and drop the pullback, silently swallowing the request.
+    layout.carousel_request_rotate(1);
+    assert!(layout.carousel_pullback_is_active());
+
+    // Drive the choreography (now reset to ZoomOut) to completion: ZoomOut,
+    // Rotate, ZoomIn again.
+    layout.clock.set_complete_instantly(true);
+    for _ in 0..6 {
+        layout.advance_animations();
+    }
+    layout.clock.set_complete_instantly(false);
+
+    // `pullback_test_layout` only has 2 outputs, so a second `delta: 1`
+    // request computed from the settled target of 1.0 wraps back to 0.0 —
+    // the *second* target, distinct from the first (1.0). Without the fix,
+    // the re-request is dropped and rotation stays wedged at 1.0 (the first
+    // target) once the ZoomIn leg completes. The zoom must also return to
+    // the original restore_zoom (0.5) rather than getting stuck partway.
+    assert_eq!(layout.carousel_rotation_target(), 0.0);
+    assert_eq!(layout.carousel_rotation(), 0.0);
+    assert!(!layout.carousel_rotating());
+    assert!(!layout.carousel_pullback_is_active());
+    assert_eq!(
+        layout.active_monitor_ref().unwrap().overview_zoom_target(),
+        0.5
+    );
+}
+
+#[test]
+fn cross_output_activation_refreshes_overview_state() {
+    let (mut layout, _a, b) = pullback_test_layout();
+
+    // Overview opens on the active monitor (A, since it was added first);
+    // window 1 lives on B.
+    layout.toggle_overview(); // open
+
+    layout.clock.set_complete_instantly(true);
+    layout.advance_animations();
+    layout.clock.set_complete_instantly(false);
+
+    let mons = layout.monitors().collect::<Vec<_>>();
+    assert!(mons[0].overview_open, "active output A is in overview");
+    assert!(!mons[1].overview_open, "non-active output B stays live");
+
+    // A plain `FocusWindow`-style bind to a window on another output, with
+    // no `focus_output`/`close_overview()` call around it (unlike the
+    // carousel lens focus-jump, which calls both). Before the fix, this
+    // left B's `overview_open` stale (still false) instead of becoming the
+    // new active monitor's overview participation.
+    layout.activate_window(&1);
+
+    layout.verify_invariants();
+
+    assert_eq!(layout.active_output(), Some(&b));
+
+    let active = layout.active_output().cloned().unwrap();
+    for mon in layout.monitors() {
+        let should_be_open = mon.output() == &active;
+        assert_eq!(
+            mon.overview_open, should_be_open,
+            "overview_open for {:?} should match whether it is now active",
+            mon.output_name()
+        );
+    }
+}
+
+#[test]
 fn output_removal_recenters_ring() {
     fn make_output(name: &str, x: i32) -> Output {
         let output = Output::new(
