@@ -4775,6 +4775,246 @@ fn pullback_cancelled_by_cross_output_window_activation() {
     assert!(!layout.carousel_pullback_is_active());
 }
 
+#[test]
+fn output_removal_recenters_ring() {
+    fn make_output(name: &str, x: i32) -> Output {
+        let output = Output::new(
+            name.to_owned(),
+            PhysicalProperties {
+                size: Size::from((1280, 720)),
+                subpixel: Subpixel::Unknown,
+                make: String::new(),
+                model: String::new(),
+                serial_number: String::new(),
+            },
+        );
+        output.change_current_state(
+            Some(Mode {
+                size: Size::from((1280, 720)),
+                refresh: 60000,
+            }),
+            None,
+            None,
+            Some(Point::from((x, 0))),
+        );
+        output.user_data().insert_if_missing(|| OutputName {
+            connector: name.to_owned(),
+            make: None,
+            model: None,
+            serial: None,
+        });
+        output
+    }
+
+    let mut options = Options::default();
+    options.overview.consolidated_carousel = Some(niri_config::ConsolidatedCarousel {
+        reveal_zoom: 0.4,
+        assembled_zoom: 0.15,
+    });
+
+    let mut layout = Layout::<TestWindow>::with_options(Clock::with_time(Duration::ZERO), options);
+
+    let a = make_output("A", 0);
+    let b = make_output("B", 1280);
+    let c = make_output("C", 2560);
+
+    layout.add_output(a.clone(), None, false);
+    layout.add_output(b.clone(), None, false);
+    layout.add_output(c.clone(), None, false);
+
+    layout.add_window(
+        TestWindow::new(TestWindowParams::new(0)),
+        AddWindowTarget::Output(&a),
+        None,
+        None,
+        false,
+        false,
+        ActivateWindow::default(),
+    );
+    layout.add_window(
+        TestWindow::new(TestWindowParams::new(1)),
+        AddWindowTarget::Output(&b),
+        None,
+        None,
+        false,
+        false,
+        ActivateWindow::default(),
+    );
+    layout.add_window(
+        TestWindow::new(TestWindowParams::new(2)),
+        AddWindowTarget::Output(&c),
+        None,
+        None,
+        false,
+        false,
+        ActivateWindow::default(),
+    );
+
+    layout.toggle_overview(); // open
+
+    layout.clock.set_complete_instantly(true);
+    layout.advance_animations();
+    layout.clock.set_complete_instantly(false);
+
+    layout.set_overview_zoom_for_test(0.15);
+
+    // Rotate twice to settle on C's ring position.
+    layout.rotate_carousel(1);
+    layout.rotate_carousel(1);
+
+    layout.clock.set_complete_instantly(true);
+    layout.advance_animations();
+    layout.clock.set_complete_instantly(false);
+
+    assert_eq!(layout.carousel_rotation_target(), 2.0);
+    assert_eq!(layout.carousel_rotation(), 2.0);
+
+    layout.remove_output(&c);
+
+    assert_eq!(layout.carousel_rotation_target(), 0.0);
+    assert_eq!(layout.carousel_rotation(), 0.0);
+    assert!(!layout.carousel_rotating());
+    assert!(!layout.carousel_pullback_is_active());
+}
+
+#[test]
+fn rotate_noop_single_output() {
+    fn make_output(name: &str, x: i32) -> Output {
+        let output = Output::new(
+            name.to_owned(),
+            PhysicalProperties {
+                size: Size::from((1280, 720)),
+                subpixel: Subpixel::Unknown,
+                make: String::new(),
+                model: String::new(),
+                serial_number: String::new(),
+            },
+        );
+        output.change_current_state(
+            Some(Mode {
+                size: Size::from((1280, 720)),
+                refresh: 60000,
+            }),
+            None,
+            None,
+            Some(Point::from((x, 0))),
+        );
+        output.user_data().insert_if_missing(|| OutputName {
+            connector: name.to_owned(),
+            make: None,
+            model: None,
+            serial: None,
+        });
+        output
+    }
+
+    let mut options = Options::default();
+    options.overview.consolidated_carousel = Some(niri_config::ConsolidatedCarousel {
+        reveal_zoom: 0.4,
+        assembled_zoom: 0.15,
+    });
+
+    let mut layout = Layout::<TestWindow>::with_options(Clock::with_time(Duration::ZERO), options);
+
+    let a = make_output("A", 0);
+    layout.add_output(a.clone(), None, false);
+    layout.add_window(
+        TestWindow::new(TestWindowParams::new(0)),
+        AddWindowTarget::Output(&a),
+        None,
+        None,
+        false,
+        false,
+        ActivateWindow::default(),
+    );
+
+    layout.toggle_overview(); // open
+
+    layout.clock.set_complete_instantly(true);
+    layout.advance_animations();
+    layout.clock.set_complete_instantly(false);
+
+    // `carousel_ring().len() <= 1` should make this an outright no-op: no
+    // rotation, and (crucially) no pull-back kicked off either, since a
+    // single-output ring has nowhere to rotate to.
+    layout.carousel_request_rotate(1);
+
+    assert_eq!(layout.carousel_rotation_target(), 0.0);
+    assert_eq!(layout.carousel_rotation(), 0.0);
+    assert!(!layout.carousel_rotating());
+    assert!(!layout.carousel_pullback_is_active());
+}
+
+#[test]
+fn active_output_change_rebases_ring() {
+    let (mut layout, a, b) = pullback_test_layout();
+
+    layout.toggle_overview(); // open
+
+    layout.clock.set_complete_instantly(true);
+    layout.advance_animations();
+    layout.clock.set_complete_instantly(false);
+
+    layout.set_overview_zoom_for_test(0.15);
+
+    // Settle rotated onto B's ring position.
+    layout.rotate_carousel(1);
+
+    layout.clock.set_complete_instantly(true);
+    layout.advance_animations();
+    layout.clock.set_complete_instantly(false);
+
+    assert_eq!(layout.carousel_rotation_target(), 1.0);
+
+    let current = layout.active_output().cloned().unwrap();
+    let other = if current == a { &b } else { &a };
+    layout.focus_output(other);
+
+    assert_eq!(layout.carousel_rotation_target(), 0.0);
+    assert_eq!(layout.carousel_rotation(), 0.0);
+    assert!(!layout.carousel_rotating());
+}
+
+#[test]
+fn active_output_change_restores_stranded_pullback_zoom() {
+    let (mut layout, a, b) = pullback_test_layout();
+
+    layout.toggle_overview(); // open
+
+    layout.clock.set_complete_instantly(true);
+    layout.advance_animations();
+    layout.clock.set_complete_instantly(false);
+
+    // Park the zoom above the reveal band and request a rotate: this starts
+    // a pull-back that immediately retargets the active monitor's zoom to
+    // `assembled_zoom` (0.15) for the ZoomOut phase.
+    layout.set_overview_zoom_for_test(0.5);
+    layout.carousel_request_rotate(1);
+
+    assert!(layout.carousel_pullback_is_active());
+
+    let prev_active = layout.active_output().cloned().unwrap();
+    let prev_zoom_target = layout
+        .active_monitor_ref()
+        .unwrap()
+        .overview_zoom_target();
+    // The pull-back drove it to assembled zoom, not the 0.5 the user parked.
+    assert_eq!(prev_zoom_target, 0.15);
+
+    let other = if prev_active == a { &b } else { &a };
+    layout.focus_output(other);
+
+    assert!(!layout.carousel_pullback_is_active());
+
+    // The previous monitor must not be left stranded at the assembled zoom;
+    // it should be restored (instantly) to the 0.5 the user had parked.
+    let prev_monitor = layout
+        .monitors()
+        .find(|m| m.output() == &prev_active)
+        .unwrap();
+    assert_eq!(prev_monitor.overview_zoom_target(), 0.5);
+}
+
 /// Forces a `TestWindow`'s size and applies it to its `bbox` (mirroring what the fuzz harness's
 /// `Op::SetForcedSize` + `Op::Communicate` do for a real client's configure ack), so its tile's
 /// activation region actually covers a sane chunk of the workspace. `TestWindow`'s default `bbox`

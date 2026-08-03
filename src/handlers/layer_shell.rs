@@ -216,6 +216,7 @@ impl State {
 
         // This will call queue_redraw() inside.
         self.niri.output_resized(&output);
+        self.niri.queue_carousel_host_redraw_for_sibling(&output);
 
         true
     }

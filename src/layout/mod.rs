@@ -946,6 +946,18 @@ impl<W: LayoutElement> Layout<W> {
             MonitorSet::NoOutputs { .. } => {
                 panic!("tried to remove output when there were already none")
             }
+        };
+
+        // The removed output may have been the rotation target, and ring
+        // indices shift regardless of which one went away (the ring is
+        // built fresh per-frame from the remaining outputs, but
+        // `carousel_rotation` is a ring-position value left over from
+        // before the removal) — snap home rather than try to figure out
+        // where the old target landed in the new ring.
+        if self.overview_open && self.options.overview.consolidated_carousel.is_some() {
+            self.carousel_rotation = 0.;
+            self.carousel_rotation_anim = None;
+            self.carousel_pullback = None;
         }
     }
 
@@ -3896,6 +3908,7 @@ impl<W: LayoutElement> Layout<W> {
 
     pub fn focus_output(&mut self, output: &Output) {
         let mut changed = false;
+        let mut prev_idx = None;
 
         if let MonitorSet::Normal {
             monitors,
@@ -3906,6 +3919,9 @@ impl<W: LayoutElement> Layout<W> {
             for (idx, mon) in monitors.iter().enumerate() {
                 if &mon.output == output {
                     changed = idx != *active_monitor_idx;
+                    if changed {
+                        prev_idx = Some(*active_monitor_idx);
+                    }
                     *active_monitor_idx = idx;
                     break;
                 }
@@ -3917,11 +3933,32 @@ impl<W: LayoutElement> Layout<W> {
             // monitor's zoom animation; switching which monitor is active
             // out from under it would let it transition on the wrong
             // monitor's settle, or leave the old one stuck at assembled
-            // zoom. Cancel rather than fight it.
-            //
-            // TODO(Gate C Task 5): rotation-home rebase belongs here too, at
-            // this same active-monitor-change choke point.
-            self.cancel_carousel_pullback();
+            // zoom. Cancel rather than fight it — but if a pullback was
+            // actually mid-flight, the previous monitor's zoom would be
+            // left stranded at the assembled zoom (or wherever the
+            // choreography had gotten to) instead of back where the user
+            // had it parked. Restore it instantly (no animation; the
+            // previous monitor isn't even visible during this transition).
+            if let Some(pullback) = self.carousel_pullback.take() {
+                if let Some(prev_idx) = prev_idx {
+                    if let MonitorSet::Normal { monitors, .. } = &mut self.monitor_set {
+                        if let Some(mon) = monitors.get_mut(prev_idx) {
+                            mon.set_zoom_target_no_anim(pullback.restore_zoom);
+                        }
+                    }
+                }
+            }
+
+            // The carousel ring is host-relative (ring position 0.0 = the
+            // active output); switching which output is active invalidates
+            // any in-flight or settled rotation, so rebase home and let
+            // per-output overview participation be recomputed for the new
+            // host.
+            if self.overview_open {
+                self.carousel_rotation = 0.;
+                self.carousel_rotation_anim = None;
+                self.set_monitors_overview_state();
+            }
         }
     }
 
