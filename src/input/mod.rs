@@ -1115,7 +1115,12 @@ impl State {
                 self.niri.queue_redraw_all();
             }
             Action::FocusColumnLeftUnderMouse => {
-                if let Some((output, ws)) = self.niri.workspace_under_cursor(true) {
+                // Lens world: side-scrolling with the carousel settled on a remote
+                // output scrolls THAT output's active workspace (see the workspace
+                // up/down routing above).
+                if self.niri.layout.carousel_lens_focus_column(false) {
+                    self.niri.queue_redraw_all();
+                } else if let Some((output, ws)) = self.niri.workspace_under_cursor(true) {
                     let ws_id = ws.id();
                     let ws = {
                         let mut workspaces = self.niri.layout.workspaces_mut();
@@ -1143,7 +1148,9 @@ impl State {
                 self.niri.queue_redraw_all();
             }
             Action::FocusColumnRightUnderMouse => {
-                if let Some((output, ws)) = self.niri.workspace_under_cursor(true) {
+                if self.niri.layout.carousel_lens_focus_column(true) {
+                    self.niri.queue_redraw_all();
+                } else if let Some((output, ws)) = self.niri.workspace_under_cursor(true) {
                     let ws_id = ws.id();
                     let ws = {
                         let mut workspaces = self.niri.layout.workspaces_mut();

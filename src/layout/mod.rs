@@ -2979,27 +2979,7 @@ impl<W: LayoutElement> Layout<W> {
     /// Returns `false` (no-op) when `in_carousel_lens()` doesn't hold — the
     /// caller falls back to normal routing.
     pub fn carousel_lens_switch_workspace(&mut self, up: bool) -> bool {
-        if !self.in_carousel_lens() {
-            return false;
-        }
-
-        let rotation = self.carousel_rotation_target();
-        let target_output = {
-            let ring = self.carousel_ring();
-            let outputs = self.carousel_outputs();
-            let Some(&(target_idx, _)) = ring
-                .iter()
-                .find(|(_, ring_pos)| ring_pos.round() == rotation.round())
-            else {
-                return false;
-            };
-            let Some(target_mon) = outputs.get(target_idx) else {
-                return false;
-            };
-            target_mon.output().clone()
-        };
-
-        let Some(mon) = self.monitor_for_output_mut(&target_output) else {
+        let Some(mon) = self.carousel_lens_monitor_mut() else {
             return false;
         };
         if up {
@@ -3008,6 +2988,43 @@ impl<W: LayoutElement> Layout<W> {
             mon.switch_workspace_down();
         }
         true
+    }
+
+    /// Horizontal column navigation on the lens'd remote output, mirroring
+    /// [`Self::carousel_lens_switch_workspace`]: side-scrolling with the lens
+    /// settled must scroll the remote's active workspace, not the workspace
+    /// under the cursor on the host.
+    pub fn carousel_lens_focus_column(&mut self, right: bool) -> bool {
+        let Some(mon) = self.carousel_lens_monitor_mut() else {
+            return false;
+        };
+        let ws = mon.active_workspace();
+        if right {
+            ws.focus_right();
+        } else {
+            ws.focus_left();
+        }
+        true
+    }
+
+    /// The monitor the settled lens is showing, when `in_carousel_lens()`
+    /// holds (rotation settled on a non-host ring member).
+    fn carousel_lens_monitor_mut(&mut self) -> Option<&mut Monitor<W>> {
+        if !self.in_carousel_lens() {
+            return None;
+        }
+
+        let rotation = self.carousel_rotation_target();
+        let target_output = {
+            let ring = self.carousel_ring();
+            let outputs = self.carousel_outputs();
+            let &(target_idx, _) = ring
+                .iter()
+                .find(|(_, ring_pos)| ring_pos.round() == rotation.round())?;
+            outputs.get(target_idx)?.output().clone()
+        };
+
+        self.monitor_for_output_mut(&target_output)
     }
 
     #[cfg(test)]

@@ -4591,6 +4591,32 @@ fn lens_routes_workspace_switch_to_remote_monitor() {
 
     assert!(layout.carousel_lens_switch_workspace(true));
     assert_eq!(ws_idx(&layout, &b), 0, "remote workspace switched back up");
+
+    // Column navigation routes to the lens'd remote too (2026-08-04 round 2:
+    // side-scrolling was still hitting the workspace under the cursor).
+    layout.add_window(
+        TestWindow::new(TestWindowParams::new(2)),
+        AddWindowTarget::Output(&b),
+        None,
+        None,
+        false,
+        false,
+        ActivateWindow::No,
+    );
+    let col_idx = |layout: &Layout<TestWindow>, out: &Output| {
+        layout
+            .monitors()
+            .find(|m| m.output() == out)
+            .unwrap()
+            .active_workspace_ref()
+            .scrolling()
+            .active_column_idx()
+    };
+    assert_eq!(col_idx(&layout, &b), 0);
+    assert!(layout.carousel_lens_focus_column(true));
+    assert_eq!(col_idx(&layout, &b), 1, "remote column focused right");
+    assert!(layout.carousel_lens_focus_column(false));
+    assert_eq!(col_idx(&layout, &b), 0, "remote column focused back left");
 }
 
 #[test]

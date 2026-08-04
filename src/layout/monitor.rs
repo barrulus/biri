@@ -2017,15 +2017,15 @@ impl<W: LayoutElement> Monitor<W> {
     /// ignoring its inherited overview zoom. Elements are positioned in this monitor's
     /// own view space; the caller relocates/crops them onto the host output.
     ///
-    /// Every pushed element is additionally cropped to ITS OWN workspace's render-geo box (see
-    /// the per-workspace crop below). This is the sole caller-visible difference from
-    /// `render_workspaces`, and is safe only because this method has exactly one caller
-    /// (`Niri::update_panel_sources`, the carousel panel prepass): the prepass pins the baked
-    /// texture's extent to this monitor's view box via a backdrop element (that box is what
-    /// `carousel_focus_jump`'s uv mapping and the panel shader's sampling both assume), so
-    /// off-view scrolling columns and any other content that would otherwise overflow a
-    /// workspace's box must not be allowed to inflate the `OffscreenBuffer`'s
-    /// encompassing-extent sizing beyond it.
+    /// Every pushed element is additionally cropped to its workspace's STRIP: the workspace
+    /// render-geo box vertically, widened to the full view box horizontally (side-scrolled
+    /// columns are visible in the live overview, so they must be in the bake too). This is the
+    /// sole caller-visible difference from `render_workspaces`, and is safe only because this
+    /// method has exactly one caller (`Niri::update_panel_sources`, the carousel panel prepass):
+    /// the prepass pins the baked texture's extent to this monitor's view box via a backdrop
+    /// element (that box is what `carousel_focus_jump`'s uv mapping and the panel shader's
+    /// sampling both assume), and the strip crop keeps any remaining overflow from inflating
+    /// the `OffscreenBuffer`'s encompassing-extent sizing beyond it.
     ///
     /// This crop uses `self.scale` (the TARGET monitor's own scale, this method's `self`) to bake
     /// `geo_phys`'s physical crop bounds below. The prepass's background/layer-shell elements
@@ -2084,11 +2084,25 @@ impl<W: LayoutElement> Monitor<W> {
             )
         };
 
+        let view_phys = Rectangle::from_size(self.view_size).to_physical_precise_round(scale);
+
         for (ws, geo) in self.workspaces_with_render_geo_at_zoom(zoom) {
             // This workspace's own render-geo box, in the same physical coordinate space the
             // element lands in after `scale_relocate` below (mirrors `scale_relocate_crop` in
             // niri.rs, which crops layer-shell/background elements the same way).
             let geo_phys = geo.to_physical_precise_round(scale);
+
+            // Horizontally the crop widens to the full view box: the live overview shows
+            // columns scrolled beyond the workspace box (`crop_bounds` above is horizontally
+            // infinite), so the panel bake must too, or side-scrolled columns vanish from the
+            // panels (2026-08-04 hardware finding, round 2). The offscreen extent stays pinned
+            // to the view box by the prepass's backdrop element, so this can't inflate it.
+            // Vertically the crop stays the workspace strip so stacked workspaces can't bleed
+            // into each other.
+            let strip_phys = Rectangle::new(
+                Point::from((view_phys.loc.x, geo_phys.loc.y)),
+                Size::from((view_phys.size.w, geo_phys.size.h)),
+            );
 
             // Macro instead of closure because ws and insert hint have different elem types.
             macro_rules! push {
@@ -2099,7 +2113,7 @@ impl<W: LayoutElement> Monitor<W> {
                             let elem = MonitorInnerRenderElement::from(elem);
                             let elem = scale_relocate(geo, elem);
                             if let Some(elem) =
-                                CropRenderElement::from_element(elem, scale, geo_phys)
+                                CropRenderElement::from_element(elem, scale, strip_phys)
                             {
                                 push(elem);
                             }
