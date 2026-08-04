@@ -1501,14 +1501,24 @@ impl State {
                 self.niri.queue_redraw_all();
             }
             Action::FocusWorkspaceDown => {
-                self.niri.layout.switch_workspace_down();
-                self.maybe_warp_cursor_to_focus();
-                self.niri.layer_shell_on_demand_focus = None;
-                // FIXME: granular
-                self.niri.queue_redraw_all();
+                // Lens world: with the carousel settled on a remote output, vertical
+                // workspace navigation drives THAT output's workspaces (shown in the
+                // centered lens panel), not the host's. No cursor warp: focus doesn't
+                // move until the final window selection.
+                if self.niri.layout.carousel_lens_switch_workspace(false) {
+                    self.niri.queue_redraw_all();
+                } else {
+                    self.niri.layout.switch_workspace_down();
+                    self.maybe_warp_cursor_to_focus();
+                    self.niri.layer_shell_on_demand_focus = None;
+                    // FIXME: granular
+                    self.niri.queue_redraw_all();
+                }
             }
             Action::FocusWorkspaceDownUnderMouse => {
-                if let Some(output) = self.niri.output_under_cursor() {
+                if self.niri.layout.carousel_lens_switch_workspace(false) {
+                    self.niri.queue_redraw_all();
+                } else if let Some(output) = self.niri.output_under_cursor() {
                     if let Some(mon) = self.niri.layout.monitor_for_output_mut(&output) {
                         mon.switch_workspace_down();
                         self.maybe_warp_cursor_to_focus();
@@ -1518,14 +1528,20 @@ impl State {
                 }
             }
             Action::FocusWorkspaceUp => {
-                self.niri.layout.switch_workspace_up();
-                self.maybe_warp_cursor_to_focus();
-                self.niri.layer_shell_on_demand_focus = None;
-                // FIXME: granular
-                self.niri.queue_redraw_all();
+                if self.niri.layout.carousel_lens_switch_workspace(true) {
+                    self.niri.queue_redraw_all();
+                } else {
+                    self.niri.layout.switch_workspace_up();
+                    self.maybe_warp_cursor_to_focus();
+                    self.niri.layer_shell_on_demand_focus = None;
+                    // FIXME: granular
+                    self.niri.queue_redraw_all();
+                }
             }
             Action::FocusWorkspaceUpUnderMouse => {
-                if let Some(output) = self.niri.output_under_cursor() {
+                if self.niri.layout.carousel_lens_switch_workspace(true) {
+                    self.niri.queue_redraw_all();
+                } else if let Some(output) = self.niri.output_under_cursor() {
                     if let Some(mon) = self.niri.layout.monitor_for_output_mut(&output) {
                         mon.switch_workspace_up();
                         self.maybe_warp_cursor_to_focus();
@@ -3051,12 +3067,14 @@ impl State {
 
                     if let Some((ring_pos, uv)) = hit {
                         let rotation = self.niri.layout.carousel_rotation();
-                        let settled = rotation == rotation.round()
-                            && !self.niri.layout.carousel_rotating();
+                        let settled =
+                            rotation == rotation.round() && !self.niri.layout.carousel_rotating();
                         let target = self.niri.layout.carousel_rotation_target();
 
                         if !(settled && ring_pos.round() == target.round()) {
-                            self.niri.layout.carousel_request_rotate_to(ring_pos.round());
+                            self.niri
+                                .layout
+                                .carousel_request_rotate_to(ring_pos.round());
                             // FIXME: granular.
                             self.niri.queue_redraw_all();
                             return;
