@@ -4042,6 +4042,27 @@ fn consolidated_mode_scopes_overview_to_active_output() {
     let mons = layout.monitors().collect::<Vec<_>>();
     assert!(mons[0].overview_open, "active output enters overview");
     assert!(!mons[1].overview_open, "non-active output stays live");
+
+    // The visual zoom is driven by `overview_progress`, not `overview_open`:
+    // the sibling must also be denied progress or it still zooms into the
+    // overview on screen (the 2026-08-04 hardware finding).
+    let mons = layout.monitors().collect::<Vec<_>>();
+    assert!(
+        mons[0].overview_progress_value().is_some(),
+        "active output gets overview progress"
+    );
+    assert_eq!(
+        None,
+        mons[1].overview_progress_value(),
+        "non-active output gets no overview progress"
+    );
+
+    // `advance_animations` re-pushes progress every frame — it must keep
+    // withholding it from the sibling too.
+    layout.advance_animations();
+    let mons = layout.monitors().collect::<Vec<_>>();
+    assert!(mons[0].overview_progress_value().is_some());
+    assert_eq!(None, mons[1].overview_progress_value());
 }
 
 #[test]
@@ -4110,11 +4131,15 @@ fn removing_active_output_refreshes_overview_state() {
     // Active monitor shifted (index-shift in `remove_output`); overview
     // participation must have been recomputed for whichever monitor is
     // active now, not left stale from before the removal.
-    let active = layout.active_output().cloned().expect("an output remains active");
+    let active = layout
+        .active_output()
+        .cloned()
+        .expect("an output remains active");
     for mon in layout.monitors() {
         let should_be_open = mon.output() == &active;
         assert_eq!(
-            mon.overview_open, should_be_open,
+            mon.overview_open,
+            should_be_open,
             "overview_open for {:?} should match whether it is now active",
             mon.output_name()
         );
@@ -4186,6 +4211,56 @@ fn carousel_reveal_tracks_zoom_threshold() {
 
     layout.set_overview_zoom_for_test(0.05);
     assert_eq!(layout.carousel_reveal(), 1.);
+
+    // The assembled gallery is the terminal state of the zoom-out gesture:
+    // the zoom target itself must clamp at assembled_zoom, so the live host
+    // strip can't keep shrinking under the frozen gallery (the 2026-08-04
+    // hardware finding, screenshot -5).
+    assert_eq!(
+        layout.active_monitor_ref().unwrap().overview_zoom_target(),
+        0.15,
+        "zoom target clamps at assembled_zoom in consolidated mode"
+    );
+}
+
+#[test]
+fn zoom_target_unclamped_without_consolidated_carousel() {
+    let mut layout = Layout::<TestWindow>::default();
+
+    let output = Output::new(
+        "out".to_owned(),
+        PhysicalProperties {
+            size: Size::from((1280, 720)),
+            subpixel: Subpixel::Unknown,
+            make: String::new(),
+            model: String::new(),
+            serial_number: String::new(),
+        },
+    );
+    output.change_current_state(
+        Some(Mode {
+            size: Size::from((1280, 720)),
+            refresh: 60000,
+        }),
+        None,
+        None,
+        None,
+    );
+    output.user_data().insert_if_missing(|| OutputName {
+        connector: "out".to_owned(),
+        make: None,
+        model: None,
+        serial: None,
+    });
+    layout.add_output(output, None, false);
+
+    layout.toggle_overview();
+    layout.set_overview_zoom_for_test(0.05);
+    assert_eq!(
+        layout.active_monitor_ref().unwrap().overview_zoom_target(),
+        0.05,
+        "no clamp when the carousel isn't configured"
+    );
 }
 
 #[test]
@@ -4330,7 +4405,8 @@ fn carousel_outputs_includes_host_and_reset_centers_on_active() {
     ); // host included
 
     layout.reset_carousel_center();
-    assert_eq!(layout.carousel_rotation_target(), 0.0); // centered (rotation snapped to host) on active host "A"
+    assert_eq!(layout.carousel_rotation_target(), 0.0); // centered (rotation snapped to host) on
+                                                        // active host "A"
 }
 
 #[test]
@@ -4417,6 +4493,104 @@ fn rotate_carousel_wraps_over_ring_positions() {
     assert_eq!(layout.carousel_rotation_target(), 0.0); // wrapped to leftmost
     layout.rotate_carousel(-1);
     assert_eq!(layout.carousel_rotation_target(), 2.0); // wrapped backward to rightmost
+}
+
+#[test]
+fn lens_routes_workspace_switch_to_remote_monitor() {
+    // Scrolling workspaces while the lens is settled on a remote output must
+    // switch workspaces on THAT monitor, not the host (2026-08-04 hardware
+    // finding, screenshot -4).
+    fn make_output(name: &str, x: i32) -> Output {
+        let output = Output::new(
+            name.to_owned(),
+            PhysicalProperties {
+                size: Size::from((1280, 720)),
+                subpixel: Subpixel::Unknown,
+                make: String::new(),
+                model: String::new(),
+                serial_number: String::new(),
+            },
+        );
+        output.change_current_state(
+            Some(Mode {
+                size: Size::from((1280, 720)),
+                refresh: 60000,
+            }),
+            None,
+            None,
+            Some(Point::from((x, 0))),
+        );
+        output.user_data().insert_if_missing(|| OutputName {
+            connector: name.to_owned(),
+            make: None,
+            model: None,
+            serial: None,
+        });
+        output
+    }
+
+    let mut options = Options::default();
+    options.overview.consolidated_carousel = Some(niri_config::ConsolidatedCarousel {
+        reveal_zoom: 0.4,
+        assembled_zoom: 0.15,
+    });
+    let mut layout = Layout::<TestWindow>::with_options(Clock::with_time(Duration::ZERO), options);
+
+    let a = make_output("A", 0);
+    let b = make_output("B", 1280);
+    layout.add_output(a.clone(), None, false);
+    layout.add_output(b.clone(), None, false);
+
+    layout.add_window(
+        TestWindow::new(TestWindowParams::new(0)),
+        AddWindowTarget::Output(&a),
+        None,
+        None,
+        false,
+        false,
+        ActivateWindow::default(),
+    );
+    layout.add_window(
+        TestWindow::new(TestWindowParams::new(1)),
+        AddWindowTarget::Output(&b),
+        None,
+        None,
+        false,
+        false,
+        ActivateWindow::default(),
+    );
+    layout.focus_output(&a);
+
+    layout.toggle_overview();
+    layout.clock.set_complete_instantly(true);
+    layout.advance_animations();
+
+    // Not lens'd (settled on host): falls back to normal routing.
+    assert!(!layout.carousel_lens_switch_workspace(false));
+
+    // Rotate to the remote and settle.
+    layout.rotate_carousel(1);
+    layout.advance_animations();
+    layout.clock.set_complete_instantly(false);
+    assert!(layout.in_carousel_lens());
+
+    let ws_idx = |layout: &Layout<TestWindow>, out: &Output| {
+        layout
+            .monitors()
+            .find(|m| m.output() == out)
+            .unwrap()
+            .active_workspace_idx()
+    };
+    assert_eq!(ws_idx(&layout, &a), 0);
+    assert_eq!(ws_idx(&layout, &b), 0);
+
+    // Lens'd on B: the switch lands on B, host A stays put.
+    assert!(layout.carousel_lens_switch_workspace(false));
+    assert_eq!(ws_idx(&layout, &a), 0, "host workspaces unmoved");
+    assert_eq!(ws_idx(&layout, &b), 1, "remote workspace switched down");
+
+    assert!(layout.carousel_lens_switch_workspace(true));
+    assert_eq!(ws_idx(&layout, &b), 0, "remote workspace switched back up");
 }
 
 #[test]
@@ -4903,7 +5077,8 @@ fn cross_output_activation_refreshes_overview_state() {
     for mon in layout.monitors() {
         let should_be_open = mon.output() == &active;
         assert_eq!(
-            mon.overview_open, should_be_open,
+            mon.overview_open,
+            should_be_open,
             "overview_open for {:?} should match whether it is now active",
             mon.output_name()
         );
@@ -5129,10 +5304,7 @@ fn active_output_change_restores_stranded_pullback_zoom() {
     assert!(layout.carousel_pullback_is_active());
 
     let prev_active = layout.active_output().cloned().unwrap();
-    let prev_zoom_target = layout
-        .active_monitor_ref()
-        .unwrap()
-        .overview_zoom_target();
+    let prev_zoom_target = layout.active_monitor_ref().unwrap().overview_zoom_target();
     // The pull-back drove it to assembled zoom, not the 0.5 the user parked.
     assert_eq!(prev_zoom_target, 0.15);
 
@@ -5157,7 +5329,11 @@ fn active_output_change_restores_stranded_pullback_zoom() {
 /// point near the workspace center, and `communicate()` alone is a no-op until either
 /// `forced_size` or `requested_size` (the latter only set once the real column-width layout pass
 /// runs) is populated.
-fn set_window_size_and_communicate(layout: &mut Layout<TestWindow>, id: usize, size: Size<i32, Logical>) {
+fn set_window_size_and_communicate(
+    layout: &mut Layout<TestWindow>,
+    id: usize,
+    size: Size<i32, Logical>,
+) {
     if let Some((_, w)) = layout.windows().find(|(_, w)| *w.id() == id) {
         w.0.forced_size.set(Some(size));
     }
@@ -5206,7 +5382,10 @@ fn focus_jump_activates_window_on_settled_remote_output() {
     assert!(!layout.is_overview_open());
     assert_eq!(layout.active_output(), Some(&b));
     assert_eq!(
-        layout.active_monitor_ref().and_then(|m| m.active_window()).map(|w| *w.id()),
+        layout
+            .active_monitor_ref()
+            .and_then(|m| m.active_window())
+            .map(|w| *w.id()),
         Some(1)
     );
 }
@@ -5251,7 +5430,10 @@ fn focus_jump_to_focused_uses_targets_active_window_skipping_uv() {
     assert!(!layout.is_overview_open());
     assert_eq!(layout.active_output(), Some(&b));
     assert_eq!(
-        layout.active_monitor_ref().and_then(|m| m.active_window()).map(|w| *w.id()),
+        layout
+            .active_monitor_ref()
+            .and_then(|m| m.active_window())
+            .map(|w| *w.id()),
         Some(1)
     );
 }

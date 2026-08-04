@@ -1421,10 +1421,22 @@ impl<W: LayoutElement> Monitor<W> {
         self.overview_zoom_target
     }
 
+    /// The assembled carousel gallery is the terminal state of the zoom-out
+    /// gesture (see the 2026-08-01 redesign spec): with a consolidated
+    /// carousel configured, the zoom target never goes below `assembled-zoom`.
+    /// The reveal already clamps at 1 there, so zooming further would only
+    /// shrink the live center strip out from under the frozen gallery.
+    fn clamp_zoom_target(&self, target: f64) -> f64 {
+        match self.base_options.overview.consolidated_carousel {
+            Some(cc) => target.max(cc.assembled_zoom),
+            None => target,
+        }
+    }
+
     /// Set zoom target without animation (for use before opening overview,
     /// where the open animation handles the visual transition).
     pub fn set_zoom_target_no_anim(&mut self, target: f64) {
-        self.overview_zoom_target = target;
+        self.overview_zoom_target = self.clamp_zoom_target(target);
         self.overview_zoom_anim = None;
     }
 
@@ -1436,7 +1448,7 @@ impl<W: LayoutElement> Monitor<W> {
     /// Reset zoom to config default - call when overview closes.
     /// This is instant (no animation) since the overview is closing.
     pub fn reset_overview_zoom(&mut self, default_zoom: f64) {
-        self.overview_zoom_target = default_zoom;
+        self.overview_zoom_target = self.clamp_zoom_target(default_zoom);
         self.overview_zoom_anim = None;
         self.overview_zoom_preset_idx = 0;
     }
@@ -1526,6 +1538,7 @@ impl<W: LayoutElement> Monitor<W> {
 
     /// Start or retarget a zoom animation.
     pub(super) fn animate_zoom_to(&mut self, new_target: f64, config: niri_config::Animation) {
+        let new_target = self.clamp_zoom_target(new_target);
         let current = self.overview_zoom_value();
         self.overview_zoom_target = new_target;
 
@@ -1803,21 +1816,23 @@ impl<W: LayoutElement> Monitor<W> {
     /// Like [`Self::window_under`], but resolves the workspace/window hit at a caller-supplied
     /// `zoom` (via [`Self::workspaces_with_render_geo_at_zoom`]) instead of this monitor's own
     /// live `overview_zoom()`. Used for the carousel lens focus-jump, which hit-tests a *remote*
-    /// monitor's content baked at the panel prepass's `fill_zoom`, not this monitor's local
-    /// overview state.
+    /// monitor's content baked at the HOST's live overview zoom (the panel prepass's bake zoom),
+    /// not this monitor's local overview state.
     pub fn window_under_at_zoom(
         &self,
         zoom: f64,
         pos: Point<f64, Logical>,
     ) -> Option<(&W, HitType)> {
-        let (ws, geo) = self.workspaces_with_render_geo_at_zoom(zoom).find_map(|(ws, geo)| {
-            // Extend width to entire output, mirroring `Self::workspace_under`.
-            let loc = Point::from((0., geo.loc.y));
-            let size = Size::from((self.view_size.w, geo.size.h));
-            let bounds = Rectangle::new(loc, size);
+        let (ws, geo) = self
+            .workspaces_with_render_geo_at_zoom(zoom)
+            .find_map(|(ws, geo)| {
+                // Extend width to entire output, mirroring `Self::workspace_under`.
+                let loc = Point::from((0., geo.loc.y));
+                let size = Size::from((self.view_size.w, geo.size.h));
+                let bounds = Rectangle::new(loc, size);
 
-            bounds.contains(pos).then_some((ws, geo))
-        })?;
+                bounds.contains(pos).then_some((ws, geo))
+            })?;
 
         let pos_within_workspace = (pos - geo.loc).downscale(zoom);
         let (win, hit) = ws.window_under(pos_within_workspace)?;
@@ -2005,12 +2020,12 @@ impl<W: LayoutElement> Monitor<W> {
     /// Every pushed element is additionally cropped to ITS OWN workspace's render-geo box (see
     /// the per-workspace crop below). This is the sole caller-visible difference from
     /// `render_workspaces`, and is safe only because this method has exactly one caller
-    /// (`Niri::update_panel_sources`, the carousel panel prepass): the prepass needs the baked
-    /// texture's encompassing extent to equal the union of workspace render-geo boxes exactly
-    /// (that union is what `carousel_focus_jump`'s uv mapping and the panel shader's sampling
-    /// both assume), so off-view scrolling columns and any other content that would otherwise
-    /// overflow a workspace's box must not be allowed to inflate the `OffscreenBuffer`'s
-    /// encompassing-extent sizing.
+    /// (`Niri::update_panel_sources`, the carousel panel prepass): the prepass pins the baked
+    /// texture's extent to this monitor's view box via a backdrop element (that box is what
+    /// `carousel_focus_jump`'s uv mapping and the panel shader's sampling both assume), so
+    /// off-view scrolling columns and any other content that would otherwise overflow a
+    /// workspace's box must not be allowed to inflate the `OffscreenBuffer`'s
+    /// encompassing-extent sizing beyond it.
     ///
     /// This crop uses `self.scale` (the TARGET monitor's own scale, this method's `self`) to bake
     /// `geo_phys`'s physical crop bounds below. The prepass's background/layer-shell elements
@@ -2083,7 +2098,8 @@ impl<W: LayoutElement> Monitor<W> {
                         if let Some(elem) = elem {
                             let elem = MonitorInnerRenderElement::from(elem);
                             let elem = scale_relocate(geo, elem);
-                            if let Some(elem) = CropRenderElement::from_element(elem, scale, geo_phys)
+                            if let Some(elem) =
+                                CropRenderElement::from_element(elem, scale, geo_phys)
                             {
                                 push(elem);
                             }

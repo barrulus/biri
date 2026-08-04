@@ -779,7 +779,12 @@ impl<W: LayoutElement> Layout<W> {
         }
     }
 
-    pub fn add_output(&mut self, output: Output, layout_config: Option<LayoutPart>, isolated: bool) {
+    pub fn add_output(
+        &mut self,
+        output: Output,
+        layout_config: Option<LayoutPart>,
+        isolated: bool,
+    ) {
         self.monitor_set = match mem::take(&mut self.monitor_set) {
             MonitorSet::Normal {
                 mut monitors,
@@ -855,9 +860,18 @@ impl<W: LayoutElement> Layout<W> {
                     layout_config,
                     isolated,
                 );
-                // Isolated outputs never enter the overview.
-                monitor.overview_open = self.overview_open && !isolated;
-                monitor.set_overview_progress(self.overview_progress.as_ref());
+                // Isolated outputs never enter the overview. In consolidated mode a
+                // hotplugged output is never the active (host) monitor, so it joins on
+                // its live desktop: no overview flag and no progress (see
+                // `set_monitors_overview_state`).
+                let consolidated = self.options.overview.consolidated_carousel.is_some();
+                monitor.overview_open = self.overview_open && !isolated && !consolidated;
+                let progress = if consolidated {
+                    None
+                } else {
+                    self.overview_progress.as_ref()
+                };
+                monitor.set_overview_progress(progress);
                 monitors.push(monitor);
 
                 MonitorSet::Normal {
@@ -1609,8 +1623,9 @@ impl<W: LayoutElement> Layout<W> {
                         monitor_changed = *active_monitor_idx != monitor_idx;
                         *active_monitor_idx = monitor_idx;
 
-                        // If currently in the middle of a vertical swipe between the target workspace
-                        // and some other, don't switch the workspace.
+                        // If currently in the middle of a vertical swipe between the target
+                        // workspace and some other, don't switch the
+                        // workspace.
                         match &mon.workspace_switch {
                             Some(WorkspaceSwitch::Gesture(gesture))
                                 if gesture.current_idx.floor() == workspace_idx as f64
@@ -1663,8 +1678,9 @@ impl<W: LayoutElement> Layout<W> {
                         monitor_changed = *active_monitor_idx != monitor_idx;
                         *active_monitor_idx = monitor_idx;
 
-                        // If currently in the middle of a vertical swipe between the target workspace
-                        // and some other, don't switch the workspace.
+                        // If currently in the middle of a vertical swipe between the target
+                        // workspace and some other, don't switch the
+                        // workspace.
                         match &mon.workspace_switch {
                             Some(WorkspaceSwitch::Gesture(gesture))
                                 if gesture.current_idx.floor() == workspace_idx as f64
@@ -1964,7 +1980,11 @@ impl<W: LayoutElement> Layout<W> {
         let Some(active) = self.active_output().cloned() else {
             return;
         };
-        if self.carousel_outputs().iter().any(|m| m.output() == &active) {
+        if self
+            .carousel_outputs()
+            .iter()
+            .any(|m| m.output() == &active)
+        {
             self.carousel_rotation = 0.;
             self.carousel_rotation_anim = None;
         }
@@ -2067,15 +2087,13 @@ impl<W: LayoutElement> Layout<W> {
     /// is already in flight — just replaces its target. Behavior depends on
     /// the in-flight pullback's phase:
     ///
-    /// - `Rotate`: retargets the rotation animation immediately so it heads
-    ///   straight for the new target instead of settling on the stale one
-    ///   first.
-    /// - `ZoomIn`: the zoom is already heading back down to `restore_zoom`,
-    ///   past the point where a rotation could still happen. Reset the
-    ///   phase to `ZoomOut` (keeping the original `restore_zoom` so it still
-    ///   returns to where the user parked their zoom) and retarget the zoom
-    ///   back out to `assembled_zoom`, otherwise the request would be
-    ///   silently dropped once the ZoomIn leg completes.
+    /// - `Rotate`: retargets the rotation animation immediately so it heads straight for the new
+    ///   target instead of settling on the stale one first.
+    /// - `ZoomIn`: the zoom is already heading back down to `restore_zoom`, past the point where a
+    ///   rotation could still happen. Reset the phase to `ZoomOut` (keeping the original
+    ///   `restore_zoom` so it still returns to where the user parked their zoom) and retarget the
+    ///   zoom back out to `assembled_zoom`, otherwise the request would be silently dropped once
+    ///   the ZoomIn leg completes.
     /// - `ZoomOut`: already heading the right way; nothing else to do.
     fn start_or_retarget_pullback(&mut self, target: f64) {
         if let Some(pullback) = self.carousel_pullback.as_mut() {
@@ -2864,7 +2882,6 @@ impl<W: LayoutElement> Layout<W> {
         ((cc.reveal_zoom - zoom) / (cc.reveal_zoom - cc.assembled_zoom)).clamp(0., 1.)
     }
 
-
     /// Overview is open, the carousel is configured, and the rotation has
     /// settled (no animation in flight) on a non-host output.
     pub fn in_carousel_lens(&self) -> bool {
@@ -2883,23 +2900,13 @@ impl<W: LayoutElement> Layout<W> {
     /// mapped point (a click on the panel's backdrop/gaps).
     ///
     /// uv -> content-point mapping mirrors `Niri::update_panel_sources`'s recipe exactly: the
-    /// panel's texture is the target's own overview baked at `fill_zoom` (same
-    /// `min(host_view/target_view axis ratios) * host_scale/target_scale` letterbox formula, computed
-    /// against `host`'s own view — `host` is `active_output()`, matching the prepass's call-site
-    /// gate) over the target's own workspace geometry
-    /// (`Monitor::workspaces_with_render_geo_at_zoom`), rendered unshifted (target's own origin,
-    /// no host-centering relocate). The panel shader then samples that whole texture across
-    /// `[0,1]^2` with no further letterbox/crop of its own (see `PanelRenderElement::new`, which
-    /// wires `niri_panel_tex` straight to the quad's homography-derived UV, and
-    /// `OffscreenBuffer::render`, whose texture IS the encompassing bounding box of the baked
-    /// elements — background, layer-shell, and windows all get cropped or sized to their
-    /// workspace's render-geo box, so that bounding box is exactly the union of the visible
-    /// workspaces' `workspaces_with_render_geo_at_zoom(fill_zoom)` rectangles, NOT the target's
-    /// full view box, which the two differ whenever `fill_zoom != 1`).
-    ///
-    /// So: `content_point = bbox.loc + uv * bbox.size`, where `bbox` is that union — NOT the
-    /// naive `uv * target_view` (which only agrees with this at `uv == (0.5, 0.5)`, since the
-    /// workspace box is centered within the target's view).
+    /// panel's texture is the target's own overview baked at the host's live overview zoom
+    /// (`Layout::overview_zoom` — `host` is `active_output()`, matching the prepass's call-site
+    /// gate), rendered unshifted (target's own origin, no relocate) with its extent pinned to the
+    /// target's FULL view box by the backdrop element. The panel shader samples that whole
+    /// texture across `[0,1]^2` with no further letterbox/crop of its own (the quad itself is
+    /// letterboxed to the target view's aspect in `render_inner`), so:
+    /// `content_point = uv * target_view`, hit-tested at the same live zoom.
     pub fn carousel_focus_jump(&mut self, uv: (f64, f64)) -> bool {
         self.carousel_focus_jump_at(Some(uv))
     }
@@ -2916,21 +2923,20 @@ impl<W: LayoutElement> Layout<W> {
             return false;
         }
 
-        let Some(host) = self.active_output().cloned() else {
+        if self.active_output().is_none() {
             return false;
-        };
-        let Some(host_mon) = self.monitor_for_output(&host) else {
-            return false;
-        };
-        let host_view = host_mon.view_size();
-        let host_scale = host.current_scale().fractional_scale();
+        }
+        // Same zoom the panel prepass bakes with (the host is the active
+        // output, so this is the host's live overview zoom).
+        let bake_zoom = self.overview_zoom();
 
         let rotation = self.carousel_rotation_target();
         let ring = self.carousel_ring();
         let outputs = self.carousel_outputs();
-        let Some(&(target_idx, _)) = ring.iter().find(|(_, ring_pos)| {
-            ring_pos.round() == rotation.round()
-        }) else {
+        let Some(&(target_idx, _)) = ring
+            .iter()
+            .find(|(_, ring_pos)| ring_pos.round() == rotation.round())
+        else {
             return false;
         };
         let Some(target_mon) = outputs.get(target_idx) else {
@@ -2942,24 +2948,11 @@ impl<W: LayoutElement> Layout<W> {
         let window_id = match uv {
             Some((u, v)) => {
                 let target_view = target_mon.view_size();
-                let target_scale = target_mon.scale().fractional_scale();
 
-                let fit = (host_view.w / target_view.w).min(host_view.h / target_view.h);
-                let fill_zoom = fit * (host_scale / target_scale);
-
-                let bbox = target_mon
-                    .workspaces_with_render_geo_at_zoom(fill_zoom)
-                    .map(|(_ws, geo)| geo)
-                    .reduce(|a, b| a.merge(b));
-                let Some(bbox) = bbox else {
-                    return false;
-                };
-
-                let point = Point::from((
-                    bbox.loc.x + u * bbox.size.w,
-                    bbox.loc.y + v * bbox.size.h,
-                ));
-                let Some((win, _hit)) = target_mon.window_under_at_zoom(fill_zoom, point) else {
+                // Texture extent == the target's full view box (see the doc above), so uv maps
+                // straight onto it.
+                let point = Point::from((u * target_view.w, v * target_view.h));
+                let Some((win, _hit)) = target_mon.window_under_at_zoom(bake_zoom, point) else {
                     return false;
                 };
                 win.id().clone()
@@ -2975,6 +2968,45 @@ impl<W: LayoutElement> Layout<W> {
         self.activate_window(&window_id);
         self.focus_output(&target_output);
         self.close_overview();
+        true
+    }
+
+    /// Vertical workspace navigation while the carousel lens is settled on a
+    /// remote output: the lens world's stage is that remote monitor, so
+    /// workspace up/down must switch workspaces THERE, not on the physical
+    /// monitor under the cursor (the 2026-08-04 hardware finding, screenshot
+    /// -4: scrolling moved the host's workspaces behind an unmoving lens).
+    /// Returns `false` (no-op) when `in_carousel_lens()` doesn't hold — the
+    /// caller falls back to normal routing.
+    pub fn carousel_lens_switch_workspace(&mut self, up: bool) -> bool {
+        if !self.in_carousel_lens() {
+            return false;
+        }
+
+        let rotation = self.carousel_rotation_target();
+        let target_output = {
+            let ring = self.carousel_ring();
+            let outputs = self.carousel_outputs();
+            let Some(&(target_idx, _)) = ring
+                .iter()
+                .find(|(_, ring_pos)| ring_pos.round() == rotation.round())
+            else {
+                return false;
+            };
+            let Some(target_mon) = outputs.get(target_idx) else {
+                return false;
+            };
+            target_mon.output().clone()
+        };
+
+        let Some(mon) = self.monitor_for_output_mut(&target_output) else {
+            return false;
+        };
+        if up {
+            mon.switch_workspace_up();
+        } else {
+            mon.switch_workspace_down();
+        }
         true
     }
 
@@ -3132,17 +3164,23 @@ impl<W: LayoutElement> Layout<W> {
             if consolidated && !carousel_settled_home {
                 if monitor.isolated {
                     assert!(!monitor.overview_open);
+                    assert_eq!(None, monitor.overview_progress_value());
                 }
             } else {
                 let expect_open = self.overview_open
                     && !monitor.isolated
                     && (!consolidated || idx == active_monitor_idx);
                 assert_eq!(expect_open, monitor.overview_open);
+                // Progress mirrors the same gating: isolated outputs never get it,
+                // and in consolidated mode only the active (host) monitor does.
+                let expect_progress =
+                    if monitor.isolated || (consolidated && idx != active_monitor_idx) {
+                        None
+                    } else {
+                        self.overview_progress.as_ref().map(|p| p.value())
+                    };
+                assert_eq!(expect_progress, monitor.overview_progress_value());
             }
-            assert_eq!(
-                self.overview_progress.as_ref().map(|p| p.value()),
-                monitor.overview_progress_value()
-            );
 
             monitor.verify_invariants();
 
@@ -3377,9 +3415,22 @@ impl<W: LayoutElement> Layout<W> {
         }
 
         match &mut self.monitor_set {
-            MonitorSet::Normal { monitors, .. } => {
-                for mon in monitors {
-                    mon.set_overview_progress(self.overview_progress.as_ref());
+            MonitorSet::Normal {
+                monitors,
+                active_monitor_idx,
+                ..
+            } => {
+                let consolidated = self.options.overview.consolidated_carousel.is_some();
+                for (idx, mon) in monitors.iter_mut().enumerate() {
+                    // Consolidated mode: only the active (host) monitor gets overview
+                    // progress; siblings stay on their live desktops (see
+                    // `set_monitors_overview_state`).
+                    let progress = if consolidated && idx != *active_monitor_idx {
+                        None
+                    } else {
+                        self.overview_progress.as_ref()
+                    };
+                    mon.set_overview_progress(progress);
                     mon.advance_animations();
                 }
             }
@@ -3485,12 +3536,21 @@ impl<W: LayoutElement> Layout<W> {
             return;
         };
 
+        let consolidated = self.options.overview.consolidated_carousel.is_some();
         for (idx, mon) in monitors.iter_mut().enumerate() {
             if output.is_none_or(|output| mon.output == *output) {
                 let is_active = self.is_active
                     && idx == *active_monitor_idx
                     && !matches!(self.interactive_move, Some(InteractiveMoveState::Moving(_)));
-                mon.set_overview_progress(self.overview_progress.as_ref());
+                // Consolidated mode: only the active (host) monitor gets overview
+                // progress; siblings stay on their live desktops (see
+                // `set_monitors_overview_state`).
+                let progress = if consolidated && idx != *active_monitor_idx {
+                    None
+                } else {
+                    self.overview_progress.as_ref()
+                };
+                mon.set_overview_progress(progress);
                 mon.update_render_elements(is_active);
             }
         }
@@ -5363,7 +5423,16 @@ impl<W: LayoutElement> Layout<W> {
             // other physical output stays live.
             mon.overview_open =
                 overview_open && !mon.isolated && (!consolidated || idx == active_idx);
-            mon.set_overview_progress(self.overview_progress.as_ref());
+            // The visual zoom is driven by `overview_progress`, not `overview_open`
+            // (see `Monitor::set_overview_progress`), so in consolidated mode the
+            // progress must also be withheld from non-active monitors — otherwise
+            // sibling outputs still zoom into the overview visually.
+            let progress = if consolidated && idx != active_idx {
+                None
+            } else {
+                self.overview_progress.as_ref()
+            };
+            mon.set_overview_progress(progress);
         }
     }
 
