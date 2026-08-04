@@ -610,19 +610,19 @@ impl Drop for InRenderInnerGuard {
 /// Two-frame trace (buffers A/B, `flip` = scratch):
 ///
 /// * **Static frame** (`flip` = A, `elem` = Some(B-texture)): render into A diffs element states
-///   against A's tracker → no damage → the fresh `OffscreenRenderElement` (holding a clone of
-///   A's texture) is dropped immediately; `elem`, `generation` and `flip` are untouched. The
-///   published texture identity is therefore stable across static frames, so a host-side
-///   [`PanelRenderElement::update`] compare on `(source id, generation)` early-returns keeping
-///   its old clone — which is exactly the still-published B texture, not a stale one. A remains
-///   unique for the next render. Repeat indefinitely: zero publishes, zero host damage.
+///   against A's tracker → no damage → the fresh `OffscreenRenderElement` (holding a clone of A's
+///   texture) is dropped immediately; `elem`, `generation` and `flip` are untouched. The published
+///   texture identity is therefore stable across static frames, so a host-side
+///   [`PanelRenderElement::update`] compare on `(source id, generation)` early-returns keeping its
+///   old clone — which is exactly the still-published B texture, not a stale one. A remains unique
+///   for the next render. Repeat indefinitely: zero publishes, zero host damage.
 /// * **Damaged frame** (`flip` = A, `elem` = Some(B-texture)): render into A produces damage
 ///   (incremental, since A stayed unique) → publish `elem` = Some(A-texture), `generation` += 1,
-///   `flip` → B; the old B clone held here drops. The next render targets B, whose tracker last
-///   saw states from one publish earlier, so it produces catch-up damage and publishes again
-///   (one redundant publish per content change; the render after that targets the now up-to-date
-///   buffer and settles into the static case). During continuous animation this degenerates to
-///   the plain alternate-every-frame ping-pong, which is optimal anyway.
+///   `flip` → B; the old B clone held here drops. The next render targets B, whose tracker last saw
+///   states from one publish earlier, so it produces catch-up damage and publishes again (one
+///   redundant publish per content change; the render after that targets the now up-to-date buffer
+///   and settles into the static case). During continuous animation this degenerates to the plain
+///   alternate-every-frame ping-pong, which is optimal anyway.
 ///
 /// A host's retained [`PanelRenderElement`] may still hold a clone of the previously published
 /// texture until the host next redraws and `update()` swaps it (params differ via `generation`).
@@ -654,17 +654,15 @@ pub struct PanelSource {
     /// `update_panel_sources` idempotent when reached more than once in the same redraw cycle
     /// (e.g. via a screencopy re-render).
     frame: u64,
-    /// The workspace-geo union (`target_mon.workspaces_with_render_geo_at_zoom(fill_zoom)`,
-    /// reduced via `Rectangle::merge`) that produced the currently published `elem`, i.e. the
-    /// same bbox `Layout::carousel_focus_jump` computes to map its uv. `update_panel_sources`
-    /// compares each refresh's freshly-computed union against this (with a small epsilon — see
-    /// its call site) and, on a real change, resets this source's offscreen buffers via
-    /// `Self::clear`/`OffscreenBuffer::clear` BEFORE rendering, forcing recreation at the new
-    /// extent. Needed because `OffscreenBuffer` only recreates on GROWTH: without this, a
-    /// SHRINK (fewer/narrower workspaces, or window count changes at a fixed `fill_zoom`) would
-    /// leave stale content in a sub-rect of an oversized allocation while the panel samples the
-    /// full texture, i.e. a persistent (steady-state, window-content-driven) skew — not a
-    /// transient sub-pixel artifact.
+    /// The content output's view box that produced the currently published `elem` — the bake's
+    /// extent is pinned to the full view box by the backdrop element (see
+    /// `Niri::update_panel_sources`), which is also what `Layout::carousel_focus_jump`'s
+    /// `uv * target_view` mapping assumes. `update_panel_sources` compares the current view box
+    /// against this (with a small epsilon — see its call site) and, on a real change (mode/scale
+    /// change), resets this source's offscreen buffers via `Self::clear`/`OffscreenBuffer::clear`
+    /// BEFORE rendering, forcing recreation at the new extent. Needed because `OffscreenBuffer`
+    /// only recreates on GROWTH: without this, a SHRINK would leave stale content in a sub-rect
+    /// of an oversized allocation while the panel samples the full texture.
     last_extent: Option<Rectangle<f64, Logical>>,
 }
 
@@ -3233,7 +3231,8 @@ impl Niri {
             None,
         );
 
-        self.layout.add_output(output.clone(), layout_config, isolated);
+        self.layout
+            .add_output(output.clone(), layout_config, isolated);
 
         let lock_render_state = if self.is_locked() {
             // We haven't rendered anything yet so it's as good as locked.
@@ -4718,11 +4717,12 @@ impl Niri {
 
         // Single-host gating: only the active output's own render ever refreshes panel sources
         // or reconciles ring membership. `update_panel_sources` bakes every source at THIS host's
-        // `fill_zoom`, so calling it from a non-active output's render would fight over the same
-        // sources' baked zoom with the real active host (the multi-host zoom-contamination
-        // finding from the Task 5 review). Non-active-output renders (e.g. an isolated output, or
-        // a screencopy of a non-focused monitor) touch no panel state at all; a stale ring member
-        // is reconciled the next time the active host itself redraws.
+        // live overview zoom, so calling it from a non-active output's render would fight over the
+        // same sources' baked zoom with the real active host (the multi-host
+        // zoom-contamination finding from the Task 5 review). Non-active-output renders
+        // (e.g. an isolated output, or a screencopy of a non-focused monitor) touch no
+        // panel state at all; a stale ring member is reconciled the next time the active
+        // host itself redraws.
         if self.layout.active_output() == Some(output) {
             if self.carousel_panels_needed() {
                 self.update_panel_sources(&mut ctx.as_gles(), output, self.panel_frame.get());
@@ -5273,9 +5273,9 @@ impl Niri {
                     // order to have their non-xray framebuffer effects separated from each other.
                     //
                     // This doesn't have to correspond exactly to workspace id or idx, the only
-                    // requirement is that there's only one framebuffer effect element with a given id +
-                    // namespace on the frame at once. Id + namespace is used as the cache key in the
-                    // damage tracker.
+                    // requirement is that there's only one framebuffer effect element with a given
+                    // id + namespace on the frame at once. Id + namespace is
+                    // used as the cache key in the damage tracker.
                     let ns = Some(ws.id().get() as usize);
                     let xray_pos = XrayPos::new(geo.loc, zoom);
                     push_normal_from_layer!(Layer::Bottom, ns, xray_pos, process!(geo));
@@ -5347,9 +5347,22 @@ impl Niri {
                 let generation = source.generation;
                 drop(source);
 
+                // The texture is the ring member's full view box (see `update_panel_sources`),
+                // so letterbox its aspect into the slot box — sampling a 16:10 output's texture
+                // across a host-aspect quad would stretch it (2026-08-04 hardware finding,
+                // screenshot -3).
+                let target_view = m.view_size();
+                let content_aspect = target_view.w / target_view.h;
+                let (slot_w, slot_h) = placement.size;
+                let quad_size = if slot_w / slot_h > content_aspect {
+                    (slot_h * content_aspect, slot_h)
+                } else {
+                    (slot_w, slot_w / content_aspect)
+                };
+
                 let corners = crate::render_helpers::panel_quad::tilted_panel_corners(
                     placement.center,
-                    placement.size,
+                    quad_size,
                     placement.yaw,
                     view.w * crate::layout::carousel::FOCAL_FACTOR,
                 );
@@ -5480,13 +5493,19 @@ impl Niri {
     /// single monitor was both host and (self-)target (see project memory
     /// `carousel-lens-layer-map-deadlock`).
     ///
-    /// Content recipe (windows + Background/Bottom layer-shell + workspace backgrounds) is
-    /// rendered at `fill_zoom`, computed against `host`'s own view — the panel stack's geometry
-    /// in `render_inner` bakes every ring member's content at ITS host's `fill_zoom`. Elements are
-    /// rendered at the content output's own origin, not shifted onto the host's view.
+    /// Content recipe (backdrop + windows + Background/Bottom layer-shell + workspace
+    /// backgrounds) is the target's own overview view: rendered at the HOST's live overview zoom
+    /// (`Layout::overview_zoom` — the lens/panel shows what that output's overview would show at
+    /// the current zoom gesture), at the target's own scale, pinned to the target's full view box
+    /// by a backdrop element. The texture is therefore always view-box shaped (target aspect,
+    /// stable extent across zoom — no per-frame reallocation during the reveal gesture), and the
+    /// panel quad letterboxes it into the slot box in `render_inner`. Every coordinate is
+    /// target-native: workspace-geo offsets, crop rects, AND element content all physicalize at
+    /// the target's scale (the pre-2026-08-04 recipe rendered content at the host's scale against
+    /// target-scale crop boxes, which misaligned the two on mixed-DPI host/target pairs).
     ///
     /// Single-host gating: callers must only invoke this for the CURRENT active output (see
-    /// `Niri::render`'s call site). Every source's pixels are baked against `host`'s `fill_zoom`;
+    /// `Niri::render`'s call site). Every source's pixels are baked against `host`'s live zoom;
     /// calling this for more than one host in the same cycle would have two hosts race to publish
     /// the same sibling sources at two different zooms, and whichever host rendered last would
     /// silently win for every host's panel stack (the multi-host zoom-contamination finding from
@@ -5499,12 +5518,14 @@ impl Niri {
             "update_panel_sources must run before render_inner is entered for the host output"
         );
 
-        let Some(host_mon) = self.layout.monitor_for_output(host) else {
+        if self.layout.monitor_for_output(host).is_none() {
             return;
-        };
-        let host_view = host_mon.view_size();
-        let host_scale = host.current_scale().fractional_scale();
-        let output_scale = Scale::from(host_scale);
+        }
+        // The host is the active output (call-site gate), so the layout's live
+        // overview zoom IS the host's. Panels bake their output's overview at
+        // this same zoom: the lens and every panel show exactly what that
+        // output's overview would show at the current zoom gesture.
+        let bake_zoom = self.layout.overview_zoom();
         let host_state = self.output_state.get(host).unwrap();
 
         for m in self.layout.carousel_outputs() {
@@ -5519,57 +5540,40 @@ impl Niri {
 
             let target_view = m.view_size();
             let target_scale = m.scale().fractional_scale();
-            // Physical space for the background/layer-shell crop below: the SAME convention
-            // `render_overview_at_zoom` uses for `geo_phys` (windows/`PanelMonitor`) — the
-            // target's own scale, not the host's. `geo` (from `workspaces_with_render_geo_at_zoom`
-            // just below) is the target's unshifted logical render-geo; baking its physical crop
-            // rect and relocate offset with `output_scale` (host) instead would only agree with
-            // the windows path's baked physical space when host_scale == target_scale, producing
-            // mixed-DPI misalignment between panel content types otherwise.
+            // EVERYTHING in this bake physicalizes at the target's own scale: the workspace-geo
+            // offsets and crop rects (`render_overview_at_zoom` / `scale_relocate_crop` below)
+            // AND the offscreen render itself (`target_output_scale` is what's handed to
+            // `panel_offscreen.render`). One convention, target-native — mixing in the host's
+            // scale anywhere here misaligns content against its crop boxes on mixed-DPI pairs.
             let target_output_scale = Scale::from(target_scale);
-            // Fit the target's overview into the host view (letterbox: min of the axis ratios),
-            // corrected for the host/target output-scale difference. Same formula as the lens
-            // block's `fill_zoom`.
-            let fit = (host_view.w / target_view.w).min(host_view.h / target_view.h);
-            let fill_zoom = fit * (host_scale / target_scale);
 
-            // Same union `Layout::carousel_focus_jump` computes to map its uv: the workspace-geo
-            // boxes at `fill_zoom`, reduced to their bounding box. With the per-workspace crop in
-            // `render_overview_at_zoom` above (see its doc), this bbox equals the baked texture's
-            // encompassing extent exactly — including on mixed-DPI host/target pairs, PROVIDED the
-            // background/layer-shell crop below bakes its physical crop bounds with `target_scale`
-            // (via `target_output_scale`), matching the windows path's convention. See
-            // `render_overview_at_zoom`'s doc for why a scale mismatch between the two content
-            // types would inflate this beyond the workspace-geo union.
-            let bbox = m
-                .workspaces_with_render_geo_at_zoom(fill_zoom)
-                .map(|(_ws, geo)| geo)
-                .reduce(|a, b| a.merge(b));
+            // The texture extent is pinned to the target's full view box by the backdrop element
+            // below, so it's independent of zoom and window layout (zoom gestures re-bake CONTENT
+            // within a stable allocation — no per-frame texture recreation). It changes only on
+            // mode/scale changes; `Layout::carousel_focus_jump` relies on this: uv over the quad
+            // maps to `uv * target_view` directly.
+            let view_box = Rectangle::from_size(target_view);
 
             // Extent-change reset. `OffscreenBuffer` only recreates its texture on GROWTH (see
-            // its doc on `render`'s size check), so a SHRINK of this union (fewer/narrower
-            // workspaces, or a window layout change, at an unchanged `fill_zoom`) would otherwise
-            // leave stale content in a sub-rect of an oversized allocation while the panel
-            // samples the full texture — a persistent, steady-state, window-content-driven skew,
-            // not a transient sub-pixel artifact. Compare with a small epsilon so float jitter
-            // across frames at an unchanged layout doesn't force a needless recreation (full
-            // damage, one dropped frame of content) on every redraw.
+            // its doc on `render`'s size check), so a SHRINK of the view box (mode/scale change)
+            // would otherwise leave stale content in a sub-rect of an oversized allocation while
+            // the panel samples the full texture. Compare with a small epsilon so float jitter
+            // doesn't force a needless recreation (full damage, one dropped frame of content).
             const EXTENT_EPSILON: f64 = 1e-3;
             let prev_extent = state.panel_source.borrow().last_extent;
-            let extent_changed = match (prev_extent, bbox) {
-                (Some(prev), Some(cur)) => {
-                    (prev.loc.x - cur.loc.x).abs() > EXTENT_EPSILON
-                        || (prev.loc.y - cur.loc.y).abs() > EXTENT_EPSILON
-                        || (prev.size.w - cur.size.w).abs() > EXTENT_EPSILON
-                        || (prev.size.h - cur.size.h).abs() > EXTENT_EPSILON
+            let extent_changed = match prev_extent {
+                Some(prev) => {
+                    (prev.loc.x - view_box.loc.x).abs() > EXTENT_EPSILON
+                        || (prev.loc.y - view_box.loc.y).abs() > EXTENT_EPSILON
+                        || (prev.size.w - view_box.size.w).abs() > EXTENT_EPSILON
+                        || (prev.size.h - view_box.size.h).abs() > EXTENT_EPSILON
                 }
-                (None, None) => false,
-                _ => true,
+                None => true,
             };
             if extent_changed {
                 let mut source = state.panel_source.borrow_mut();
                 source.clear();
-                source.last_extent = bbox;
+                source.last_extent = Some(view_box);
                 drop(source);
                 for buf in &state.panel_offscreen {
                     buf.clear();
@@ -5577,7 +5581,7 @@ impl Niri {
             }
 
             let mut elements: Vec<OutputRenderElements<GlesRenderer>> = Vec::new();
-            m.render_overview_at_zoom(ctx.r(), fill_zoom, false, &mut |elem| {
+            m.render_overview_at_zoom(ctx.r(), bake_zoom, false, &mut |elem| {
                 elements.push(OutputRenderElements::PanelMonitor(elem));
             });
 
@@ -5585,7 +5589,7 @@ impl Niri {
             // windows above so they land behind them (niri renders earlier-pushed elements on
             // top). No host-centering relocate: geo is the target's own, unshifted.
             let target_layer_map = layer_map_for_output(&target);
-            for (ws, geo) in m.workspaces_with_render_geo_at_zoom(fill_zoom) {
+            for (ws, geo) in m.workspaces_with_render_geo_at_zoom(bake_zoom) {
                 self.render_layer_normal(
                     ctx.r(),
                     None,
@@ -5595,7 +5599,7 @@ impl Niri {
                     false,
                     &mut |elem| {
                         if let Some(w) =
-                            scale_relocate_crop(elem, target_output_scale, fill_zoom, geo)
+                            scale_relocate_crop(elem, target_output_scale, bake_zoom, geo)
                         {
                             elements.push(OutputRenderElements::RelocatedLayerSurface(w));
                         }
@@ -5610,22 +5614,32 @@ impl Niri {
                     false,
                     &mut |elem| {
                         if let Some(w) =
-                            scale_relocate_crop(elem, target_output_scale, fill_zoom, geo)
+                            scale_relocate_crop(elem, target_output_scale, bake_zoom, geo)
                         {
                             elements.push(OutputRenderElements::RelocatedLayerSurface(w));
                         }
                     },
                 );
-                if let Some(w) = scale_relocate_crop(
-                    ws.render_background(),
-                    target_output_scale,
-                    fill_zoom,
-                    geo,
-                ) {
+                if let Some(w) =
+                    scale_relocate_crop(ws.render_background(), target_output_scale, bake_zoom, geo)
+                {
                     elements.push(OutputRenderElements::RelocatedColor(w));
                 }
             }
             drop(target_layer_map);
+
+            // Backdrop last (behind everything — earlier-pushed elements render on top): the
+            // target's own overview backdrop color, spanning its full view box. This is what the
+            // real overview shows between workspace strips, and it pins the offscreen's
+            // encompassing extent to the view box (see `view_box` above).
+            elements.push(OutputRenderElements::SolidColor(
+                SolidColorRenderElement::from_buffer(
+                    &state.backdrop_buffer,
+                    Point::from((0., 0.)),
+                    1.,
+                    Kind::Unspecified,
+                ),
+            ));
 
             // Scoped borrow: only read which ping-pong slot to render into. The GPU render below
             // must not run while a `panel_source` borrow is held — that is why the offscreen
@@ -5636,7 +5650,8 @@ impl Niri {
             // command ordering within one context is guaranteed, so the `SyncPoint` this returns
             // is deliberately not threaded through. Revisit only if panels ever need to render
             // cross-context (e.g. multi-GPU screencast of panel content).
-            let result = state.panel_offscreen[idx].render(ctx.renderer, output_scale, &elements);
+            let result =
+                state.panel_offscreen[idx].render(ctx.renderer, target_output_scale, &elements);
 
             let mut source = state.panel_source.borrow_mut();
             source.frame = frame;
@@ -5960,7 +5975,12 @@ impl Niri {
         // deferred redraw. Leaving the flag SET on `Skipped` means it's picked up by this same
         // check the next time this output actually renders.
         if res != RenderResult::Skipped
-            && self.output_state.get(output).unwrap().panel_redraw_pending.take()
+            && self
+                .output_state
+                .get(output)
+                .unwrap()
+                .panel_redraw_pending
+                .take()
         {
             self.queue_redraw(output);
         }
