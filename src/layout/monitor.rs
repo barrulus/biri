@@ -1445,8 +1445,11 @@ impl<W: LayoutElement> Monitor<W> {
         self.overview_zoom_preset_idx = idx;
     }
 
-    /// Reset zoom to config default - call when overview closes.
-    /// This is instant (no animation) since the overview is closing.
+    /// Reset overview zoom state on close: preset cycling starts fresh next
+    /// open, but the zoom TARGET is deliberately kept — the close animation
+    /// scales from it, so snapping it to the config default here made the
+    /// overview visibly jump at close start, and keeping it means the next
+    /// open resumes at the parked zoom (PR #2 / upstream niri#3194).
     pub fn reset_overview_zoom(&mut self) {
         self.overview_zoom_anim = None;
         self.overview_zoom_preset_idx = 0;

@@ -5487,7 +5487,9 @@ impl<W: LayoutElement> Layout<W> {
             self.carousel_pullback = None;
         }
 
-        // Reset zoom to config default when closing overview.
+        // Reset preset cycling when closing overview; the zoom target is
+        // kept so the close animates from the parked zoom and the next open
+        // resumes there (see `Monitor::reset_overview_zoom`).
         if !self.overview_open {
             for monitor in self.monitors_mut() {
                 monitor.reset_overview_zoom();
