@@ -5487,12 +5487,11 @@ impl<W: LayoutElement> Layout<W> {
             self.carousel_pullback = None;
         }
 
-        // Reset preset cycling when closing overview; the zoom target is
-        // kept so the close animates from the parked zoom and the next open
-        // resumes there (see `Monitor::reset_overview_zoom`).
+        // Reset zoom to config default when closing overview.
         if !self.overview_open {
+            let default_zoom = self.options.overview.zoom;
             for monitor in self.monitors_mut() {
-                monitor.reset_overview_zoom();
+                monitor.reset_overview_zoom(default_zoom);
             }
 
             // Snap carousel rotation home instantly (no animation — the

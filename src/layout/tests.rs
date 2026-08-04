@@ -4224,52 +4224,6 @@ fn carousel_reveal_tracks_zoom_threshold() {
 }
 
 #[test]
-fn overview_zoom_persists_across_close() {
-    // PR #2 port: the zoom target survives close (the close animation scales
-    // from it, and the next open resumes at the parked zoom); only the preset
-    // cycling index resets.
-    let mut layout = Layout::<TestWindow>::default();
-
-    let output = Output::new(
-        "out".to_owned(),
-        PhysicalProperties {
-            size: Size::from((1280, 720)),
-            subpixel: Subpixel::Unknown,
-            make: String::new(),
-            model: String::new(),
-            serial_number: String::new(),
-        },
-    );
-    output.change_current_state(
-        Some(Mode {
-            size: Size::from((1280, 720)),
-            refresh: 60000,
-        }),
-        None,
-        None,
-        None,
-    );
-    output.user_data().insert_if_missing(|| OutputName {
-        connector: "out".to_owned(),
-        make: None,
-        model: None,
-        serial: None,
-    });
-    layout.add_output(output, None, false);
-
-    layout.toggle_overview();
-    layout.set_overview_zoom_for_test(0.3);
-    layout.toggle_overview(); // close
-    layout.toggle_overview(); // reopen
-
-    assert_eq!(
-        layout.active_monitor_ref().unwrap().overview_zoom_target(),
-        0.3,
-        "parked zoom survives close/reopen"
-    );
-}
-
-#[test]
 fn zoom_target_unclamped_without_consolidated_carousel() {
     let mut layout = Layout::<TestWindow>::default();
 
