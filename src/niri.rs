@@ -5322,6 +5322,18 @@ impl Niri {
                 })
                 .collect();
 
+            // Per-frame choreography state for shudder diagnosis (2026-08-04 open bug).
+            // Enable with RUST_LOG=niri=warn,carousel=trace.
+            trace!(
+                target: "carousel",
+                "frame: zoom {:.4}, reveal {reveal:.4}, rotation {rotation:.4}, panels {:?}",
+                self.layout.overview_zoom(),
+                visible
+                    .iter()
+                    .map(|(idx, _, p)| (*idx, (p.center.0 * 10.).round() / 10., (p.size.0 * 10.).round() / 10.))
+                    .collect::<Vec<_>>(),
+            );
+
             // Nearer panels first: z is highest (100.0) at the center and decreases with depth,
             // so sorting descending by z and pushing in that order puts nearer panels on top
             // (niri renders earlier-pushed elements in front). This is also hit-test priority
@@ -5668,6 +5680,12 @@ impl Niri {
                     // is what makes the host-side `PanelRenderElement` `(source id, generation)`
                     // compare sound. See `PanelSource`'s doc for the full ownership trace.
                     if data.damaged {
+                        trace!(
+                            target: "carousel",
+                            "publish: {} gen {} at bake_zoom {bake_zoom:.4}",
+                            target.name(),
+                            source.generation.wrapping_add(1),
+                        );
                         source.elem = Some(elem);
                         source.flip = !source.flip;
                         source.generation = source.generation.wrapping_add(1);

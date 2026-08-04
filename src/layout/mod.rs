@@ -2099,11 +2099,16 @@ impl<W: LayoutElement> Layout<W> {
         if let Some(pullback) = self.carousel_pullback.as_mut() {
             pullback.target = target;
             let phase = pullback.phase;
+            trace!(
+                target: "carousel",
+                "pullback retarget: phase {phase:?}, new target {target}"
+            );
             match phase {
                 PullbackPhase::Rotate => {
                     self.rotate_carousel_to(target);
                 }
                 PullbackPhase::ZoomIn => {
+                    trace!(target: "carousel", "pullback ZoomIn -> ZoomOut reversal");
                     if let Some(pullback) = self.carousel_pullback.as_mut() {
                         pullback.phase = PullbackPhase::ZoomOut;
                     }
@@ -2121,6 +2126,10 @@ impl<W: LayoutElement> Layout<W> {
             .map(|m| m.overview_zoom_target())
             .unwrap_or(self.options.overview.zoom);
 
+        trace!(
+            target: "carousel",
+            "pullback start: target {target}, restore_zoom {restore_zoom}"
+        );
         self.carousel_pullback = Some(Pullback {
             phase: PullbackPhase::ZoomOut,
             target,
@@ -2186,9 +2195,11 @@ impl<W: LayoutElement> Layout<W> {
                         .map(|m| (m.overview_zoom_target() - cc.assembled_zoom).abs() < 0.0001)
                         .unwrap_or(true);
                     if at_assembled {
+                        trace!(target: "carousel", "pullback ZoomOut -> Rotate (target {})", pullback.target);
                         pullback.phase = PullbackPhase::Rotate;
                         self.rotate_carousel_to(pullback.target);
                     } else {
+                        trace!(target: "carousel", "pullback canceled: zoom settled off-target (user won)");
                         self.carousel_pullback = None;
                         return;
                     }
@@ -2196,6 +2207,7 @@ impl<W: LayoutElement> Layout<W> {
             }
             PullbackPhase::Rotate => {
                 if self.carousel_rotation_anim.is_none() {
+                    trace!(target: "carousel", "pullback Rotate -> ZoomIn (restore {})", pullback.restore_zoom);
                     pullback.phase = PullbackPhase::ZoomIn;
                     self.retarget_active_monitor_zoom(pullback.restore_zoom);
                 }
@@ -2213,9 +2225,11 @@ impl<W: LayoutElement> Layout<W> {
                         // Settled at the wrong target: a user zoom action
                         // hijacked the restore step. Cancel rather than
                         // fight it — the user always wins.
+                        trace!(target: "carousel", "pullback canceled during ZoomIn: restore hijacked (user won)");
                         self.carousel_pullback = None;
                         return;
                     }
+                    trace!(target: "carousel", "pullback complete");
                     // Done; don't reinsert.
                     return;
                 }
@@ -4054,6 +4068,14 @@ impl<W: LayoutElement> Layout<W> {
         let pullback = self.carousel_pullback.take();
 
         if self.overview_open {
+            trace!(
+                target: "carousel",
+                "host swap: rotation {} (anim: {}), pullback: {}, new active {:?}",
+                self.carousel_rotation,
+                self.carousel_rotation_anim.is_some(),
+                pullback.is_some(),
+                self.active_output().map(|o| o.name()),
+            );
             self.carousel_rotation = 0.;
             self.carousel_rotation_anim = None;
             self.set_monitors_overview_state();
