@@ -152,8 +152,17 @@ pub fn panel_placement(view: (f64, f64), d: f64, reveal: f64) -> Option<PanelPla
     let start_yaw = -sign * start_yaw_mag;
 
     let r = reveal.clamp(0.0, 1.0);
-    let center_x = lerp(start_center_x, settled_center_x, r);
-    let yaw = lerp(start_yaw, settled_yaw, r);
+    // The slide-out displacement scales with min(|d|, 1) so placement stays
+    // continuous across d = 0: `sign` (and with it `start_center_x`) flips
+    // sides there, and without the taper a card interpolating through the
+    // center slot at reveal < 1 would jump between the left- and right-edge
+    // start positions instantly. Reachable whenever zoom and rotation animate
+    // together — e.g. a user zoom canceling a pull-back mid-rotate, or a
+    // cross-output activation mid-swing. At |d| >= 1 this is exactly the old
+    // lerp(start, settled, reveal).
+    let slide = (1.0 - r) * ad.min(1.0);
+    let center_x = settled_center_x + (start_center_x - settled_center_x) * slide;
+    let yaw = settled_yaw + (start_yaw - settled_yaw) * slide;
 
     Some(PanelPlacement {
         center: (center_x, view_h / 2.0),
@@ -234,5 +243,25 @@ mod tests {
     #[test]
     fn beyond_max_depth_is_none() {
         assert!(panel_placement((1920., 1080.), 5.0, 1.0).is_none());
+    }
+
+    #[test]
+    fn placement_is_continuous_across_center_at_partial_reveal() {
+        // Regression: at reveal < 1 the slide-out start position flips sides
+        // with sign(d), so without the |d| taper a card crossing d = 0
+        // mid-rotation jumped between the screen edges instantly.
+        let center = panel_placement((1920., 1080.), 0.0, 0.5).unwrap();
+        let left = panel_placement((1920., 1080.), -1e-6, 0.5).unwrap();
+        let right = panel_placement((1920., 1080.), 1e-6, 0.5).unwrap();
+        for p in [&left, &right] {
+            assert!(
+                (p.center.0 - center.center.0).abs() < 0.1,
+                "center.x continuous at d=0: {} vs {}",
+                p.center.0,
+                center.center.0
+            );
+            assert!((p.yaw - center.yaw).abs() < 1e-3);
+            assert!((p.size.1 - center.size.1).abs() < 0.1);
+        }
     }
 }
