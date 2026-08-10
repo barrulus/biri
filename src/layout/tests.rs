@@ -1615,7 +1615,7 @@ impl Op {
                 layout.interactive_resize_end(&window);
             }
             Op::ToggleOverview => {
-                layout.toggle_overview();
+                layout.toggle_overview(None);
             }
             Op::UpdateConfig { layout_config } => {
                 let options = Options {

@@ -2272,7 +2272,7 @@ impl State {
                 self.niri.stop_cast(CastSessionId::from(session_id));
             }
             Action::ToggleOverview => {
-                self.niri.layout.toggle_overview();
+                self.niri.layout.toggle_overview(None);
                 self.niri.queue_redraw_all();
             }
             Action::OpenOverview => {
@@ -2728,7 +2728,7 @@ impl State {
                     .with_grab(|_, grab| grab_allows_hot_corner(grab))
                     .unwrap_or(true)
             {
-                self.niri.layout.toggle_overview();
+                self.niri.layout.toggle_overview(None);
             }
             self.niri.pointer_inside_hot_corner = true;
         }
@@ -2819,7 +2819,7 @@ impl State {
                     .with_grab(|_, grab| grab_allows_hot_corner(grab))
                     .unwrap_or(true)
             {
-                self.niri.layout.toggle_overview();
+                self.niri.layout.toggle_overview(None);
             }
             self.niri.pointer_inside_hot_corner = true;
         }
