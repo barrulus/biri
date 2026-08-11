@@ -4601,14 +4601,16 @@ impl<W: LayoutElement> Layout<W> {
     pub fn toggle_overview(&mut self, zoom:Option<f64>) {        
         // if not opened (and will be opening), set zoom target from provided
         // zoom parameter (default to `options.overview.zoom`).
-        if !self.overview_open {
+        let use_last_preset = self.options.overview.zoom_use_last_preset;
+        if !self.overview_open && !use_last_preset {
             // set zoom factor if opening
             let zoom: f64 = zoom.unwrap_or(self.options.overview.zoom);
             for monitor in self.monitors_mut() {
                 monitor.set_zoom_target_no_anim(zoom);
             }
         }
-        else {
+        
+        if self.overview_open {
             // Reset zoom to config default when closing overview.
             for monitor in self.monitors_mut() {
                 monitor.reset_overview_zoom();
