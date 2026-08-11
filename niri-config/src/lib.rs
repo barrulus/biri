@@ -1712,6 +1712,7 @@ mod tests {
                     },
                 },
                 zoom_presets: None,
+                zoom_use_last_preset: false,
             },
             environment: Environment(
                 [
