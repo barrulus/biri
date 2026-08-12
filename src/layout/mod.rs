@@ -4598,7 +4598,11 @@ impl<W: LayoutElement> Layout<W> {
         }
     }
 
-    pub fn toggle_overview(&mut self, zoom:Option<f64>) {        
+    pub fn toggle_overview(&mut self) {    
+        self.toggle_overview_with_zoom(None);
+    }
+
+    pub fn toggle_overview_with_zoom(&mut self, zoom:Option<f64>) {        
         // if not opened (and will be opening), set zoom target from provided
         // zoom parameter (default to `options.overview.zoom`).
         let use_last_preset = self.options.overview.zoom_use_last_preset;
@@ -4637,7 +4641,7 @@ impl<W: LayoutElement> Layout<W> {
             return false;
         }
 
-        self.toggle_overview(self
+        self.toggle_overview_with_zoom(self
             .active_monitor_ref()
             .map(|m| m.overview_zoom_target()));
         true
@@ -4648,7 +4652,7 @@ impl<W: LayoutElement> Layout<W> {
             return false;
         }
 
-        self.toggle_overview(None);
+        self.toggle_overview();
         true
     }
 
@@ -4689,7 +4693,7 @@ impl<W: LayoutElement> Layout<W> {
         if let Some(mon) = self.active_monitor() {
             mon.activate_workspace_with_anim_config(ws_idx, Some(config));
         }
-        self.toggle_overview(None);
+        self.toggle_overview();
     }
 
     pub fn start_open_animation_for_window(&mut self, window: &W::Id) {
