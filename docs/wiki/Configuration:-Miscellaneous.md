@@ -253,12 +253,12 @@ overview {
 Define a list of zoom levels to cycle through using the `overview-zoom-cycle` action.
 If not set or empty, the cycle action does nothing.
 
-Setting option `zoom-use-last-preset` to `true` allows standard niri overview actions (e.g. entering overview via hot-corner or keybind) to start at the "last used" zoom preset.  The default setting of `false` starts overview at the niri's overview `zoom` value (0.5 by default).
+Option `zoom-remember-last` to `true` allows standard niri overview actions (e.g. entering overview via hot-corner or keybind) to start at the "last used" zoom preset.  The default setting of `false` starts overview at the niri's overview `zoom` value.
 
 ```kdl
 overview {
     zoom-presets 0.5 0.25 0.1
-    zoom-use-last-preset true
+    zoom-remember-last true
 }
 ```
 

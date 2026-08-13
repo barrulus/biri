@@ -1712,7 +1712,7 @@ mod tests {
                     },
                 },
                 zoom_presets: None,
-                zoom_use_last_preset: false,
+                zoom_remember_last: false,
             },
             environment: Environment(
                 [
