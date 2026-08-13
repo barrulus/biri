@@ -1463,7 +1463,10 @@ impl<W: LayoutElement> Monitor<W> {
 
         if let Some(new_target) = next {
             // Update preset index to match
-            if let Some(idx) = presets.iter().position(|&p| (p - new_target).abs() < 0.0001) {
+            if let Some(idx) = presets
+                .iter()
+                .position(|&p| (p - new_target).abs() < 0.0001)
+            {
                 self.overview_zoom_preset_idx = idx;
             }
             self.animate_zoom_to(new_target, config);
@@ -1486,7 +1489,10 @@ impl<W: LayoutElement> Monitor<W> {
 
         if let Some(new_target) = next {
             // Update preset index to match
-            if let Some(idx) = presets.iter().position(|&p| (p - new_target).abs() < 0.0001) {
+            if let Some(idx) = presets
+                .iter()
+                .position(|&p| (p - new_target).abs() < 0.0001)
+            {
                 self.overview_zoom_preset_idx = idx;
             }
             self.animate_zoom_to(new_target, config);

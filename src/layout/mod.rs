@@ -4599,15 +4599,27 @@ impl<W: LayoutElement> Layout<W> {
     }
 
     pub fn toggle_overview(&mut self) {
-        self.overview_open = !self.overview_open;
+        self.toggle_overview_with_zoom(None);
+    }
 
-        // Reset zoom to config default when closing overview.
-        if !self.overview_open {
+    pub fn toggle_overview_with_zoom(&mut self, zoom: Option<f64>) {
+        // if not opened (and will be opening), set zoom target from provided
+        // zoom parameter (default to `options.overview.zoom`).
+        if !self.overview_open && !self.options.overview.zoom_remember_last {
+            // set zoom factor if opening
+            let zoom: f64 = zoom.unwrap_or(self.options.overview.zoom);
+            for monitor in self.monitors_mut() {
+                monitor.set_zoom_target_no_anim(zoom);
+            }
+        }
+
+        if self.overview_open {
             for monitor in self.monitors_mut() {
                 monitor.reset_overview_zoom();
             }
         }
 
+        self.overview_open = !self.overview_open;
         let from = self.overview_progress.take().map_or(0., |p| p.value());
         let to = if self.overview_open { 1. } else { 0. };
 
@@ -4628,6 +4640,15 @@ impl<W: LayoutElement> Layout<W> {
         }
 
         self.toggle_overview();
+        true
+    }
+
+    pub fn open_overview_preserving_zoom(&mut self) -> bool {
+        if self.overview_open {
+            return false;
+        }
+
+        self.toggle_overview_with_zoom(self.active_monitor_ref().map(|m| m.overview_zoom_target()));
         true
     }
 

@@ -2300,7 +2300,7 @@ impl State {
                         monitor.set_zoom_target_no_anim(presets[0]);
                         monitor.set_zoom_preset_idx(0);
                     }
-                    self.niri.layout.open_overview();
+                    self.niri.layout.open_overview_preserving_zoom();
                 } else {
                     for monitor in self.niri.layout.monitors_mut() {
                         monitor.cycle_overview_zoom(&presets, reverse, anim_config);
@@ -2373,7 +2373,7 @@ impl State {
                         monitor.set_zoom_target_no_anim(max_preset);
                         monitor.set_zoom_preset_idx(max_idx);
                     }
-                    self.niri.layout.open_overview();
+                    self.niri.layout.open_overview_preserving_zoom();
                 } else {
                     for monitor in self.niri.layout.monitors_mut() {
                         monitor.overview_zoom_out(&presets, anim_config);

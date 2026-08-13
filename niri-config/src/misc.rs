@@ -125,6 +125,7 @@ pub struct Overview {
     pub workspace_shadow: WorkspaceShadow,
     /// Optional zoom presets for cycling. If None/empty, zoom cycling is disabled.
     pub zoom_presets: Option<Vec<f64>>,
+    pub zoom_remember_last: bool,
 }
 
 impl Default for Overview {
@@ -134,6 +135,7 @@ impl Default for Overview {
             backdrop_color: DEFAULT_BACKDROP_COLOR,
             workspace_shadow: WorkspaceShadow::default(),
             zoom_presets: None,
+            zoom_remember_last: true,
         }
     }
 }
@@ -153,6 +155,8 @@ pub struct OverviewPart {
     pub workspace_shadow: Option<WorkspaceShadowPart>,
     #[knuffel(child)]
     pub zoom_presets: Option<ZoomPresets>,
+    #[knuffel(child)]
+    pub zoom_remember_last: Option<Flag>,
 }
 
 impl MergeWith<OverviewPart> for Overview {
@@ -162,6 +166,7 @@ impl MergeWith<OverviewPart> for Overview {
         if let Some(presets) = &part.zoom_presets {
             self.zoom_presets = Some(presets.0.clone());
         }
+        merge!((self, part), zoom_remember_last);
     }
 }
 
