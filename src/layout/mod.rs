@@ -4614,7 +4614,6 @@ impl<W: LayoutElement> Layout<W> {
         }
 
         if self.overview_open {
-            // Reset zoom to config default when closing overview.
             for monitor in self.monitors_mut() {
                 monitor.reset_overview_zoom();
             }
