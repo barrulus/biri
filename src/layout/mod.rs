@@ -4641,6 +4641,15 @@ impl<W: LayoutElement> Layout<W> {
             return false;
         }
 
+        self.toggle_overview();
+        true
+    }
+
+    pub fn open_overview_preserving_zoom(&mut self) -> bool {
+        if self.overview_open {
+            return false;
+        }
+
         self.toggle_overview_with_zoom(self.active_monitor_ref().map(|m| m.overview_zoom_target()));
         true
     }
