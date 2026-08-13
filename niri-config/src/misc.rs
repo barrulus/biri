@@ -135,7 +135,7 @@ impl Default for Overview {
             backdrop_color: DEFAULT_BACKDROP_COLOR,
             workspace_shadow: WorkspaceShadow::default(),
             zoom_presets: None,
-            zoom_remember_last: false,
+            zoom_remember_last: true,
         }
     }
 }
