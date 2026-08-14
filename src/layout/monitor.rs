@@ -10,6 +10,7 @@ use smithay::backend::renderer::element::utils::{
 use smithay::output::Output;
 use smithay::utils::{Logical, Point, Rectangle, Size};
 
+use super::floating::{FloatingSpace, FloatingSpaceRenderElement};
 use super::insert_hint_element::{InsertHintElement, InsertHintRenderElement};
 use super::scrolling::{Column, ColumnWidth};
 use super::tile::Tile;
@@ -17,7 +18,7 @@ use super::workspace::{
     compute_working_area, OutputId, Workspace, WorkspaceAddWindowTarget, WorkspaceId,
     WorkspaceRenderElement,
 };
-use super::{compute_overview_zoom, ActivateWindow, HitType, LayoutElement, Options};
+use super::{compute_overview_zoom, ActivateWindow, HitType, LayoutElement, Options, RemovedTile};
 use crate::animation::{Animation, Clock};
 use crate::input::swipe_tracker::SwipeTracker;
 use crate::layout::RenderLayer;
@@ -63,6 +64,8 @@ pub struct Monitor<W: LayoutElement> {
     // should only consider overlay and top layer-shell surfaces. However, Smithay doesn't easily
     // let you do this at the moment.
     working_area: Rectangle<f64, Logical>,
+    /// Sticky floating windows shown on all workspaces of this monitor.
+    pub(super) sticky: FloatingSpace<W>,
     // Must always contain at least one.
     pub(super) workspaces: Vec<Workspace<W>>,
     /// Index of the currently active workspace.
@@ -98,8 +101,16 @@ pub struct Monitor<W: LayoutElement> {
     pub(super) base_options: Rc<Options>,
     /// Configurable properties of the layout.
     pub(super) options: Rc<Options>,
+    /// Whether focus is on sticky windows or the active workspace.
+    active_space: ActiveSpace,
     /// Layout config overrides for this monitor.
     layout_config: Option<niri_config::LayoutPart>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ActiveSpace {
+    Workspace,
+    Sticky,
 }
 
 #[derive(Debug)]
@@ -197,6 +208,7 @@ impl<'a, W: LayoutElement> Clone for MonitorAddWindowTarget<'a, W> {
 
 niri_render_elements! {
     MonitorInnerRenderElement<R> => {
+        Floating = CropRenderElement<FloatingSpaceRenderElement<R>>,
         Workspace = CropRenderElement<WorkspaceRenderElement<R>>,
         InsertHint = CropRenderElement<InsertHintRenderElement>,
         UncroppedInsertHint = InsertHintRenderElement,
@@ -316,6 +328,13 @@ impl<W: LayoutElement> Monitor<W> {
         let scale = output.current_scale();
         let view_size = output_size(&output);
         let working_area = compute_working_area(&output);
+        let sticky = FloatingSpace::new(
+            view_size,
+            working_area,
+            scale.fractional_scale(),
+            clock.clone(),
+            options.clone(),
+        );
 
         // Prepare the workspaces: set output, empty first, empty last.
         let mut active_workspace_idx = 0;
@@ -331,6 +350,27 @@ impl<W: LayoutElement> Monitor<W> {
             }
         }
 
+        // Hidden workspaces should always be at the end
+        let mut hidden_workspaces = Vec::new();
+        let mut i = 0;
+        while i < workspaces.len() {
+            if workspaces[i].hidden {
+                let mut ws = workspaces.remove(i);
+                // hidden workspaces want to go to where they were beofore
+                if ws.original_idx.is_none() {
+                    ws.original_idx = Some(i);
+                }
+                // simply push the workspace to the end of the vec as it will
+                // start as hidden
+                hidden_workspaces.push(ws);
+                if i < active_workspace_idx {
+                    active_workspace_idx = active_workspace_idx.saturating_sub(1);
+                }
+            } else {
+                i += 1;
+            }
+        }
+
         if options.layout.empty_workspace_above_first && !workspaces.is_empty() {
             let ws = Workspace::new(output.clone(), clock.clone(), options.clone());
             workspaces.insert(0, ws);
@@ -339,6 +379,9 @@ impl<W: LayoutElement> Monitor<W> {
 
         let ws = Workspace::new(output.clone(), clock.clone(), options.clone());
         workspaces.push(ws);
+
+        // Add hidden workspaces at the end
+        workspaces.extend(hidden_workspaces);
 
         Self {
             output_name: output.name(),
@@ -362,6 +405,8 @@ impl<W: LayoutElement> Monitor<W> {
             clock,
             base_options,
             options,
+            sticky,
+            active_space: ActiveSpace::Workspace,
             layout_config,
         }
     }
@@ -374,6 +419,16 @@ impl<W: LayoutElement> Monitor<W> {
         }
 
         self.workspaces
+    }
+
+    pub fn into_workspaces_and_sticky(mut self) -> (Vec<Workspace<W>>, Vec<Tile<W>>) {
+        self.workspaces.retain(|ws| ws.has_windows_or_name());
+
+        for ws in &mut self.workspaces {
+            ws.set_output(None);
+        }
+
+        (self.workspaces, self.sticky.into_tiles())
     }
 
     pub fn output(&self) -> &Output {
@@ -431,7 +486,49 @@ impl<W: LayoutElement> Monitor<W> {
     }
 
     pub fn windows(&self) -> impl Iterator<Item = &W> {
-        self.workspaces.iter().flat_map(|ws| ws.windows())
+        let sticky = self.sticky.tiles().map(Tile::window);
+        let workspace = self.workspaces.iter().flat_map(|ws| ws.windows());
+        sticky.chain(workspace)
+    }
+
+    fn make_tile(&self, window: W) -> Tile<W> {
+        Tile::new(
+            window,
+            self.view_size,
+            self.scale.fractional_scale(),
+            self.clock.clone(),
+            self.options.clone(),
+        )
+    }
+
+    pub fn sticky_has_window(&self, window: &W::Id) -> bool {
+        self.sticky.has_window(window)
+    }
+
+    pub fn activate_sticky_window(&mut self, window: &W::Id) -> bool {
+        if self.sticky.activate_window(window) {
+            self.active_space = ActiveSpace::Sticky;
+            return true;
+        }
+
+        false
+    }
+
+    pub fn activate_sticky_window_without_raising(&mut self, window: &W::Id) -> bool {
+        if self.sticky.activate_window_without_raising(window) {
+            self.active_space = ActiveSpace::Sticky;
+            return true;
+        }
+
+        false
+    }
+
+    pub fn focus_workspace(&mut self) {
+        self.active_space = ActiveSpace::Workspace;
+    }
+
+    pub fn sticky_is_active(&self) -> bool {
+        self.active_space == ActiveSpace::Sticky
     }
 
     pub fn has_window(&self, window: &W::Id) -> bool {
@@ -482,6 +579,7 @@ impl<W: LayoutElement> Monitor<W> {
         }
 
         let prev_active_idx = self.active_workspace_idx;
+
         self.active_workspace_idx = idx;
 
         let config = config.unwrap_or(self.options.animations.workspace_switch.0);
@@ -505,6 +603,9 @@ impl<W: LayoutElement> Monitor<W> {
                 if prev_active_idx == idx {
                     return;
                 }
+
+                // remove hidden if the previous active workspace was forced unhidden
+                self.hide_needs_hidden(prev_active_idx);
 
                 self.workspace_switch = Some(WorkspaceSwitch::Animation(Animation::new(
                     self.clock.clone(),
@@ -553,7 +654,22 @@ impl<W: LayoutElement> Monitor<W> {
         width: ColumnWidth,
         is_full_width: bool,
         is_floating: bool,
+        is_sticky: bool,
+        force_unhide_workspace: bool,
     ) {
+        if is_sticky {
+            let mut tile = self.make_tile(window);
+            tile.restore_to_floating = true;
+
+            let activate =
+                activate.map_smart(|| !self.active_workspace_ref().is_active_pending_fullscreen());
+            self.sticky.add_tile(tile, activate);
+            if activate {
+                self.active_space = ActiveSpace::Sticky;
+            }
+            return;
+        }
+
         // Currently, everything a workspace sets on a Tile is the same across all workspaces of a
         // monitor. So we can use any workspace, not necessarily the exact target workspace.
         let tile = self.workspaces[0].make_tile(window);
@@ -567,7 +683,30 @@ impl<W: LayoutElement> Monitor<W> {
             is_full_width,
             is_floating,
             None,
+            force_unhide_workspace,
         );
+    }
+
+    pub fn add_sticky_tile(&mut self, mut tile: Tile<W>, activate: bool) {
+        tile.restore_to_floating = true;
+        self.sticky.add_tile(tile, activate);
+        if activate {
+            self.active_space = ActiveSpace::Sticky;
+        }
+    }
+
+    pub fn remove_sticky_tile(&mut self, window: &W::Id) -> Option<RemovedTile<W>> {
+        if !self.sticky.has_window(window) {
+            return None;
+        }
+
+        let mut removed = self.sticky.remove_tile(window);
+        removed.is_sticky = true;
+        if self.active_space == ActiveSpace::Sticky && self.sticky.active_window().is_none() {
+            self.active_space = ActiveSpace::Workspace;
+        }
+
+        Some(removed)
     }
 
     pub fn add_column(
@@ -577,6 +716,11 @@ impl<W: LayoutElement> Monitor<W> {
         activate: bool,
         anim: Option<niri_config::Animation>,
     ) {
+        let first_hidden_idx = self.workspaces.iter().position(|ws| ws.hidden);
+        let is_last_visible = first_hidden_idx
+            .map(|hidden_idx| workspace_idx + 1 == hidden_idx)
+            .unwrap_or(workspace_idx == self.workspaces.len() - 1);
+
         let workspace = &mut self.workspaces[workspace_idx];
 
         workspace.add_column(column, activate, anim);
@@ -586,9 +730,15 @@ impl<W: LayoutElement> Monitor<W> {
             workspace.original_output = OutputId::new(&self.output);
         }
 
-        if workspace_idx == self.workspaces.len() - 1 {
-            self.add_workspace_bottom();
+        // Insert a new empty workspace.
+        if is_last_visible {
+            if first_hidden_idx.is_some() {
+                self.ensure_empty_before_hidden();
+            } else {
+                self.add_workspace_bottom();
+            }
         }
+
         if self.options.layout.empty_workspace_above_first && workspace_idx == 0 {
             self.add_workspace_top();
             workspace_idx += 1;
@@ -611,8 +761,22 @@ impl<W: LayoutElement> Monitor<W> {
         is_full_width: bool,
         is_floating: bool,
         anim: Option<niri_config::Animation>,
+        force_unhide_workspace: bool,
     ) {
         let (mut workspace_idx, target) = self.resolve_add_window_target(target);
+
+        // Force-unhide the workspace if requested and it's hidden.
+        if force_unhide_workspace && self.workspaces[workspace_idx].hidden {
+            let ws_id = self.workspaces[workspace_idx].id();
+            if let Some(idx) = self.unhide_workspace_by_id(ws_id, true) {
+                workspace_idx = idx;
+            }
+        }
+
+        let first_hidden_idx = self.workspaces.iter().position(|ws| ws.hidden);
+        let is_last_visible = first_hidden_idx
+            .map(|hidden_idx| workspace_idx + 1 == hidden_idx)
+            .unwrap_or(workspace_idx == self.workspaces.len() - 1);
 
         let workspace = &mut self.workspaces[workspace_idx];
 
@@ -631,9 +795,12 @@ impl<W: LayoutElement> Monitor<W> {
             workspace.original_output = OutputId::new(&self.output);
         }
 
-        if workspace_idx == self.workspaces.len() - 1 {
-            // Insert a new empty workspace.
-            self.add_workspace_bottom();
+        if is_last_visible {
+            if first_hidden_idx.is_some() {
+                self.ensure_empty_before_hidden();
+            } else {
+                self.add_workspace_bottom();
+            }
         }
 
         if self.options.layout.empty_workspace_above_first && workspace_idx == 0 {
@@ -643,6 +810,16 @@ impl<W: LayoutElement> Monitor<W> {
 
         if allow_to_activate_workspace && activate.map_smart(|| false) {
             self.activate_workspace(workspace_idx);
+        }
+    }
+
+    pub fn ensure_empty_before_hidden(&mut self) {
+        let first_hidden_idx = self.workspaces.iter().position(|ws| ws.hidden);
+
+        if let Some(hidden_idx) = first_hidden_idx {
+            if hidden_idx == 0 || self.workspaces[hidden_idx - 1].has_windows_or_name() {
+                self.add_workspace_at(hidden_idx);
+            }
         }
     }
 
@@ -675,14 +852,24 @@ impl<W: LayoutElement> Monitor<W> {
 
     pub fn clean_up_workspaces(&mut self) {
         assert!(self.workspace_switch.is_none());
+        let last_hidden_idx = self.workspaces.iter().position(|ws| ws.hidden);
 
         let range_start = if self.options.layout.empty_workspace_above_first {
             1
         } else {
             0
         };
-        for idx in (range_start..self.workspaces.len() - 1).rev() {
+        let last_index_to_clean = if let Some(last_hidden_idx) = last_hidden_idx {
+            last_hidden_idx - 1
+        } else {
+            self.workspaces.len() - 1
+        };
+        for idx in (range_start..last_index_to_clean).rev() {
             if self.active_workspace_idx == idx {
+                continue;
+            }
+
+            if self.workspaces[idx].hidden {
                 continue;
             }
 
@@ -705,6 +892,7 @@ impl<W: LayoutElement> Monitor<W> {
     }
 
     pub fn unname_workspace(&mut self, id: WorkspaceId) -> bool {
+        self.unhide_workspace_by_id(id, false);
         let Some(idx) = self.idx_of_ws(id) else {
             return false;
         };
@@ -719,8 +907,75 @@ impl<W: LayoutElement> Monitor<W> {
         true
     }
 
-    pub fn remove_workspace_by_idx(&mut self, mut idx: usize) -> Workspace<W> {
+    pub fn unhide_workspace_by_id(&mut self, id: WorkspaceId, needs_hidden: bool) -> Option<usize> {
+        let name = self
+            .workspaces
+            .iter()
+            .find(|ws| ws.id() == id)
+            .and_then(|ws| ws.name.clone());
+
+        let Some(name) = name else {
+            return None;
+        };
+
+        let Some(idx) = self.find_named_workspace_index(&name) else {
+            return None;
+        };
+
+        // Hidden workspaces are positioned physically after visible workspaces in their
+        // workspace vec, because of this on unhide we need to position them to match
+        // where they were originally on unhide.
+        let original_idx = self.workspaces[idx].original_idx.unwrap_or(idx);
+        let mut ws = self.remove_workspace_by_idx(idx);
+        ws.hidden = false;
+        ws.needs_hidden = needs_hidden;
+        ws.original_idx = None;
+        self.insert_workspace(ws, original_idx, false);
+        return Some(original_idx);
+    }
+
+    pub fn hide_workspace_by_name(&mut self, name: &str) {
+        let Some(idx) = self.find_named_workspace_index(name) else {
+            return;
+        };
+        self.hide_workspace_by_idx(idx);
+    }
+
+    // Currently only named workspaces can be hidden
+    pub fn hide_workspace_by_id(&mut self, id: WorkspaceId) -> bool {
+        let name = self
+            .workspaces
+            .iter()
+            .find(|ws| ws.id() == id)
+            .and_then(|ws| ws.name.clone());
+
+        let Some(name) = name else {
+            return false;
+        };
+
+        self.hide_workspace_by_name(&name);
+        true
+    }
+
+    pub fn hide_workspace_by_idx(&mut self, idx: usize) {
         if idx == self.workspaces.len() - 1 {
+            return;
+        }
+        if self.options.layout.empty_workspace_above_first && idx == 0 {
+            self.add_workspace_top();
+        }
+
+        self.workspaces[idx].hidden = true;
+        self.workspaces[idx].needs_hidden = false;
+        let mut ws = self.remove_workspace_by_idx(idx);
+        ws.original_idx = Some(idx);
+        self.workspaces.insert(self.workspaces.len(), ws);
+        self.ensure_empty_before_hidden();
+    }
+
+    pub fn remove_workspace_by_idx(&mut self, mut idx: usize) -> Workspace<W> {
+        // Don't add a new workspace if we're removing a hidden one
+        if idx == self.workspaces.len() - 1 && !self.workspaces[idx].hidden {
             self.add_workspace_bottom();
         }
         if self.options.layout.empty_workspace_above_first && idx == 0 {
@@ -729,7 +984,13 @@ impl<W: LayoutElement> Monitor<W> {
         }
 
         let mut ws = self.workspaces.remove(idx);
-        ws.set_output(None);
+
+        // hidden workspaces are always named, when we remove one
+        // we're always going to be readding it to the same monitor
+        // so we preserve its output.
+        if !ws.hidden {
+            ws.set_output(None);
+        }
 
         // For monitor current workspace removal, we focus previous rather than next (<= rather
         // than <). This is different from columns and tiles, but it lets move-workspace-to-monitor
@@ -742,6 +1003,28 @@ impl<W: LayoutElement> Monitor<W> {
         self.clean_up_workspaces();
 
         ws
+    }
+
+    // Hidden workspaces always want to be at then end of the vec, even
+    // when they are newly added. Their original idx should instead be set to
+    // where they would have gone if they were not hidden so when we toggle visibility
+    // they appear in an intuitive spot.
+    pub fn insert_hidden_workspace(&mut self, mut ws: Workspace<W>, mut idx: usize) {
+        ws.set_output(Some(self.output.clone()));
+        ws.update_config(self.options.clone());
+
+        if idx == self.workspaces.len() {
+            idx -= 1;
+        }
+        if idx == 0 && self.options.layout.empty_workspace_above_first {
+            idx += 1;
+        }
+        ws.original_idx = Some(idx);
+
+        let idx = self.workspaces.len();
+        self.workspaces.insert(idx, ws);
+        self.workspace_switch = None;
+        self.clean_up_workspaces();
     }
 
     pub fn insert_workspace(&mut self, mut ws: Workspace<W>, mut idx: usize, activate: bool) {
@@ -907,6 +1190,7 @@ impl<W: LayoutElement> Monitor<W> {
             removed.is_full_width,
             removed.is_floating,
             Some(config),
+            false,
         );
 
         if self.workspace_switch.is_none() {
@@ -1005,10 +1289,31 @@ impl<W: LayoutElement> Monitor<W> {
                 let new = current.ceil() - 1.;
                 new.clamp(0., (self.workspaces.len() - 1) as f64) as usize
             }
-            _ => self.active_workspace_idx.saturating_sub(1),
+            // If the workspace is hidden, we shouldn't switch to it.
+            _ => {
+                let mut new_idx = self.active_workspace_idx.saturating_sub(1);
+                while new_idx > 0 && self.workspaces[new_idx].hidden {
+                    new_idx = new_idx.saturating_sub(1);
+                }
+                // Don't move if there is only hidden above
+                if self.workspaces[new_idx].hidden {
+                    self.active_workspace_idx
+                } else {
+                    new_idx
+                }
+            }
         };
 
         self.activate_workspace(new_idx);
+    }
+
+    pub fn hide_needs_hidden(&mut self, idx: usize) -> bool {
+        let needs_hidden = self.workspaces[idx].needs_hidden;
+        if needs_hidden {
+            self.hide_workspace_by_idx(idx);
+            return true;
+        }
+        return false;
     }
 
     pub fn switch_workspace_down(&mut self) {
@@ -1019,7 +1324,20 @@ impl<W: LayoutElement> Monitor<W> {
                 let new = current.floor() + 1.;
                 new.clamp(0., (self.workspaces.len() - 1) as f64) as usize
             }
-            _ => min(self.active_workspace_idx + 1, self.workspaces.len() - 1),
+            // If the workspace is hidden, we shouldn't switch to it.
+            // Instead we need to bump the workspace down
+            _ => {
+                let max = self.workspaces.len() - 1;
+                let mut new_idx = min(self.active_workspace_idx + 1, max);
+                while new_idx < max && self.workspaces[new_idx].hidden {
+                    new_idx += 1;
+                }
+                if new_idx > max || self.workspaces[new_idx].hidden {
+                    return;
+                }
+
+                new_idx
+            }
         };
 
         self.activate_workspace(new_idx);
@@ -1030,8 +1348,26 @@ impl<W: LayoutElement> Monitor<W> {
         self.idx_of_ws(id)
     }
 
-    pub fn switch_workspace(&mut self, idx: usize) {
-        self.activate_workspace(min(idx, self.workspaces.len() - 1));
+    pub fn switch_workspace(&mut self, idx: usize, force_unhide: bool) {
+        let mut actual_idx = min(idx, self.workspaces.len() - 1);
+
+        if force_unhide {
+            let id = &self.workspaces[actual_idx].id().clone();
+            // If this workspace was forcefully unhidden by needing focus
+            // also make sure it needs to be hidden later.
+            if let Some(idx) = self.unhide_workspace_by_id(*id, force_unhide) {
+                actual_idx = idx;
+            }
+        }
+        if self.workspaces[actual_idx].hidden && !force_unhide {
+            if let Some(visible_idx) = (0..actual_idx).rev().find(|&i| !self.workspaces[i].hidden) {
+                actual_idx = visible_idx;
+            } else {
+                return;
+            }
+        }
+
+        self.activate_workspace(actual_idx);
     }
 
     pub fn switch_workspace_auto_back_and_forth(&mut self, idx: usize) {
@@ -1039,20 +1375,26 @@ impl<W: LayoutElement> Monitor<W> {
 
         if idx == self.active_workspace_idx {
             if let Some(prev_idx) = self.previous_workspace_idx() {
-                self.switch_workspace(prev_idx);
+                self.switch_workspace(prev_idx, false);
             }
         } else {
-            self.switch_workspace(idx);
+            self.switch_workspace(idx, false);
         }
     }
 
     pub fn switch_workspace_previous(&mut self) {
         if let Some(idx) = self.previous_workspace_idx() {
-            self.switch_workspace(idx);
+            self.switch_workspace(idx, false);
         }
     }
 
     pub fn active_window(&self) -> Option<&W> {
+        if self.active_space == ActiveSpace::Sticky {
+            if let Some(win) = self.sticky.active_window() {
+                return Some(win);
+            }
+        }
+
         self.active_workspace_ref().active_window()
     }
 
@@ -1101,6 +1443,8 @@ impl<W: LayoutElement> Monitor<W> {
         for ws in &mut self.workspaces {
             ws.advance_animations();
         }
+
+        self.sticky.advance_animations();
     }
 
     pub(super) fn are_animations_ongoing(&self) -> bool {
@@ -1109,6 +1453,7 @@ impl<W: LayoutElement> Monitor<W> {
             .is_some_and(|s| s.is_animation_ongoing())
             || self.overview_zoom_anim.is_some()
             || self.workspaces.iter().any(|ws| ws.are_animations_ongoing())
+            || self.sticky.are_animations_ongoing()
     }
 
     pub fn are_transitions_ongoing(&self) -> bool {
@@ -1117,6 +1462,7 @@ impl<W: LayoutElement> Monitor<W> {
                 .workspaces
                 .iter()
                 .any(|ws| ws.are_transitions_ongoing())
+            || self.sticky.are_transitions_ongoing()
     }
 
     pub fn update_render_elements(&mut self, is_active: bool) {
@@ -1129,6 +1475,11 @@ impl<W: LayoutElement> Monitor<W> {
         for ws in &mut self.workspaces {
             ws.update_render_elements(is_active, RenderLayer::MovingBetweenWorkspaces);
         }
+
+        let sticky_active = is_active && self.active_space == ActiveSpace::Sticky;
+        let view_rect = Rectangle::from_size(self.view_size);
+        self.sticky
+            .update_render_elements(sticky_active, view_rect, RenderLayer::Normal);
 
         for (ws, geo) in self.workspaces_with_render_geo_mut(true) {
             ws.update_render_elements(is_active, RenderLayer::Normal);
@@ -1238,6 +1589,13 @@ impl<W: LayoutElement> Monitor<W> {
             ws.update_config(options.clone());
         }
 
+        self.sticky.update_config(
+            self.view_size,
+            self.working_area,
+            self.scale.fractional_scale(),
+            options.clone(),
+        );
+
         self.insert_hint_element
             .update_config(options.layout.insert_hint);
 
@@ -1261,6 +1619,8 @@ impl<W: LayoutElement> Monitor<W> {
             ws.update_shaders();
         }
 
+        self.sticky.update_shaders();
+
         self.insert_hint_element.update_shaders();
     }
 
@@ -1268,6 +1628,13 @@ impl<W: LayoutElement> Monitor<W> {
         self.scale = self.output.current_scale();
         self.view_size = output_size(&self.output);
         self.working_area = compute_working_area(&self.output);
+
+        self.sticky.update_config(
+            self.view_size,
+            self.working_area,
+            self.scale.fractional_scale(),
+            self.options.clone(),
+        );
 
         for ws in &mut self.workspaces {
             ws.update_output_size();
@@ -1701,7 +2068,9 @@ impl<W: LayoutElement> Monitor<W> {
         let geo = self.workspaces_render_geo();
         zip(self.workspaces.iter(), geo)
             // Cull out workspaces outside the output.
-            .filter(move |(_ws, geo)| !cull || geo.intersection(output_geo).is_some())
+            .filter(move |(ws, geo)| {
+                !ws.hidden && (!cull || geo.intersection(output_geo).is_some())
+            })
     }
 
     pub fn workspaces_with_render_geo(
@@ -1757,8 +2126,8 @@ impl<W: LayoutElement> Monitor<W> {
 
         let geo = self.workspaces_render_geo_at_zoom(zoom);
         zip(self.workspaces.iter(), geo)
-            // Cull out workspaces outside the output.
-            .filter(move |(_ws, geo)| geo.intersection(output_geo).is_some())
+            // Cull out hidden workspaces and workspaces outside the output.
+            .filter(move |(ws, geo)| !ws.hidden && geo.intersection(output_geo).is_some())
     }
 
     pub fn workspaces_with_render_geo_idx(
@@ -1769,7 +2138,7 @@ impl<W: LayoutElement> Monitor<W> {
         let geo = self.workspaces_render_geo();
         zip(self.workspaces.iter().enumerate(), geo)
             // Cull out workspaces outside the output.
-            .filter(move |(_ws, geo)| geo.intersection(output_geo).is_some())
+            .filter(move |(ws, geo)| !ws.1.hidden && geo.intersection(output_geo).is_some())
     }
 
     pub fn workspaces_with_render_geo_mut(
@@ -1781,7 +2150,9 @@ impl<W: LayoutElement> Monitor<W> {
         let geo = self.workspaces_render_geo();
         zip(self.workspaces.iter_mut(), geo)
             // Cull out workspaces outside the output.
-            .filter(move |(_ws, geo)| !cull || geo.intersection(output_geo).is_some())
+            .filter(move |(ws, geo)| {
+                !ws.hidden && (!cull || geo.intersection(output_geo).is_some())
+            })
     }
 
     pub fn workspace_under(
@@ -1810,9 +2181,24 @@ impl<W: LayoutElement> Monitor<W> {
     pub fn window_under(&self, pos_within_output: Point<f64, Logical>) -> Option<(&W, HitType)> {
         let (ws, geo) = self.workspace_under(pos_within_output)?;
 
-        if self.overview_progress.is_some() {
-            let zoom = self.overview_zoom();
-            let pos_within_workspace = (pos_within_output - geo.loc).downscale(zoom);
+        let in_overview = self.overview_progress.is_some();
+        let zoom = self.overview_zoom();
+        let pos_within_workspace = if in_overview {
+            (pos_within_output - geo.loc).downscale(zoom)
+        } else {
+            pos_within_output - geo.loc
+        };
+
+        if let Some((win, hit)) = self.sticky.window_under(pos_within_workspace) {
+            let hit = if in_overview {
+                hit.to_activate()
+            } else {
+                hit.offset_win_pos(geo.loc)
+            };
+            return Some((win, hit));
+        }
+
+        if in_overview {
             let (win, hit) = ws.window_under(pos_within_workspace)?;
             // During the overview animation, we cannot do input hits because we cannot really
             // represent scaled windows properly.
@@ -1855,7 +2241,11 @@ impl<W: LayoutElement> Monitor<W> {
         }
 
         let (ws, geo) = self.workspace_under(pos_within_output)?;
-        ws.resize_edges_under(pos_within_output - geo.loc)
+        let pos_within_workspace = pos_within_output - geo.loc;
+        if let Some(edges) = self.sticky.resize_edges_under(pos_within_workspace) {
+            return Some(edges);
+        }
+        ws.resize_edges_under(pos_within_workspace)
     }
 
     pub(super) fn insert_position(
@@ -1971,6 +2361,44 @@ impl<W: LayoutElement> Monitor<W> {
                 Relocate::Relative,
             )
         };
+
+        // Sticky windows belong to the monitor rather than to any particular workspace, so
+        // render them exactly once, fixed at the monitor origin, before any workspace content.
+        // Monitor elements are pushed in top-to-bottom order, so pushing sticky first keeps it
+        // above fullscreen/tiling windows and above workspace-switch transitions.
+        if !self.sticky.is_empty() {
+            let sticky_crop_bounds =
+                if self.workspace_switch.is_some() || self.overview_progress.is_some() {
+                    Rectangle::new(
+                        Point::from((-i32::MAX / 2, 0)),
+                        Size::from((i32::MAX, height)),
+                    )
+                } else {
+                    Rectangle::new(
+                        Point::from((-i32::MAX / 2, -i32::MAX / 2)),
+                        Size::from((i32::MAX, i32::MAX)),
+                    )
+                };
+            let sticky_geo = Rectangle::new(Point::from((0., 0.)), self.view_size);
+            let sticky_focus_ring = focus_ring && self.active_space == ActiveSpace::Sticky;
+            let xray_pos = XrayPos::new(sticky_geo.loc, zoom);
+
+            self.sticky.render(
+                ctx.r(),
+                xray_pos,
+                sticky_geo,
+                sticky_focus_ring,
+                RenderLayer::Normal,
+                true,
+                &mut |elem| {
+                    let elem = CropRenderElement::from_element(elem, scale, sticky_crop_bounds);
+                    if let Some(elem) = elem {
+                        let elem = MonitorInnerRenderElement::from(elem);
+                        push(scale_relocate(sticky_geo, elem));
+                    }
+                },
+            );
+        }
 
         // Draw in passes for correct Z ordering during window movement between workspaces:
         // - floating windows moving between workspaces

@@ -1086,6 +1086,7 @@ impl<W: LayoutElement> ScrollingSpace<W> {
                 width: column.width,
                 is_full_width: column.is_full_width,
                 is_floating: false,
+                is_sticky: false,
             };
         }
 
@@ -1138,6 +1139,7 @@ impl<W: LayoutElement> ScrollingSpace<W> {
             width: column.width,
             is_full_width: column.is_full_width,
             is_floating: false,
+            is_sticky: false,
         };
 
         #[allow(clippy::comparison_chain)] // What do you even want here?
@@ -3715,6 +3717,7 @@ impl<W: LayoutElement> ScrollingSpace<W> {
                 let active_in_column = col.active_tile_idx == tile_idx;
                 win.set_active_in_column(active_in_column);
                 win.set_floating(false);
+                win.set_sticky(false);
 
                 let mut active = is_active && self.active_column_idx == col_idx;
                 if self.options.deactivate_unfocused_windows {

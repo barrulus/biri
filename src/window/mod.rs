@@ -79,6 +79,9 @@ pub struct ResolvedWindowRules {
     /// Whether the window should open floating.
     pub open_floating: Option<bool>,
 
+    /// Whether the window should open sticky.
+    pub open_sticky: Option<bool>,
+
     /// Whether the window should open focused.
     pub open_focused: Option<bool>,
 
@@ -119,6 +122,9 @@ pub struct ResolvedWindowRules {
 
     /// Whether to bob this window up and down.
     pub baba_is_float: Option<bool>,
+
+    /// Whether this floating window should render above fullscreen windows.
+    pub float_above_fullscreen: Option<bool>,
 
     /// Whether to block out this window from certain render targets.
     pub block_out_from: Option<BlockOutFrom>,
@@ -183,6 +189,13 @@ impl<'a> WindowRef<'a> {
             // window rule, rather than relying on a different is-floating rule.
             WindowRef::Unmapped(_) => false,
             WindowRef::Mapped(mapped) => mapped.is_floating(),
+        }
+    }
+
+    pub fn is_sticky(self) -> bool {
+        match self {
+            WindowRef::Unmapped(_) => false,
+            WindowRef::Mapped(mapped) => mapped.is_sticky(),
         }
     }
 
@@ -268,6 +281,10 @@ impl ResolvedWindowRules {
                     resolved.open_floating = Some(x);
                 }
 
+                if let Some(x) = rule.open_sticky {
+                    resolved.open_sticky = Some(x);
+                }
+
                 if let Some(x) = rule.open_focused {
                     resolved.open_focused = Some(x);
                 }
@@ -308,6 +325,9 @@ impl ResolvedWindowRules {
                 }
                 if let Some(x) = rule.baba_is_float {
                     resolved.baba_is_float = Some(x);
+                }
+                if let Some(x) = rule.float_above_fullscreen {
+                    resolved.float_above_fullscreen = Some(x);
                 }
                 if let Some(x) = rule.block_out_from {
                     resolved.block_out_from = Some(x);
@@ -464,6 +484,12 @@ fn window_matches(window: WindowRef, role: &XdgToplevelSurfaceRoleAttributes, m:
 
     if let Some(is_floating) = m.is_floating {
         if window.is_floating() != is_floating {
+            return false;
+        }
+    }
+
+    if let Some(is_sticky) = m.is_sticky {
+        if window.is_sticky() != is_sticky {
             return false;
         }
     }

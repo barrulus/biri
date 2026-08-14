@@ -34,6 +34,7 @@ window-rule {
     match is-focused=false
     match is-active-in-column=true
     match is-floating=true
+    match is-sticky=true
     match is-window-cast-target=true
     match is-urgent=true
     match at-startup=true
@@ -47,6 +48,7 @@ window-rule {
     open-maximized-to-edges true
     open-fullscreen true
     open-floating true
+    open-sticky true
     open-focused false
 
     // Properties that apply continuously.
@@ -100,6 +102,7 @@ window-rule {
     clip-to-geometry true
     tiled-state true
     baba-is-float true
+    float-above-fullscreen true
 
     background-effect {
         xray true
@@ -265,6 +268,22 @@ Matches floating windows.
 ```kdl
 window-rule {
     match is-floating=true
+}
+```
+
+#### `is-sticky`
+
+<sup>Since: 25.11</sup>
+
+Can be `true` or `false`.
+Matches sticky windows.
+
+> [!NOTE]
+> This matcher will apply only after the window is already open.
+
+```kdl
+window-rule {
+    match is-sticky=true
 }
 ```
 
@@ -499,6 +518,22 @@ You can also set this to `false` to *prevent* a window from opening in the float
 // Open all windows in the tiling layout, overriding any auto-floating logic.
 window-rule {
     open-floating false
+}
+```
+
+#### `open-sticky`
+
+<sup>Since: 25.11</sup>
+
+Make the window sticky across all workspaces on the current output.
+Sticky windows are floating windows; `open-sticky` implies `open-floating`.
+
+```kdl
+// Keep picture-in-picture windows visible across workspace switches.
+window-rule {
+    match app-id="firefox$" title="^Picture-in-Picture$"
+
+    open-sticky true
 }
 ```
 
@@ -957,6 +992,18 @@ window-rule {
 https://github.com/user-attachments/assets/3f4cb1a4-40b2-4766-98b7-eec014c19509
 
 </video>
+
+#### `float-above-fullscreen`
+
+<sup>Since: next release</sup>
+
+Make a floating window always visible when the current workspace is occupied by a fullscreen window.
+
+```kdl
+window-rule {
+    float-above-fullscreen false
+}
+```
 
 #### `background-effect`
 

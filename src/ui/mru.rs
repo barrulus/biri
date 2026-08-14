@@ -582,6 +582,10 @@ impl WindowMru {
         let config = niri.config.borrow().recent_windows.previews;
         let mut thumbnails = Vec::new();
         for (mon, ws_idx, ws) in niri.layout.workspaces() {
+            if ws.hidden {
+                continue;
+            }
+
             let mon = mon.expect("an active output exists so all workspaces have a monitor");
             let on_current_output = mon.output() == output;
             let on_current_workspace = on_current_output && mon.active_workspace_idx() == ws_idx;
@@ -592,6 +596,23 @@ impl WindowMru {
                 thumbnail.on_current_workspace = on_current_workspace;
                 thumbnails.push(thumbnail);
             }
+        }
+
+        for (mon, mapped) in niri.layout.windows() {
+            let Some(mon) = mon else {
+                continue;
+            };
+            if !niri.layout.is_sticky_window(&mapped.window) {
+                continue;
+            }
+
+            let on_current_output = mon.output() == output;
+            let on_current_workspace = on_current_output;
+
+            let mut thumbnail = Thumbnail::from_mapped(mapped, niri.clock.clone(), config);
+            thumbnail.on_current_output = on_current_output;
+            thumbnail.on_current_workspace = on_current_workspace;
+            thumbnails.push(thumbnail);
         }
 
         thumbnails

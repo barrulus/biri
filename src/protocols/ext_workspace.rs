@@ -98,7 +98,9 @@ pub fn refresh(state: &mut State) {
     let mut seen_workspaces = HashMap::new();
     for (mon, _, ws) in state.niri.layout.workspaces() {
         let output = mon.map(|mon| mon.output());
-        seen_workspaces.insert(ws.id(), output);
+        if !ws.hidden {
+            seen_workspaces.insert(ws.id(), output);
+        }
     }
 
     protocol_state.workspaces.retain(|id, workspace| {
@@ -139,6 +141,9 @@ pub fn refresh(state: &mut State) {
 
     // Update existing workspaces and create new ones.
     for (mon, ws_idx, ws) in state.niri.layout.workspaces() {
+        if ws.hidden {
+            continue;
+        }
         changed |= refresh_workspace(protocol_state, mon, ws_idx, ws);
     }
 

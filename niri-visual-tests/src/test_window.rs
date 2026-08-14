@@ -266,4 +266,6 @@ impl LayoutElement for TestWindow {
     fn is_urgent(&self) -> bool {
         false
     }
+
+    fn set_sticky(&mut self, _sticky: bool) {}
 }
