@@ -12,6 +12,61 @@
 
 <img width="1280" height="720" alt="niri with a few windows open" src="https://github.com/user-attachments/assets/dea5909e-1859-4aaa-9d88-d37f9663e00b" />
 
+> [!IMPORTANT]
+> **This is biri, a custom fork of [niri](https://github.com/niri-wm/niri).**
+>
+> It tracks upstream niri and adds a set of extra features on top: GPU post-process shaders (global, per-region, and per-window), a consolidated multi-monitor carousel overview, dynamic overview zoom presets, isolated "signage" outputs, and runtime touchpad/DWT toggles.
+> See [Fork Features](#fork-features) below for the full list.
+>
+> Everything documented for upstream niri still applies. Bugs you hit here should be reported to this fork, not to upstream niri.
+
+## Fork Features
+
+These exist only in biri, not in upstream niri. Unless noted, each is off by default and inert when unconfigured.
+
+### Post-process shaders
+
+A GLSL fragment shader pipeline layered on top of niri's rendering, in three scopes that can all be active at once:
+
+- **[`global-shader`](./docs/wiki/Configuration:-Global-Shader.md)** — a full-screen post-process pass over the whole composited output: colour grading, CRT scanlines, night-light tints, motion-blur trails, and so on. TTY/DRM backend only.
+- **`region-shader`** — the same shader contract scoped to a fixed screen rectangle, optionally pinned to one output. Repeatable.
+- **`shader {}` in a `window-rule`** — a shader applied to a single window's content, with borders and shadows rendered outside it. Animated, and only redrawn while the window is actually visible.
+
+Supporting machinery:
+
+- Two API flavours: a native `niri` mode and a `hyprland` mode that accepts most Hyprland `screen_shader` files with light edits.
+- Multi-pass chains via repeatable `pass {}` blocks, where each pass reads the previous pass's output.
+- A previous-frame feedback buffer (`niri_prev` / `tex2D_prev`) plus a dedicated `global_buffer` pass for trails and accumulation effects.
+- Redraw scheduling (`redraw "auto" | "on-damage" | "continuous"`) so a static shader doesn't force a continuous redraw loop, and `cursor-radius` to reshade only a box around the cursor and keep the rest of the output scanout-eligible.
+- `shader-animation-max-fps` to cap shader-driven redraws independently of the output refresh rate.
+- `shaders-in-capture` (top-level flag) to opt shader output into portal screencasts and screencopy; by default shaders stay a local display effect and never leak into shared or recorded content.
+- Hot-reload on config reload; a shader that fails to compile logs a warning and leaves the screen rendering normally.
+
+Note the cost: an active global shader disables direct scanout and redraws the whole output every frame. The [shader documentation](./docs/wiki/Configuration:-Global-Shader.md) covers this in detail.
+
+### Consolidated carousel overview
+
+`overview { consolidated-carousel { ... } }` replaces the per-monitor overview on multi-monitor setups with a single-screen, cover-flow style browser. Zooming one output's overview out past `reveal-zoom` continuously reveals the *other* outputs as perspective panels receding to the sides, fully assembled by `assembled-zoom` — no snapping or thresholds.
+
+Rotate the ring with the normal `focus-column-left`/`right` binds, `Shift`+scroll, or by clicking a side panel; any of these work at any zoom level, pulling out to show the ring and then returning to where you were. Rotating a sibling output into the centre gives you its live, interactive workspace strip ("the lens"), and clicking a window there — or pressing `Enter` — jumps focus straight to that window on its real output.
+
+See [Configuration: Miscellaneous](./docs/wiki/Configuration:-Miscellaneous.md#consolidated-carousel).
+
+### Dynamic overview zoom
+
+`overview { zoom-presets 0.5 0.25 0.1 }` plus three new actions — `overview-zoom-in`, `overview-zoom-out`, and `overview-zoom-cycle` — let you move between zoom levels while in the [Overview](./docs/wiki/Overview.md#dynamic-zoom). The zoom actions also open and close the overview at the ends of the range, so two binds (typically `Mod`+scroll) cover the whole interaction. Transitions are animated via the new `overview-zoom` [animation](./docs/wiki/Configuration:-Animations.md#overview-zoom).
+
+### Isolated outputs
+
+An `isolated` flag on an [output](./docs/wiki/Configuration:-Outputs.md#isolated) keeps compositor UI — the overview, the Alt-Tab switcher, the hotkey overlay, and the config error notification — off that screen, for projection, digital signage, shop-front visuals, or a clean capture feed. Windows and layer-shell surfaces still render normally. `power-off-monitors skip-isolated=true` leaves isolated outputs lit while the rest sleep on idle.
+
+### Runtime input toggles
+
+- [`toggle-touchpad`](./docs/wiki/Configuration:-Key-Bindings.md#toggle-touchpad) — enable/disable the touchpad without editing the config.
+- [`toggle-dwt`](./docs/wiki/Configuration:-Key-Bindings.md#toggle-dwt) — same for disable-while-typing.
+
+Both compose with the config settings (config and toggle must agree), reset on restart, and apply to newly hot-plugged touchpads.
+
 ## About
 
 Windows are arranged in columns on an infinite strip going to the right.
@@ -98,6 +153,8 @@ An LWN article with a nice overview and introduction to niri.
 
 If you'd like to help with niri, there are plenty of both coding- and non-coding-related ways to do so.
 See [CONTRIBUTING.md](https://github.com/niri-wm/niri/blob/main/CONTRIBUTING.md) for an overview.
+
+For the fork-specific features listed above, open issues and pull requests against this repository rather than upstream niri.
 
 ## Inspiration
 

@@ -343,6 +343,8 @@ Override this with `redraw`:
 | `"on-damage"` | Never force idle redraws — animate only when other on-screen activity triggers a frame. |
 | `"continuous"` | Always redraw every frame, even for a static shader. |
 
+The same `auto` scan drives region and per-window shaders, which have no `redraw` setting of their own. To limit how fast any of them animate, see [`shader-animation-max-fps`](#shader-animation-max-fps).
+
 The scan is a literal text match, so it errs on the side of *more* redraws (e.g. an identifier like `lifetime` in a `hyprland`-mode shader counts as using `time`). Use `redraw "on-damage"` to opt out if that happens.
 
 ```kdl
@@ -353,6 +355,20 @@ global-shader {
     redraw "auto"
 }
 ```
+
+---
+
+### shader-animation-max-fps
+
+A top-level setting that caps how often shader-driven redraws happen, across **all** shader scopes (global, region, and per-window):
+
+```kdl
+shader-animation-max-fps 30
+```
+
+Without it (or with `0`) an animated shader recomposites at the output's native refresh rate — 144 recomposites/sec on a 144 Hz panel, even when the desktop is otherwise idle. With a cap set, biri renders one shader frame and then schedules the next from a one-shot timer instead of the vblank loop, so an idle animated shader runs at roughly the configured rate.
+
+The cap applies only when shaders are the *sole* reason to redraw. Shaders riding along with a real animation — a window drag, a workspace switch, the overview — are never throttled, so nothing else gets choppy.
 
 ---
 
@@ -494,13 +510,26 @@ Multiple windows with a `shader {}` rule are independent: each is shaded separat
 
 Multi-pass chains work the same way as for `global-shader` — each pass reads the previous pass's output as `niri_screen`, and `niri_source` holds the original window content.
 
-#### v1 limits
+#### Animation
 
-- **Static only — no animation and no cursor reactivity.** `niri_time` is always `0.0` and `niri_cursor` is always `(0.0, 0.0)` for window shaders in this release. Do not write window shaders that depend on `niri_time` or `niri_cursor`; use `global-shader` for animated effects.
+Window shaders animate: `niri_time` is the compositor's shared shader clock (seconds since startup), the same origin used by `global-shader` and `region-shader`, so several shaded windows stay in phase with each other and with a global shader.
+
+Redraw scheduling is automatic — there is no per-window `redraw` setting:
+
+- A window shader whose source references `niri_time` keeps the output redrawing every frame while that window is on screen, exactly like an animated `global-shader` (with the same continuous-GPU-load cost).
+- A shader that doesn't reference `niri_time` imposes no continuous-redraw cost; it re-runs when the window's own content is damaged.
+- Only **visible** animating windows force redraws. A shaded window on an inactive workspace, or scrolled off the viewport, does not keep the GPU busy. While the overview is open, all windows on the output are treated as visible, since the overview shows several workspaces at once.
+
+Use [`shader-animation-max-fps`](#shader-animation-max-fps) to cap the rate of shader-driven redraws.
+
+#### Limits
+
+- **No cursor reactivity.** `niri_cursor` is always `(0.0, 0.0)` for window shaders. Do not write window shaders that depend on it; use `global-shader` or `region-shader` for cursor-driven effects.
+- **`niri_time` is live on the display, but `0.0` in a few paths.** Window shaders animate normally on screen (see [Animation](#animation) above), but `niri_time` is fixed at `0.0` in single-window screencasts (the `render_windows_for_screen_cast` path has no access to the compositor time origin) and in unmap/close snapshots. Full-output captures use the live clock.
 - **No per-scope feedback.** `niri_prev`, `niri_screen_prev`, and `niri_buffer` all alias `niri_screen` (the current window content), and `global_buffer` is ignored. There is no previous-frame feedback within a window shader in this release.
-- **Corner-rounding is not applied inside the shader.** The shader runs on the window's full rectangular offscreen buffer before corner clipping. A window that has `corner-radius` configured will appear with **square corners** while a window shader is active — the rounded clipping that normally happens at composite time does not apply to the shaded result. This is a known v1 limitation.
+- **Corner-rounding is not applied inside the shader.** The shaded result is drawn over the window's full rectangle, so a window with `corner-radius` configured will appear with **square corners** while a window shader is active — the rounded clipping that normally happens at composite time does not apply to the shaded result.
 - **Content only.** The shader cannot see or affect border, shadow, focus-ring, or any other decoration — those are composited around the result after the shader runs.
-- **No `reads-cursor` or `redraw` controls.** Window shaders redraw when the window's own content is damaged. Because `niri_time` is always 0, they never force continuous redraws on their own.
+- **No `reads-cursor` or `redraw` controls.** Redraw is automatic, as described under [Animation](#animation) above.
 
 #### Example: grayscale on one app
 
