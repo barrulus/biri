@@ -71,9 +71,26 @@ Both compose with the config settings (config and toggle must agree), reset on r
 
 Open niri pull requests merged here ahead of upstream, originally combined in [niri-qol](https://github.com/AmmoniumX/niri-qol) (now absorbed into this fork):
 
-- **Hidden workspaces** ([niri#2997](https://github.com/niri-wm/niri/pull/2997)) — `toggle-workspace-visibility` hides a named workspace from the workspace list and overview until toggled back.
-- **`float-above-fullscreen`** ([niri#4062](https://github.com/niri-wm/niri/pull/4062)) — a window rule letting floating windows render above fullscreen windows.
-- **Sticky floating windows** ([niri#3302](https://github.com/niri-wm/niri/pull/3302)) — an `open-sticky` window rule and a `toggle-window-sticky` bind for floating windows that follow you across workspaces.
+- **Hidden workspaces** ([niri#2997](https://github.com/niri-wm/niri/pull/2997)) — a named workspace can be hidden: it keeps its windows but disappears from the workspace strip, the overview, and workspace switching until toggled back. Declare it hidden at startup with `workspace "name" { hidden true }`, or toggle at runtime with the `toggle-workspace-visibility "name"` bind. Hidden workspaces also stay out of the consolidated carousel's panels.
+- **Sticky floating windows** ([niri#3302](https://github.com/niri-wm/niri/pull/3302)) — floating windows that follow you across all workspaces of their output. Set [`open-sticky true`](./docs/wiki/Configuration:-Window-Rules.md#open-sticky) in a window rule (implies `open-floating`), or toggle any floating window with the [`toggle-window-sticky`](./docs/wiki/Configuration:-Key-Bindings.md#toggle-window-sticky) bind. In the consolidated carousel, sticky windows show on every workspace panel, and clicking one in the lens focuses it.
+- **`float-above-fullscreen`** ([niri#4062](https://github.com/niri-wm/niri/pull/4062)) — a [window rule](./docs/wiki/Configuration:-Window-Rules.md#float-above-fullscreen) that keeps a floating window visible on top when a fullscreen window occupies the workspace. Off by default.
+
+```kdl
+workspace "scratch" {
+    hidden true
+}
+
+window-rule {
+    match app-id="firefox$" title="^Picture-in-Picture$"
+    open-sticky true
+    float-above-fullscreen true
+}
+
+binds {
+    Mod+H { toggle-workspace-visibility "scratch"; }
+    Mod+S { toggle-window-sticky; }
+}
+```
 
 If these land upstream, the upstream versions replace them here.
 
