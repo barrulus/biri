@@ -64,7 +64,8 @@ pub use crate::region_shader::{Geometry, RegionShader, RegionShaderPart};
 pub use crate::utils::FloatOrInt;
 use crate::utils::{Flag, MergeWith as _};
 pub use crate::window_rule::{
-    FloatingPosition, PopupsRule, RelativeTo, ResolvedPopupsRules, ShaderRule, WindowRule,
+    FloatingPosition, OnXdgActivate, PopupsRule, RelativeTo, ResolvedPopupsRules, ShaderRule,
+    WindowRule,
 };
 pub use crate::workspace::{Workspace, WorkspaceLayoutPart};
 
@@ -685,6 +686,30 @@ mod tests {
     }
 
     #[test]
+    fn parse_on_xdg_activate() {
+        let parsed = do_parse(
+            r#"
+            window-rule { on-xdg-activate "ignore"; }
+            window-rule { on-xdg-activate "set-urgent"; }
+            window-rule { on-xdg-activate "focus"; }
+            "#,
+        );
+
+        assert_eq!(
+            parsed
+                .window_rules
+                .iter()
+                .map(|rule| rule.on_xdg_activate)
+                .collect::<Vec<_>>(),
+            vec![
+                Some(OnXdgActivate::Ignore),
+                Some(OnXdgActivate::SetUrgent),
+                Some(OnXdgActivate::Focus),
+            ]
+        );
+    }
+
+    #[test]
     fn parse() {
         let parsed = do_parse(
             r##"
@@ -921,6 +946,7 @@ mod tests {
                 default-window-height { fixed 500; }
                 default-column-display "tabbed"
                 default-floating-position x=100 y=-200 relative-to="bottom-left"
+                on-xdg-activate "ignore"
 
                 focus-ring {
                     off
@@ -1859,6 +1885,9 @@ mod tests {
                     open_focused: Some(
                         true,
                     ),
+                    on_xdg_activate: Some(
+                        Ignore,
+                    ),
                     min_width: None,
                     min_height: None,
                     max_width: None,
@@ -2331,6 +2360,7 @@ mod tests {
                 honor_xdg_activation_with_invalid_serial: false,
                 deactivate_unfocused_windows: false,
                 skip_cursor_only_updates_during_vrr: false,
+                disable_10bit_output: false,
             },
             workspaces: [
                 Workspace {
