@@ -67,6 +67,16 @@ An `isolated` flag on an [output](./docs/wiki/Configuration:-Outputs.md#isolated
 
 Both compose with the config settings (config and toggle must agree), reset on restart, and apply to newly hot-plugged touchpads.
 
+### Fast-tracked upstream PRs
+
+Open niri pull requests merged here ahead of upstream, originally combined in [niri-qol](https://github.com/AmmoniumX/niri-qol) (now absorbed into this fork):
+
+- **Hidden workspaces** ([niri#2997](https://github.com/niri-wm/niri/pull/2997)) — `toggle-workspace-visibility` hides a named workspace from the workspace list and overview until toggled back.
+- **`float-above-fullscreen`** ([niri#4062](https://github.com/niri-wm/niri/pull/4062)) — a window rule letting floating windows render above fullscreen windows.
+- **Sticky floating windows** ([niri#3302](https://github.com/niri-wm/niri/pull/3302)) — an `open-sticky` window rule and a `toggle-window-sticky` bind for floating windows that follow you across workspaces.
+
+If these land upstream, the upstream versions replace them here.
+
 ## About
 
 Windows are arranged in columns on an infinite strip going to the right.
