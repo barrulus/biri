@@ -2231,6 +2231,13 @@ impl<W: LayoutElement> Monitor<W> {
             })?;
 
         let pos_within_workspace = (pos - geo.loc).downscale(zoom);
+
+        // Sticky windows are baked into every panel above the workspace content, so hit-test
+        // them first, mirroring `Self::window_under`.
+        if let Some((win, hit)) = self.sticky.window_under(pos_within_workspace) {
+            return Some((win, hit.to_activate()));
+        }
+
         let (win, hit) = ws.window_under(pos_within_workspace)?;
         Some((win, hit.to_activate()))
     }
@@ -2617,6 +2624,24 @@ impl<W: LayoutElement> Monitor<W> {
             }
 
             let xray_pos = XrayPos::new(geo.loc, zoom);
+
+            // Sticky windows follow the user to every workspace, so bake them into every
+            // panel, above that workspace's content — mirroring the live path, where the
+            // monitor-level sticky space renders once above all workspace content (which a
+            // per-workspace bake cannot express any other way).
+            if !self.sticky.is_empty() {
+                let sticky_view_rect = Rectangle::from_size(self.view_size);
+                let sticky_focus_ring = focus_ring && self.active_space == ActiveSpace::Sticky;
+                self.sticky.render(
+                    ctx.r(),
+                    xray_pos,
+                    sticky_view_rect,
+                    sticky_focus_ring,
+                    RenderLayer::Normal,
+                    true,
+                    push!(),
+                );
+            }
 
             // Unlike `render_workspaces`, both render layers are emitted within the single
             // workspace loop: every element is strip-cropped to its own workspace's box, so the
