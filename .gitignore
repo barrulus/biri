@@ -1,8 +1,27 @@
+# Build artifacts
 /target
 /result
+/result-*
 
+# Editors / IDEs
 .idea
+.vscode/
 
 # direnv
 /.direnv/
 /.envrc
+
+# Superpowers plugin scratch dirs (any depth). NOT docs/superpowers/ — that
+# holds committed design specs and plans.
+.superpowers/
+
+# insta pending inline snapshots
+*.pending-snap
+
+# Local VM images
+*.qcow2
+
+# Profiling output
+perf.data
+perf.data.old
+flamegraph.svg
