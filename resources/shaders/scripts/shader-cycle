@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# shader-cycle — round-robin the active niri close-window shader.
+#
+# config.kdl has a single stable `include "shaders/current.kdl"`, where
+# current.kdl is a SYMLINK to one of the close-*.kdl shaders. Switching is an
+# atomic relink + a live reload via niri's IPC (`niri msg action
+# load-config-file`) — no hand-editing of config.kdl, no `touch` needed.
+#
+# Bind in niri:
+#   Mod+Shift+S { spawn "/home/barrulus/.config/biri/shader-cycle"; }
+#
+# State (next index) persists in $XDG_RUNTIME_DIR, so it survives across presses
+# but resets on reboot.
+set -euo pipefail
+
+dir="$HOME/.config/biri/shaders"
+link="$dir/current.kdl"
+state="${XDG_RUNTIME_DIR:-/tmp}/niri-shader.idx"
+
+# Available shaders, sorted for a stable cycle order.
+shaders=()
+while IFS= read -r f; do shaders+=("$(basename "$f")"); done \
+  < <(find "$dir" -maxdepth 1 -name 'close-*.kdl' | sort)
+n=${#shaders[@]}
+[ "$n" -gt 0 ] || { echo "shader-cycle: no close-*.kdl in $dir" >&2; exit 1; }
+
+# Current index from state (sanitised), then ADVANCE so a press always moves on.
+idx=0
+[ -r "$state" ] && read -r idx < "$state" 2>/dev/null || true
+case "$idx" in '' | *[!0-9]*) idx=0 ;; esac
+idx=$(( (idx + 1) % n ))
+
+target="${shaders[idx]}"
+ln -sfn "$target" "$link"                 # relative link within shaders/
+printf '%s\n' "$idx" > "$state"
+
+"${NIRI:-niri}" msg action load-config-file >/dev/null 2>&1 || true
+
+command -v notify-send >/dev/null 2>&1 \
+  && notify-send -t 1500 "niri shader" "${target#close-}" || true

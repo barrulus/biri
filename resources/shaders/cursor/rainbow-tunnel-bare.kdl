@@ -1,0 +1,17 @@
+// rainbow colour-tunnel WITHOUT the cursor ring — concentric rainbow bands flow
+// inward to the mouse point (hypnotic), semi-transparent; soft falloff at the edge
+// (no rim) so it reads as a glowing pool rather than a bounded disc
+global-shader {
+    enable
+    source "vec4 global_color(vec3 c){
+        vec3 s  = tex2D_screen(c.xy).rgb;
+        vec2 px = c.xy*niri_size;
+        float d = length(px - niri_cursor);
+
+        // rainbow tunnel — concentric bands flowing inward toward the cursor
+        float t = d*0.07 + niri_time*1.0;                                 // inward flow (toward cursor)
+        vec3 tunnel = 0.5 + 0.5*cos(6.2831853*(t + vec3(0.0,0.33,0.67))); // IQ rainbow palette
+        float fill  = smoothstep(60.0, 18.0, d);                          // soft falloff, no hard rim
+        return vec4(mix(s, tunnel, fill*0.09), 1.0);                      // light, see-through blend
+    }"
+}

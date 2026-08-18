@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# global-shader-cycle [GROUP] — round-robin the active niri global shader within a group.
+#
+# GROUP is a subdir of global-shaders/ — "cursor" (effects that follow the mouse)
+# or "screen" (full-output colour grades). Defaults to "cursor".
+#
+# global-shaders/current.kdl is a SYMLINK that config.kdl includes; switching is an
+# atomic relink + a live reload via niri IPC. Each group keeps its own index in
+# $XDG_RUNTIME_DIR, so cursor and screen cycle independently.
+#
+# Bind in niri:
+#   Mod+4        { spawn ".../global-shader-cycle" "cursor"; }
+#   Mod+Shift+4  { spawn ".../global-shader-cycle" "screen"; }
+set -euo pipefail
+
+group="${1:-cursor}"
+base="$HOME/.config/biri/global-shaders"
+dir="$base/$group"
+link="$base/current.kdl"
+state="${XDG_RUNTIME_DIR:-/tmp}/niri-global-shader-$group.idx"
+
+[ -d "$dir" ] || { echo "global-shader-cycle: no such group: $dir" >&2; exit 1; }
+
+# Available shaders in this group, sorted for a stable cycle order.
+shaders=()
+while IFS= read -r f; do shaders+=("$(basename "$f")"); done \
+  < <(find "$dir" -maxdepth 1 -name '*.kdl' | sort)
+n=${#shaders[@]}
+[ "$n" -gt 0 ] || { echo "global-shader-cycle: no *.kdl in $dir" >&2; exit 1; }
+
+# Current index from state (sanitised), then ADVANCE so a press always moves on.
+idx=0
+[ -r "$state" ] && read -r idx < "$state" 2>/dev/null || true
+case "$idx" in '' | *[!0-9]*) idx=0 ;; esac
+idx=$(( (idx + 1) % n ))
+
+target="${shaders[idx]}"
+ln -sfn "$group/$target" "$link"          # relative link within global-shaders/
+printf '%s\n' "$idx" > "$state"
+
+niri msg action load-config-file >/dev/null 2>&1 || true
+
+command -v notify-send >/dev/null 2>&1 \
+  && notify-send -t 1500 "niri $group shader" "${target%.kdl}" || true

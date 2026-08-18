@@ -1,0 +1,7 @@
+// soft blue glow ring following the cursor — blends over content (visible on white pages, no displacement)
+// cursor-local (effect fades out by ~110px) → region mode: only the box around the cursor reshades, rest keeps scanout.
+global-shader {
+    enable
+    cursor-radius 130
+    source "vec4 global_color(vec3 c){ vec3 s=tex2D_screen(c.xy).rgb; float d=length(c.xy*niri_output_size-niri_cursor); float ring=smoothstep(7.0,0.0,abs(d-55.0)); float glow=smoothstep(110.0,0.0,d)*0.3; float m=clamp(ring+glow,0.0,1.0); return vec4(mix(s, vec3(0.15,0.5,1.0), m*0.85), 1.0); }"
+}

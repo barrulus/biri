@@ -1,0 +1,5 @@
+// CRT scanlines — full-screen (no cursor)
+global-shader {
+    enable
+    source "vec4 global_color(vec3 c){ vec3 s=tex2D_screen(c.xy).rgb; float scan=0.85+0.15*sin(c.y*niri_size.y*3.14159); return vec4(s*scan, 1.0); }"
+}

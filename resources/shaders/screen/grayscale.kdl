@@ -1,0 +1,5 @@
+// grayscale — full-screen luminance (no cursor)
+global-shader {
+    enable
+    source "vec4 global_color(vec3 c){ float g=dot(tex2D_screen(c.xy).rgb, vec3(0.299,0.587,0.114)); return vec4(vec3(g), 1.0); }"
+}

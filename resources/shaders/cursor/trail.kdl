@@ -1,0 +1,20 @@
+// fading cyan cursor trail — now using the dedicated feedback buffer (global_buffer), which is
+// screen-independent, so the trail no longer tracers on scrolling/web content. The buffer stores
+// the trail intensity, decaying 0.85/frame; global_color tints the screen cyan by that intensity.
+// Requires the 3.2 build (global_buffer / niri_buffer).
+global-shader {
+    enable
+    source "
+    vec4 global_buffer(vec3 c){
+        float prev = tex2D_buffer(c.xy).r;                  // existing trail intensity (no screen)
+        float d = length(c.xy*niri_output_size - niri_cursor);
+        float fresh = smoothstep(18.0, 0.0, d)*0.8;         // fresh dab at cursor
+        return vec4(vec3(max(prev*0.85, fresh)), 1.0);      // lay down / decay
+    }
+    vec4 global_color(vec3 c){
+        vec3 s = tex2D_screen(c.xy).rgb;
+        vec3 tcol = vec3(0.2, 0.8, 1.0);                    // cyan
+        float t = tex2D_buffer(c.xy).r;                     // this frame's trail intensity
+        return vec4(mix(s, tcol, t), 1.0);
+    }"
+}

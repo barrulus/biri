@@ -1,0 +1,7 @@
+// luminance-adaptive cursor ring — bright on dark backgrounds, deep on light, so it shows on white pages AND dark terminals (no displacement)
+// cursor-local (effect fades out by ~110px) → region mode: only the box around the cursor reshades, rest keeps scanout.
+global-shader {
+    enable
+    cursor-radius 130
+    source "vec4 global_color(vec3 c){ vec3 s=tex2D_screen(c.xy).rgb; float d=length(c.xy*niri_output_size-niri_cursor); float ring=smoothstep(7.0,0.0,abs(d-55.0)); float glow=smoothstep(110.0,0.0,d)*0.3; float m=clamp(ring+glow,0.0,1.0); float lum=dot(s,vec3(0.299,0.587,0.114)); vec3 col=mix(vec3(0.35,0.75,1.0), vec3(0.0,0.1,0.45), smoothstep(0.4,0.6,lum)); return vec4(mix(s,col,m*0.9), 1.0); }"
+}

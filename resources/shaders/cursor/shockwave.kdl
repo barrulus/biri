@@ -1,0 +1,5 @@
+// rainbow shockwave — pulsing rainbow ring with a ripple localized AT the ring (blends over content; no full-screen slide, visible on white)
+global-shader {
+    enable
+    source "vec4 global_color(vec3 c){ vec2 px=c.xy*niri_size; vec2 d=px-niri_cursor; float r=length(d); float pulse=200.0+40.0*sin(niri_time*4.0); float band=smoothstep(45.0,0.0,abs(r-pulse)); float disp=sin(r*0.3-niri_time*8.0)*5.0*band; vec3 scene=tex2D_screen((px+normalize(d+1e-3)*disp)/niri_size).rgb; float hue=fract(niri_time*0.15); vec3 rb=0.5+0.5*cos(6.2831*(hue+vec3(0.0,0.33,0.67))); float ring=smoothstep(26.0,0.0,abs(r-pulse)); float glow=smoothstep(pulse,0.0,r)*0.20; float core=smoothstep(55.0,0.0,r); float m=clamp(ring*0.9+glow+core*0.7,0.0,1.0); return vec4(mix(scene,rb,m),1.0); }"
+}

@@ -1,0 +1,35 @@
+// rainbow comet trail — multi-pass build (from mp-comet). Pass 0 lays a rainbow dab at the cursor
+// and accumulates it in ITS OWN per-pass feedback (niri_prev), decaying for a long tail.
+// Pass 1 composites that pure trail ADDITIVELY over the ORIGINAL unfiltered screen (niri_source),
+// so the tail glows over content and never smears scrolling/video. Requires the multi-pass build.
+//
+// NOTE: the feedback buffer is 8-bit, so a pure *0.98 decay can't decrement small values to zero
+// (a 2% drop rounds back), leaving a permanent faint ghost of whatever seeded the buffer. The
+// `- 0.004` floor (>1/255) guarantees each frame drops by at least one 8-bit step, so the trail
+// (and the first-frame screen seed) decays all the way to black.
+global-shader {
+    enable
+    pass {
+        source "
+        vec4 global_color(vec3 c){
+            vec3 prev = max(tex2D_prev(c.xy).rgb * 0.98 - 0.004, vec3(0.0)); // decay to true zero on 8-bit
+            float hue = fract(niri_time*0.3);
+            vec3 rb = 0.5 + 0.5*cos(6.2831*(hue + vec3(0.0,0.33,0.67)));    // IQ rainbow palette
+            float d = length(c.xy*niri_output_size - niri_cursor);
+            float fresh = smoothstep(40.0, 0.0, d)*0.9;                     // fresh dab at cursor (wider)
+            return vec4(max(prev, rb*fresh), 1.0);                          // lay down / decay
+        }"
+    }
+    pass {
+        source "
+        vec4 global_color(vec3 c){
+            vec3 scr   = tex2D_source(c.xy).rgb;                            // original screen, unfiltered
+            vec3 trail = tex2D_screen(c.xy).rgb;                           // pass 0's trail = rainbow hue * strength
+            float i    = clamp(max(trail.r, max(trail.g, trail.b)), 0.0, 1.0); // trail strength 0..1
+            vec3 hue   = trail / max(i, 1e-4);                             // recover the rainbow hue
+            // Paint the rainbow OVER the screen (replace, not add) so it's visible on ANY background
+            // — white included — and never over-brightens the whole desktop. Opaque (1.0).
+            return vec4(mix(scr, hue, i), 1.0);
+        }"
+    }
+}

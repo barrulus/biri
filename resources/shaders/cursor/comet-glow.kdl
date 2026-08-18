@@ -1,0 +1,32 @@
+// rainbow comet trail — LUMINANCE-HYBRID variant of comet.kdl.
+// Pass 0 is identical: a rainbow dab at the cursor accumulated in this pass's own niri_prev,
+// with the `- 0.004` floor so the 8-bit feedback decays to true black (no stuck ghost).
+// Pass 1 blends per-pixel by the screen's brightness: on DARK areas it uses the additive GLOW
+// (neon look), on LIGHT areas it PAINTS the rainbow over the screen (so it stays visible on white).
+global-shader {
+    enable
+    pass {
+        source "
+        vec4 global_color(vec3 c){
+            vec3 prev = max(tex2D_prev(c.xy).rgb * 0.98 - 0.004, vec3(0.0)); // decay to true zero on 8-bit
+            float hue = fract(niri_time*0.3);
+            vec3 rb = 0.5 + 0.5*cos(6.2831*(hue + vec3(0.0,0.33,0.67)));    // IQ rainbow palette
+            float d = length(c.xy*niri_output_size - niri_cursor);
+            float fresh = smoothstep(40.0, 0.0, d)*0.9;                     // fresh dab at cursor
+            return vec4(max(prev, rb*fresh), 1.0);                          // lay down / decay
+        }"
+    }
+    pass {
+        source "
+        vec4 global_color(vec3 c){
+            vec3 scr   = tex2D_source(c.xy).rgb;                            // original screen, unfiltered
+            vec3 trail = tex2D_screen(c.xy).rgb;                           // pass 0's trail = rainbow hue * strength
+            float i    = clamp(max(trail.r, max(trail.g, trail.b)), 0.0, 1.0); // trail strength 0..1
+            vec3 hue   = trail / max(i, 1e-4);                             // recover the rainbow hue
+            float lum  = dot(scr, vec3(0.299,0.587,0.114));                 // screen brightness 0..1
+            vec3 glow  = scr + trail;                                       // additive glow  (great on dark)
+            vec3 paint = mix(scr, hue, i);                                  // solid paint    (visible on light)
+            return vec4(mix(glow, paint, lum), 1.0);                        // dark bg -> glow, light bg -> paint
+        }"
+    }
+}

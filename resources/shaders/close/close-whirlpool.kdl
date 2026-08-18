@@ -1,0 +1,134 @@
+// Whirlpool dissolve effect
+// Window spirals inward toward the center while dissolving
+
+animations {
+
+    window-open {
+        duration-ms 400
+        curve "linear"
+        custom-shader r"
+            vec4 open_color(vec3 coords_geo, vec3 size_geo) {
+                float progress = niri_clamped_progress;
+                vec2 uv = coords_geo.xy;
+
+                if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
+                    return vec4(0.0);
+                }
+
+                vec2 center = vec2(0.5, 0.5);
+                vec2 delta = uv - center;
+                float dist = length(delta);
+                float angle = atan(delta.y, delta.x);
+
+                // Reverse whirlpool: unwind from spiral to normal
+                float inv = 1.0 - progress;
+                float max_rotation = 6.28318 * 1.5;
+                float rotation = inv * max_rotation * (1.0 - dist * 0.5);
+
+                // Expand from center
+                float pull = mix(0.2, 1.0, progress);
+                float new_dist = dist / max(pull, 0.001);
+
+                float new_angle = angle + rotation;
+                vec2 new_uv = center + new_dist * vec2(cos(new_angle), sin(new_angle));
+
+                if (new_uv.x < 0.0 || new_uv.x > 1.0 ||
+                    new_uv.y < 0.0 || new_uv.y > 1.0) {
+                    return vec4(0.0);
+                }
+
+                vec3 coords_tex = niri_geo_to_tex * vec3(new_uv, 1.0);
+                vec4 color = texture2D(niri_tex, coords_tex.st);
+
+                // Fade in
+                float fade = smoothstep(0.0, 0.5, progress);
+
+                return color * fade;
+            }
+        "
+    }
+
+    window-close {
+        duration-ms 500
+        curve "linear"
+        custom-shader r"
+            vec4 close_color(vec3 coords_geo, vec3 size_geo) {
+                float progress = niri_clamped_progress;
+                vec2 uv = coords_geo.xy;
+
+                if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
+                    return vec4(0.0);
+                }
+
+                vec2 center = vec2(0.5, 0.5);
+                vec2 delta = uv - center;
+                float dist = length(delta);
+                float angle = atan(delta.y, delta.x);
+
+                // 1.5 rotations instead of 3 - less chaotic
+                float max_rotation = 6.28318 * 1.5;
+                float rotation = progress * max_rotation * (1.0 - dist * 0.5);
+
+                // Pull toward center
+                float pull = 1.0 - progress * 0.8;
+                float new_dist = dist * pull;
+
+                float new_angle = angle + rotation;
+                vec2 new_uv = center + new_dist * vec2(cos(new_angle), sin(new_angle));
+
+                if (new_uv.x < 0.0 || new_uv.x > 1.0 ||
+                    new_uv.y < 0.0 || new_uv.y > 1.0) {
+                    return vec4(0.0);
+                }
+
+                vec3 coords_tex = niri_geo_to_tex * vec3(new_uv, 1.0);
+                vec4 color = texture2D(niri_tex, coords_tex.st);
+
+                // Smooth single fade instead of double-multiply
+                float fade = 1.0 - smoothstep(0.1, 0.9, progress);
+
+                // Edge dissolve - outer pixels go first
+                float dissolve = smoothstep(1.0 - progress * 1.1, 0.0, dist);
+
+                return color * fade * dissolve;
+            }
+        "
+    }
+
+    window-resize {
+        spring damping-ratio=1.0 stiffness=800 epsilon=0.0001
+    }
+
+    workspace-switch {
+        spring damping-ratio=1.0 stiffness=500 epsilon=0.0001
+    }
+
+    horizontal-view-movement {
+        spring damping-ratio=1.0 stiffness=600 epsilon=0.0001
+    }
+
+    window-movement {
+        spring damping-ratio=1.0 stiffness=700 epsilon=0.0001
+    }
+
+    config-notification-open-close {
+        spring damping-ratio=0.8 stiffness=800 epsilon=0.001
+    }
+
+    exit-confirmation-open-close {
+        spring damping-ratio=0.8 stiffness=500 epsilon=0.01
+    }
+
+    screenshot-ui-open {
+        duration-ms 200
+        curve "ease-out-quad"
+    }
+
+    overview-open-close {
+        spring damping-ratio=1.0 stiffness=600 epsilon=0.0001
+    }
+
+    recent-windows-close {
+        spring damping-ratio=1.0 stiffness=700 epsilon=0.001
+    }
+}

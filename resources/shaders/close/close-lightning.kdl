@@ -1,0 +1,215 @@
+// Lightning burn effect
+// Electrical shock/lightning burns outward from the centre
+
+animations {
+
+    window-open {
+        duration-ms 400
+        curve "linear"
+        custom-shader r"
+            float hash(vec2 p) {
+                p = fract(p * vec2(123.34, 456.21));
+                p += dot(p, p + 45.32);
+                return fract(p.x * p.y);
+            }
+
+            float noise(vec2 p) {
+                vec2 i = floor(p);
+                vec2 f = fract(p);
+                f = f * f * (3.0 - 2.0 * f);
+                float a = hash(i);
+                float b = hash(i + vec2(1.0, 0.0));
+                float c = hash(i + vec2(0.0, 1.0));
+                float d = hash(i + vec2(1.0, 1.0));
+                return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+            }
+
+            float fbm(vec2 p) {
+                float value = 0.0;
+                float amp = 0.5;
+                for (int i = 0; i < 5; i++) {
+                    value += amp * noise(p);
+                    p *= 2.0;
+                    amp *= 0.5;
+                }
+                return value;
+            }
+
+            vec4 open_color(vec3 coords_geo, vec3 size_geo) {
+                float progress = niri_clamped_progress;
+                vec2 uv = coords_geo.xy;
+
+                if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
+                    return vec4(0.0);
+                }
+
+                vec2 center = vec2(0.5, 0.5);
+                float dist = distance(uv, center);
+
+                vec2 noise_uv = uv * 8.0 + vec2(niri_random_seed * 100.0);
+
+                // Lightning reveals from edges inward
+                float noise_val = fbm(noise_uv) * 0.35;
+                float reveal_radius = (1.0 - progress) * 1.2 + noise_val;
+
+                vec3 coords_tex = niri_geo_to_tex * coords_geo;
+                vec4 color = texture2D(niri_tex, coords_tex.st);
+
+                float edge_width = 0.08;
+                float inner_edge = reveal_radius - edge_width;
+
+                if (dist < inner_edge) {
+                    // Already revealed
+                    return color;
+                } else if (dist < reveal_radius) {
+                    // Electrical edge
+                    float edge_progress = (dist - inner_edge) / edge_width;
+
+                    vec3 lightning_white = vec3(1.0, 1.0, 1.0);
+                    vec3 lightning_cyan = vec3(0.3, 0.8, 1.0);
+
+                    vec3 glow_color = mix(lightning_white, lightning_cyan, edge_progress);
+
+                    float flicker = 0.8 + 0.2 * noise(uv * 20.0 + vec2(progress * 50.0));
+                    float glow_alpha = flicker * (1.0 - edge_progress * 0.3);
+
+                    return vec4(glow_color * glow_alpha, glow_alpha);
+                } else {
+                    // Not yet reached
+                    return vec4(0.0);
+                }
+            }
+        "
+    }
+
+    window-close {
+        duration-ms 400
+        curve "linear"
+        custom-shader r"
+            float hash(vec2 p) {
+                p = fract(p * vec2(123.34, 456.21));
+                p += dot(p, p + 45.32);
+                return fract(p.x * p.y);
+            }
+
+            float noise(vec2 p) {
+                vec2 i = floor(p);
+                vec2 f = fract(p);
+                f = f * f * (3.0 - 2.0 * f);
+                float a = hash(i);
+                float b = hash(i + vec2(1.0, 0.0));
+                float c = hash(i + vec2(0.0, 1.0));
+                float d = hash(i + vec2(1.0, 1.0));
+                return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+            }
+
+            float fbm(vec2 p) {
+                float value = 0.0;
+                float amp = 0.5;
+                for (int i = 0; i < 5; i++) {
+                    value += amp * noise(p);
+                    p *= 2.0;
+                    amp *= 0.5;
+                }
+                return value;
+            }
+
+            vec4 close_color(vec3 coords_geo, vec3 size_geo) {
+                float progress = niri_clamped_progress;
+                vec2 uv = coords_geo.xy;
+
+                if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
+                    return vec4(0.0);
+                }
+
+                vec2 center = vec2(0.5, 0.5);
+                float dist = distance(uv, center);
+
+                vec2 noise_uv = uv * 8.0 + vec2(niri_random_seed * 100.0);
+
+                // Jagged expanding burn radius
+                float noise_val = fbm(noise_uv) * 0.35;
+                float burn_radius = progress * 1.2 + noise_val;
+
+                vec3 coords_tex = niri_geo_to_tex * coords_geo;
+                vec4 color = texture2D(niri_tex, coords_tex.st);
+
+                float edge_width = 0.08;
+                float inner_edge = burn_radius - edge_width;
+
+                if (dist < inner_edge) {
+                    // Burned away
+                    return vec4(0.0);
+                } else if (dist < burn_radius) {
+                    // Burning edge - white core -> cyan -> blue
+                    float edge_progress = (dist - inner_edge) / edge_width;
+
+                    vec3 lightning_white = vec3(1.0, 1.0, 1.0);
+                    vec3 lightning_cyan = vec3(0.3, 0.8, 1.0);
+                    vec3 lightning_blue = vec3(0.2, 0.3, 1.0);
+
+                    vec3 glow_color = mix(lightning_white, lightning_cyan, edge_progress);
+                    glow_color = mix(glow_color, lightning_blue, edge_progress * edge_progress);
+
+                    float flicker = 0.8 + 0.2 * noise(uv * 20.0 + vec2(progress * 50.0));
+                    float glow_alpha = flicker * (1.0 - edge_progress * 0.3);
+
+                    return vec4(glow_color * glow_alpha, glow_alpha);
+                } else {
+                    // Not yet reached - subtle distortion near edge
+                    float distortion = fbm(noise_uv + vec2(progress * 5.0)) * 0.005;
+                    float proximity = 1.0 - smoothstep(burn_radius, burn_radius + 0.15, dist);
+                    vec2 distorted_uv = uv + distortion * proximity * vec2(1.0, 1.0);
+
+                    if (distorted_uv.x < 0.0 || distorted_uv.x > 1.0 ||
+                        distorted_uv.y < 0.0 || distorted_uv.y > 1.0) {
+                        return vec4(0.0);
+                    }
+
+                    vec3 dtex = niri_geo_to_tex * vec3(distorted_uv, 1.0);
+                    vec4 dcolor = texture2D(niri_tex, dtex.st);
+
+                    vec3 tinted = mix(dcolor.rgb, vec3(0.5, 0.8, 1.0), proximity * 0.15);
+                    return vec4(tinted * dcolor.a, dcolor.a);
+                }
+            }
+        "
+    }
+
+    window-resize {
+        spring damping-ratio=1.0 stiffness=800 epsilon=0.0001
+    }
+
+    workspace-switch {
+        spring damping-ratio=1.0 stiffness=500 epsilon=0.0001
+    }
+
+    horizontal-view-movement {
+        spring damping-ratio=1.0 stiffness=600 epsilon=0.0001
+    }
+
+    window-movement {
+        spring damping-ratio=1.0 stiffness=700 epsilon=0.0001
+    }
+
+    config-notification-open-close {
+        spring damping-ratio=0.8 stiffness=800 epsilon=0.001
+    }
+
+    exit-confirmation-open-close {
+        spring damping-ratio=0.8 stiffness=500 epsilon=0.01
+    }
+
+    screenshot-ui-open {
+        duration-ms 200
+        curve "ease-out-quad"
+    }
+
+    overview-open-close {
+        spring damping-ratio=1.0 stiffness=600 epsilon=0.0001
+    }
+
+    recent-windows-close {
+        spring damping-ratio=1.0 stiffness=700 epsilon=0.001
+    }
+}

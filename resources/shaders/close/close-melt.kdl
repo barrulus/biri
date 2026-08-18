@@ -1,0 +1,145 @@
+// Melt to puddle effect
+// Window melts downward like hot wax pooling at the bottom
+
+animations {
+
+    window-open {
+        duration-ms 400
+        curve "linear"
+        custom-shader r"
+            vec4 open_color(vec3 coords_geo, vec3 size_geo) {
+                float progress = niri_clamped_progress;
+                vec2 uv = coords_geo.xy;
+
+                if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
+                    return vec4(0.0);
+                }
+
+                // Reverse melt: window rises from a puddle at the bottom
+                float inv = 1.0 - progress;
+
+                // Vertical stretch from squashed to full height
+                float squash = 0.3 + 0.7 * progress;
+                float new_y = 1.0 - (1.0 - uv.y) / squash;
+
+                // Horizontal squeeze from wide puddle to normal width
+                float h_stretch = 1.0 + inv * 0.4 * smoothstep(0.5, 1.0, uv.y);
+                float new_x = 0.5 + (uv.x - 0.5) * h_stretch;
+
+                // Wavy distortion that settles as window forms
+                float wave = sin(uv.x * 15.0 + inv * 8.0) * 0.01 * inv;
+                new_y += wave;
+
+                if (new_x < 0.0 || new_x > 1.0 || new_y < 0.0 || new_y > 1.0) {
+                    return vec4(0.0);
+                }
+
+                vec3 coords_tex = niri_geo_to_tex * vec3(new_x, new_y, 1.0);
+                vec4 color = texture2D(niri_tex, coords_tex.st);
+
+                // Fade in
+                float fade = smoothstep(0.0, 0.5, progress);
+
+                return color * fade;
+            }
+        "
+    }
+
+    window-close {
+        duration-ms 500
+        curve "linear"
+        custom-shader r"
+            float hash(vec2 p) {
+                return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+            }
+
+            vec4 close_color(vec3 coords_geo, vec3 size_geo) {
+                float progress = niri_clamped_progress;
+                vec2 uv = coords_geo.xy;
+
+                if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
+                    return vec4(0.0);
+                }
+
+                // Wavy per-column drip speed
+                float wave1 = sin(uv.x * 12.0 + niri_random_seed * 6.28) * 0.4 + 0.6;
+                float wave2 = sin(uv.x * 27.0 + niri_random_seed * 3.14) * 0.2 + 0.8;
+                float drip_speed = wave1 * wave2;
+
+                // Melt line descends from the top - pixels above it are gone
+                float melt_line = 1.0 - progress * drip_speed * 1.3;
+                if (uv.y < melt_line) {
+                    return vec4(0.0);
+                }
+
+                // Vertical squash: compress remaining content downward
+                float squash = 1.0 - progress * 0.7;
+                float remaining = 1.0 - melt_line;
+                float local_y = (uv.y - melt_line) / max(remaining, 0.001);
+                float new_y = melt_line + local_y * remaining * squash;
+
+                // Horizontal stretch at bottom (puddle spreading)
+                float bottom_factor = smoothstep(0.5, 1.0, uv.y);
+                float h_stretch = 1.0 + progress * 0.4 * bottom_factor;
+                float new_x = 0.5 + (uv.x - 0.5) / h_stretch;
+
+                // Wavy distortion at the melting edge
+                float wave_distort = sin(uv.x * 15.0 + progress * 8.0) * 0.008 * progress;
+                new_y += wave_distort;
+
+                if (new_x < 0.0 || new_x > 1.0 || new_y < 0.0 || new_y > 1.0) {
+                    return vec4(0.0);
+                }
+
+                vec3 coords_tex = niri_geo_to_tex * vec3(new_x, new_y, 1.0);
+                vec4 color = texture2D(niri_tex, coords_tex.st);
+
+                // Fade out in the final stretch
+                float fade = 1.0 - smoothstep(0.6, 1.0, progress);
+
+                // Heat shimmer tint near the melting front
+                float heat_zone = smoothstep(melt_line + 0.15, melt_line, uv.y);
+                vec3 heat_tint = mix(color.rgb, vec3(1.0, 0.6, 0.2), heat_zone * 0.3 * progress);
+
+                return vec4(heat_tint * color.a * fade, color.a * fade);
+            }
+        "
+    }
+
+    window-resize {
+        spring damping-ratio=1.0 stiffness=800 epsilon=0.0001
+    }
+
+    workspace-switch {
+        spring damping-ratio=1.0 stiffness=500 epsilon=0.0001
+    }
+
+    horizontal-view-movement {
+        spring damping-ratio=1.0 stiffness=600 epsilon=0.0001
+    }
+
+    window-movement {
+        spring damping-ratio=1.0 stiffness=700 epsilon=0.0001
+    }
+
+    config-notification-open-close {
+        spring damping-ratio=0.8 stiffness=800 epsilon=0.001
+    }
+
+    exit-confirmation-open-close {
+        spring damping-ratio=0.8 stiffness=500 epsilon=0.01
+    }
+
+    screenshot-ui-open {
+        duration-ms 200
+        curve "ease-out-quad"
+    }
+
+    overview-open-close {
+        spring damping-ratio=1.0 stiffness=600 epsilon=0.0001
+    }
+
+    recent-windows-close {
+        spring damping-ratio=1.0 stiffness=700 epsilon=0.001
+    }
+}

@@ -1,0 +1,130 @@
+// Ripple effect - like a stone dropped in a pond
+// Concentric waves radiate from center, distorting and fading the window
+
+animations {
+
+    window-open {
+        duration-ms 400
+        curve "linear"
+        custom-shader r"
+            vec4 open_color(vec3 coords_geo, vec3 size_geo) {
+                float progress = niri_clamped_progress;
+                vec2 uv = coords_geo.xy;
+
+                if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
+                    return vec4(0.0);
+                }
+
+                vec2 center = vec2(0.5, 0.5);
+                float dist = distance(uv, center);
+
+                // Ripples converge inward as window materialises
+                float wave_count = 4.0;
+                float amplitude = 0.012 * smoothstep(0.0, 0.3, progress) * (1.0 - smoothstep(0.5, 1.0, progress));
+                float speed = (1.0 - progress) * 6.0;
+
+                float wave = sin(dist * wave_count * 6.28318 - speed) * amplitude;
+                wave *= smoothstep(0.0, 0.15, dist);
+
+                vec2 dir = normalize(uv - center + vec2(0.0001));
+                vec2 displaced_uv = uv + dir * wave;
+
+                if (displaced_uv.x < 0.0 || displaced_uv.x > 1.0 ||
+                    displaced_uv.y < 0.0 || displaced_uv.y > 1.0) {
+                    return vec4(0.0);
+                }
+
+                vec3 coords_tex = niri_geo_to_tex * vec3(displaced_uv, 1.0);
+                vec4 color = texture2D(niri_tex, coords_tex.st);
+
+                // Fade in from edges toward center
+                float fade = smoothstep(0.0, 0.6, progress);
+                float ring_reveal = smoothstep(progress * 0.8 + 0.1, 0.0, dist);
+                fade *= mix(1.0, ring_reveal, smoothstep(0.0, 0.5, progress));
+
+                return color * fade;
+            }
+        "
+    }
+
+    window-close {
+        duration-ms 500
+        curve "linear"
+        custom-shader r"
+            vec4 close_color(vec3 coords_geo, vec3 size_geo) {
+                float progress = niri_clamped_progress;
+                vec2 uv = coords_geo.xy;
+
+                if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
+                    return vec4(0.0);
+                }
+
+                vec2 center = vec2(0.5, 0.5);
+                float dist = distance(uv, center);
+
+                // Ripple parameters
+                float wave_count = 4.0;
+                float amplitude = 0.015 * smoothstep(0.0, 0.3, progress) * (1.0 - smoothstep(0.4, 1.0, progress));
+                float speed = progress * 6.0;
+
+                float wave = sin(dist * wave_count * 6.28318 - speed) * amplitude;
+                wave *= smoothstep(0.0, 0.15, dist);
+
+                vec2 dir = normalize(uv - center + vec2(0.0001));
+                vec2 displaced_uv = uv + dir * wave;
+
+                if (displaced_uv.x < 0.0 || displaced_uv.x > 1.0 ||
+                    displaced_uv.y < 0.0 || displaced_uv.y > 1.0) {
+                    return vec4(0.0);
+                }
+
+                vec3 coords_tex = niri_geo_to_tex * vec3(displaced_uv, 1.0);
+                vec4 color = texture2D(niri_tex, coords_tex.st);
+
+                // Gentle fade out with expanding ring transparency
+                float fade = 1.0 - smoothstep(0.2, 1.0, progress);
+                float ring_fade = smoothstep(0.0, progress * 0.8 + 0.1, dist);
+                fade *= mix(1.0, 1.0 - ring_fade, smoothstep(0.1, 0.7, progress));
+
+                return color * fade;
+            }
+        "
+    }
+
+    window-resize {
+        spring damping-ratio=1.0 stiffness=800 epsilon=0.0001
+    }
+
+    workspace-switch {
+        spring damping-ratio=1.0 stiffness=500 epsilon=0.0001
+    }
+
+    horizontal-view-movement {
+        spring damping-ratio=1.0 stiffness=600 epsilon=0.0001
+    }
+
+    window-movement {
+        spring damping-ratio=1.0 stiffness=700 epsilon=0.0001
+    }
+
+    config-notification-open-close {
+        spring damping-ratio=0.8 stiffness=800 epsilon=0.001
+    }
+
+    exit-confirmation-open-close {
+        spring damping-ratio=0.8 stiffness=500 epsilon=0.01
+    }
+
+    screenshot-ui-open {
+        duration-ms 200
+        curve "ease-out-quad"
+    }
+
+    overview-open-close {
+        spring damping-ratio=1.0 stiffness=600 epsilon=0.0001
+    }
+
+    recent-windows-close {
+        spring damping-ratio=1.0 stiffness=700 epsilon=0.001
+    }
+}

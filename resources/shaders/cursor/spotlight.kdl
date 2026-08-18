@@ -1,0 +1,5 @@
+// spotlight — dim everything except around the cursor
+global-shader {
+    enable
+    source "vec4 global_color(vec3 c){ vec4 s=tex2D_screen(c.xy); float d=length(c.xy*niri_size-niri_cursor); float k=smoothstep(320.0,120.0,d); return vec4(s.rgb*mix(0.35,1.0,k), s.a); }"
+}

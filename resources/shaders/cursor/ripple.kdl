@@ -1,0 +1,5 @@
+// water ripple localized to a small zone around the cursor (animated; no displacement beyond ~130px)
+global-shader {
+    enable
+    source "vec4 global_color(vec3 c){ vec2 px=c.xy*niri_size; vec2 d=px-niri_cursor; float r=length(d); float w=smoothstep(130.0,0.0,r); float disp=sin(r*0.12-niri_time*7.0)*8.0*w; vec2 uv=(px+normalize(d+1e-3)*disp)/niri_size; return tex2D_screen(uv); }"
+}

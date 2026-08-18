@@ -1,0 +1,2 @@
+// Global shader disabled (Mod+3). No global-shader node = no full-output post-process.
+// Mod+4 cycles back through cursor/*.kdl, Mod+Shift+4 through screen/*.kdl — either re-enables it.
