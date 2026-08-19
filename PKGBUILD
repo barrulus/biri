@@ -20,7 +20,7 @@
 
 pkgname=biri-git
 pkgver=26.04.r308.g999613f
-pkgrel=1
+pkgrel=2
 pkgdesc="Niri compositor soft-fork with several added quality of life features"
 arch=(x86_64 aarch64)
 url="https://github.com/barrulus/${pkgname%-git}"
