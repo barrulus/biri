@@ -18,8 +18,30 @@ files are plain fragment shader sources referenced by `path` from window rules.
 
 ## Wiring (symlink cycle system)
 
-Copy (or symlink) this directory's contents into `~/.config/biri/global-shaders/` and
-`~/.config/biri/shaders/`, then give `config.kdl` two stable includes:
+1. Copy (or symlink) this directory's contents into `~/.config/biri/global-shaders/` and
+`~/.config/biri/shaders/`, such as by running the following commands: 
+
+```bash
+CONFIG_DIR="$HOME/.config/biri"
+mkdir -p "$CONFIG_DIR"/{global-shaders,shaders,scripts}
+cp -r resources/shaders/* "$CONFIG_DIR/global-shaders/"
+
+find "$CONFIG_DIR/global-shaders" -type f -not -path "*/scripts/*" -print0 | while IFS= read -r -d '' f; do
+    rel="$(realpath --relative-to="$CONFIG_DIR/global-shaders" "$f")"
+    mkdir -p "$CONFIG_DIR/shaders/$(dirname "$rel")"
+    ln -s "$f" "$CONFIG_DIR/shaders/$rel"
+done
+
+for f in "resources/shaders/scripts"/*; do
+    cp "$f" "$CONFIG_DIR/scripts/"
+done
+
+ln -s "$CONFIG_DIR/global-shaders/off.kdl" "$CONFIG_DIR/global-shaders/current.kdl"
+ln -s "$CONFIG_DIR/shaders/off.kdl" "$CONFIG_DIR/shaders/current.kdl"
+```
+
+
+2. After copying the files to their respective locations, give `config.kdl` two stable includes:
 
 ```kdl
 include "global-shaders/current.kdl"   // -> cursor/*.kdl | screen/*.kdl | off.kdl
@@ -27,9 +49,9 @@ include "shaders/current.kdl"          // -> close-*.kdl
 
 binds {
     Mod+3        { spawn "sh" "-c" r#"ln -sfn off.kdl "$HOME/.config/biri/global-shaders/current.kdl" && niri msg action load-config-file"#; }
-    Mod+4        { spawn "~/.config/biri/global-shader-cycle" "cursor"; }
-    Mod+Shift+4  { spawn "~/.config/biri/global-shader-cycle" "screen"; }
-    Mod+Shift+S  { spawn "~/.config/biri/shader-cycle"; }
+    Mod+4        { spawn "~/.config/biri/scripts/global-shader-cycle" "cursor"; }
+    Mod+Shift+4  { spawn "~/.config/biri/scripts/global-shader-cycle" "screen"; }
+    Mod+Shift+S  { spawn "~/.config/biri/scripts/shader-cycle"; }
 }
 ```
 
