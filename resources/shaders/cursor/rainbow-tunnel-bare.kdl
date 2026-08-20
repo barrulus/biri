@@ -5,7 +5,7 @@ global-shader {
     enable
     source "vec4 global_color(vec3 c){
         vec3 s  = tex2D_screen(c.xy).rgb;
-        vec2 px = c.xy*niri_size;
+        vec2 px = c.xy*niri_output_size;
         float d = length(px - niri_cursor);
 
         // rainbow tunnel — concentric bands flowing inward toward the cursor

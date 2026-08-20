@@ -1,28 +1,39 @@
 #!/usr/bin/env bash
 # shader-cycle — round-robin the active niri close-window shader.
 #
-# config.kdl has a single stable `include "shaders/current.kdl"`, where
-# current.kdl is a SYMLINK to one of the close-*.kdl shaders. Switching is an
-# atomic relink + a live reload via niri's IPC (`niri msg action
-# load-config-file`) — no hand-editing of config.kdl, no `touch` needed.
+# config.kdl has a single stable `include "shaders/current.kdl"`, where current.kdl is a
+# SYMLINK to one of the close/close-*.kdl shaders. Switching is a relink plus a live
+# reload via niri's IPC (`niri msg action load-config-file`) — no hand-editing of
+# config.kdl, no `touch` needed.
+#
+# Config dir: $BIRI_CONFIG_DIR, else ~/.config/biri (see resources/shaders/README.md —
+# biri only reads that dir when you launch it with NIRI_CONFIG or `-c`). niri unsets
+# NIRI_CONFIG for spawned children, so this script cannot infer the dir itself.
+# The niri binary used for the reload can be overridden with $NIRI.
 #
 # Bind in niri:
-#   Mod+Shift+S { spawn "/home/barrulus/.config/biri/shader-cycle"; }
+#   Mod+Shift+S { spawn "~/.config/biri/scripts/shader-cycle"; }
 #
 # State (next index) persists in $XDG_RUNTIME_DIR, so it survives across presses
 # but resets on reboot.
 set -euo pipefail
 
-dir="$HOME/.config/biri/shaders"
+dir="${BIRI_CONFIG_DIR:-$HOME/.config/biri}/shaders"
 link="$dir/current.kdl"
 state="${XDG_RUNTIME_DIR:-/tmp}/niri-shader.idx"
+
+[ -d "$dir/close" ] || {
+    echo "shader-cycle: no such directory: $dir/close" >&2
+    echo "  (set \$BIRI_CONFIG_DIR if your biri config lives elsewhere)" >&2
+    exit 1
+}
 
 # Available shaders, sorted for a stable cycle order.
 shaders=()
 while IFS= read -r f; do shaders+=("$(basename "$f")"); done \
   < <(find "$dir/close" -maxdepth 1 -name 'close-*.kdl' | sort)
 n=${#shaders[@]}
-[ "$n" -gt 0 ] || { echo "shader-cycle: no close-*.kdl in $dir" >&2; exit 1; }
+[ "$n" -gt 0 ] || { echo "shader-cycle: no close-*.kdl in $dir/close" >&2; exit 1; }
 
 # Current index from state (sanitised), then ADVANCE so a press always moves on.
 idx=0
@@ -31,10 +42,17 @@ case "$idx" in '' | *[!0-9]*) idx=0 ;; esac
 idx=$(( (idx + 1) % n ))
 
 target="${shaders[idx]}"
-ln -sfn "close/$target" "$link"                 # relative link within shaders/
+ln -sfn "close/$target" "$link"           # relative link within shaders/
 printf '%s\n' "$idx" > "$state"
 
-"${NIRI:-niri}" msg action load-config-file >/dev/null 2>&1 || true
+# Don't hide a failed reload: the symlink has already moved, so a silent failure would
+# leave the keybind looking like a no-op.
+if "${NIRI:-niri}" msg action load-config-file >/dev/null 2>&1; then
+    msg="${target#close-}"
+else
+    msg="${target#close-} (reload FAILED — is niri on PATH?)"
+    echo "shader-cycle: 'niri msg action load-config-file' failed" >&2
+fi
 
 command -v notify-send >/dev/null 2>&1 \
-  && notify-send -t 1500 "niri shader" "${target#close-}" || true
+  && notify-send -t 1500 "niri shader" "$msg" || true
