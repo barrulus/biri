@@ -922,6 +922,13 @@ impl<W: LayoutElement> Monitor<W> {
             return None;
         };
 
+        // Nothing to do if the workspace isn't actually hidden. Avoid the
+        // remove/reinsert work below, which resets workspace_switch and
+        // reorders the workspace vec even though nothing needs to move.
+        if !self.workspaces[idx].hidden {
+            return None;
+        }
+
         // Hidden workspaces are positioned physically after visible workspaces in their
         // workspace vec, because of this on unhide we need to position them to match
         // where they were originally on unhide.
