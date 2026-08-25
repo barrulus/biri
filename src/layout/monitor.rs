@@ -898,6 +898,10 @@ impl<W: LayoutElement> Monitor<W> {
         };
         let ws = &mut self.workspaces[idx];
 
+        // Unnaming removes the only way to unhide this workspace later, so it must
+        // not be left pending a hide-on-switch-away (the unhide call above only
+        // clears this when the workspace was actually hidden).
+        ws.needs_hidden = false;
         ws.unname();
 
         if self.workspace_switch.is_none() {
@@ -937,6 +941,10 @@ impl<W: LayoutElement> Monitor<W> {
         ws.hidden = false;
         ws.needs_hidden = needs_hidden;
         ws.original_idx = None;
+        // The vec may have shrunk (other workspaces emptied out and were cleaned up)
+        // while this one stayed hidden, so original_idx can now be stale and past
+        // the end. Clamp it or insert_workspace() panics.
+        let original_idx = original_idx.min(self.workspaces.len());
         self.insert_workspace(ws, original_idx, false);
         return Some(original_idx);
     }
