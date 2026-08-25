@@ -1548,6 +1548,11 @@ impl<W: LayoutElement> Layout<W> {
             MonitorSet::NoOutputs { workspaces } => {
                 for (idx, ws) in workspaces.iter_mut().enumerate() {
                     if ws.id() == id {
+                        // Unnaming removes the only way to unhide this workspace later
+                        // (unhide/toggle-visibility both look workspaces up by name), so
+                        // it must not be left hidden or pending a hide-on-switch-away.
+                        ws.hidden = false;
+                        ws.needs_hidden = false;
                         ws.unname();
 
                         // Clean up empty workspaces.
