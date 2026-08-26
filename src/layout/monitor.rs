@@ -1190,7 +1190,8 @@ impl<W: LayoutElement> Monitor<W> {
         for _ in 0..incoming_visible.len() {
             self.shift_hidden_original_indices_for_insertion(empty_idx);
         }
-        self.workspaces.splice(empty_idx..empty_idx, incoming_visible);
+        self.workspaces
+            .splice(empty_idx..empty_idx, incoming_visible);
         self.workspaces.extend(incoming_hidden);
 
         // If empty_workspace_above_first is set and the first workspace is now no longer empty,

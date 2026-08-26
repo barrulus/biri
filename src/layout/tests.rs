@@ -2061,7 +2061,6 @@ fn unhide_placement_survives_workspace_cleanup() {
     // [win1, win2, "ws3"(win3), win4, empty]
     let mut layout = check_ops(ops);
 
-
     // Hide "ws3" (records original_idx 2): [win1, win2, win4, empty, H].
     layout.toggle_workspace_visibility("ws3".to_string());
     layout.verify_invariants();
