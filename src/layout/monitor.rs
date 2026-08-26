@@ -3043,9 +3043,31 @@ impl<W: LayoutElement> Monitor<W> {
             assert!(after_idx < self.workspaces.len());
         }
 
+        // Hidden workspaces are contiguous at the end of the vec and always named
+        // (unhide and toggle-visibility look workspaces up by name).
+        let visible_count = self
+            .workspaces
+            .iter()
+            .position(|ws| ws.hidden)
+            .unwrap_or(self.workspaces.len());
+        for ws in &self.workspaces[visible_count..] {
+            assert!(
+                ws.hidden,
+                "hidden workspaces must be contiguous at the end of the workspace vec"
+            );
+            assert!(ws.name.is_some(), "hidden workspaces must be named");
+        }
         assert!(
-            !self.workspaces.last().unwrap().has_windows(),
-            "monitor must have an empty workspace in the end"
+            visible_count > 0,
+            "monitor must have at least one visible workspace"
+        );
+
+        // The visible region ends with an empty unnamed workspace. When a hidden
+        // block exists, that same workspace is the guard directly before the block.
+        let last_visible = &self.workspaces[visible_count - 1];
+        assert!(
+            !last_visible.has_windows(),
+            "monitor must have an empty workspace at the end of the visible region"
         );
         if self.options.layout.empty_workspace_above_first {
             assert!(
@@ -3055,8 +3077,8 @@ impl<W: LayoutElement> Monitor<W> {
         }
 
         assert!(
-            self.workspaces.last().unwrap().name.is_none(),
-            "monitor must have an unnamed workspace in the end"
+            last_visible.name.is_none(),
+            "monitor must have an unnamed workspace at the end of the visible region"
         );
         if self.options.layout.empty_workspace_above_first {
             assert!(
@@ -3065,35 +3087,28 @@ impl<W: LayoutElement> Monitor<W> {
             )
         }
 
-        if self.options.layout.empty_workspace_above_first {
+        if self.options.layout.empty_workspace_above_first && visible_count == self.workspaces.len()
+        {
             assert!(
                 self.workspaces.len() != 2,
                 "if empty_workspace_above_first is set there must be just 1 or 3+ workspaces"
             )
         }
 
-        // If there's no workspace switch in progress, there can't be any non-last non-active
-        // empty workspaces. If empty_workspace_above_first is set then the first workspace
-        // will be empty too.
+        // If there's no workspace switch in progress, there can't be any non-last
+        // non-active empty workspaces in the visible region. If
+        // empty_workspace_above_first is set then the first workspace will be empty too.
         let pre_skip = if self.options.layout.empty_workspace_above_first {
             1
         } else {
             0
         };
         if self.workspace_switch.is_none() {
-            for (idx, ws) in self
-                .workspaces
-                .iter()
-                .enumerate()
-                .skip(pre_skip)
-                .rev()
-                // skip last
-                .skip(1)
-            {
-                if idx != self.active_workspace_idx {
+            for (idx, ws) in self.workspaces[..visible_count].iter().enumerate() {
+                if idx >= pre_skip && idx != visible_count - 1 && idx != self.active_workspace_idx {
                     assert!(
                         ws.has_windows_or_name(),
-                        "non-active workspace can't be empty and unnamed except the last one"
+                        "non-active workspace can't be empty and unnamed except the last visible one"
                     );
                 }
             }
