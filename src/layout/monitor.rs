@@ -1051,12 +1051,20 @@ impl<W: LayoutElement> Monitor<W> {
         ws.update_config(self.options.clone());
 
         // Hidden workspaces must stay contiguous at the end of the vec: never insert a
-        // visible workspace into or past that block.
-        let first_hidden_idx = self.workspaces.iter().position(|ws| ws.hidden);
-        idx = idx.min(first_hidden_idx.unwrap_or(self.workspaces.len()));
+        // visible workspace into or past that block. The visible region ends at the
+        // first hidden workspace, or at the vec end if there is none.
+        let visible_end = self
+            .workspaces
+            .iter()
+            .position(|ws| ws.hidden)
+            .unwrap_or(self.workspaces.len());
+        idx = idx.min(visible_end);
 
-        // Don't insert past the last empty workspace.
-        if idx == self.workspaces.len() {
+        // Don't insert past the last empty workspace: the trailing empty when there is
+        // no hidden block, or the empty workspace guarding the hidden block (inserting
+        // between that empty and the block would get the empty removed by
+        // clean_up_workspaces below, breaking the empty-before-hidden invariant).
+        if idx == visible_end && idx > 0 {
             idx -= 1;
         }
         if idx == 0 && self.options.layout.empty_workspace_above_first {
