@@ -1765,14 +1765,20 @@ impl<W: LayoutElement> Monitor<W> {
     }
 
     pub fn move_workspace_down(&mut self) {
-        let mut new_idx = min(self.active_workspace_idx + 1, self.workspaces.len() - 1);
+        // Stay within the visible region: hidden workspaces sit past its end.
+        let visible_end = self
+            .workspaces
+            .iter()
+            .position(|ws| ws.hidden)
+            .unwrap_or(self.workspaces.len());
+        let mut new_idx = min(self.active_workspace_idx + 1, visible_end - 1);
         if new_idx == self.active_workspace_idx {
             return;
         }
 
         self.workspaces.swap(self.active_workspace_idx, new_idx);
 
-        if new_idx == self.workspaces.len() - 1 {
+        if new_idx == visible_end - 1 {
             // Insert a new empty workspace.
             self.add_workspace_bottom();
         }
@@ -1798,7 +1804,12 @@ impl<W: LayoutElement> Monitor<W> {
 
         self.workspaces.swap(self.active_workspace_idx, new_idx);
 
-        if self.active_workspace_idx == self.workspaces.len() - 1 {
+        let visible_end = self
+            .workspaces
+            .iter()
+            .position(|ws| ws.hidden)
+            .unwrap_or(self.workspaces.len());
+        if self.active_workspace_idx == visible_end - 1 {
             // Insert a new empty workspace.
             self.add_workspace_bottom();
         }
@@ -1820,8 +1831,18 @@ impl<W: LayoutElement> Monitor<W> {
         if self.workspaces.len() <= old_idx {
             return;
         }
+        // Hidden workspaces have no meaningful position; reordering must stay
+        // within the visible region.
+        if self.workspaces[old_idx].hidden {
+            return;
+        }
+        let visible_end = self
+            .workspaces
+            .iter()
+            .position(|ws| ws.hidden)
+            .unwrap_or(self.workspaces.len());
 
-        let mut new_idx = new_idx.clamp(0, self.workspaces.len() - 1);
+        let mut new_idx = new_idx.clamp(0, visible_end - 1);
         if old_idx == new_idx {
             return;
         }
@@ -1830,7 +1851,7 @@ impl<W: LayoutElement> Monitor<W> {
         self.workspaces.insert(new_idx, ws);
 
         if new_idx > old_idx {
-            if new_idx == self.workspaces.len() - 1 {
+            if new_idx == visible_end - 1 {
                 // Insert a new empty workspace.
                 self.add_workspace_bottom();
             }
@@ -1840,7 +1861,7 @@ impl<W: LayoutElement> Monitor<W> {
                 new_idx += 1;
             }
         } else {
-            if old_idx == self.workspaces.len() - 1 {
+            if old_idx == visible_end - 1 {
                 // Insert a new empty workspace.
                 self.add_workspace_bottom();
             }

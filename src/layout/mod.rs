@@ -997,9 +997,9 @@ impl<W: LayoutElement> Layout<W> {
                         ws.update_config(self.options.clone());
                     }
 
-                    if workspaces.is_empty()
-                        && !(self.interactive_move.is_some() && sticky_tiles.is_empty())
-                    {
+                    // Sticky tiles need a workspace to live in; an empty unnamed
+                    // workspace is otherwise not allowed in NoOutputs.
+                    if workspaces.is_empty() && !sticky_tiles.is_empty() {
                         workspaces.push(Workspace::new_no_outputs(
                             self.clock.clone(),
                             self.options.clone(),

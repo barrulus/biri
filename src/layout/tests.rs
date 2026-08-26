@@ -559,6 +559,7 @@ enum Op {
         #[proptest(strategy = "proptest::option::of(1..=5usize)")]
         ws_name: Option<usize>,
     },
+    ToggleWorkspaceVisibility(#[proptest(strategy = "1..=5usize")] usize),
     MoveWindowToOutput {
         #[proptest(strategy = "proptest::option::of(1..=5usize)")]
         window_id: Option<usize>,
@@ -895,6 +896,9 @@ impl Op {
                 let ws_ref =
                     ws_name.map(|ws_name| WorkspaceReference::Name(format!("ws{ws_name}")));
                 layout.unset_workspace_name(ws_ref);
+            }
+            Op::ToggleWorkspaceVisibility(ws_name) => {
+                layout.toggle_workspace_visibility(format!("ws{ws_name}"));
             }
             Op::AddWindow { mut params } => {
                 if layout.has_window(&params.id) {
@@ -2008,6 +2012,29 @@ fn hide_workspace_at_index_zero_hides_the_right_workspace() {
 }
 
 #[test]
+fn move_workspace_down_stops_at_hidden_block() {
+    // Minimized from proptest: moving the active workspace down must not swap
+    // it into the hidden block.
+    check_ops([
+        Op::AddOutput(1),
+        Op::AddNamedWorkspace {
+            ws_name: 1,
+            output_name: None,
+            layout_config: None,
+        },
+        Op::ToggleWorkspaceVisibility(1),
+        Op::MoveWorkspaceDown,
+    ]);
+}
+
+#[test]
+fn remove_last_output_without_windows_leaves_no_workspaces() {
+    // check_ops runs verify_invariants after each op; removing the last output
+    // with nothing on it must not leave an empty unnamed workspace in NoOutputs.
+    check_ops([Op::AddOutput(1), Op::RemoveOutput(1)]);
+}
+
+#[test]
 fn unhide_placement_survives_workspace_cleanup() {
     let ops = [
         Op::AddOutput(1),
@@ -2158,6 +2185,8 @@ fn operations_dont_panic() {
             layout_config: None,
         },
         Op::UnnameWorkspace { ws_name: 1 },
+        Op::ToggleWorkspaceVisibility(1),
+        Op::ToggleWorkspaceVisibility(2),
         Op::AddWindow {
             params: TestWindowParams::new(0),
         },
@@ -2309,6 +2338,8 @@ fn operations_from_starting_state_dont_panic() {
             layout_config: None,
         },
         Op::UnnameWorkspace { ws_name: 1 },
+        Op::ToggleWorkspaceVisibility(1),
+        Op::ToggleWorkspaceVisibility(2),
         Op::AddWindow {
             params: TestWindowParams::new(0),
         },
