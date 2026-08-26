@@ -543,6 +543,7 @@ impl<W: LayoutElement> Monitor<W> {
         );
 
         self.workspaces.insert(idx, ws);
+        self.shift_hidden_original_indices_for_insertion(idx);
         if idx <= self.active_workspace_idx {
             self.active_workspace_idx += 1;
         }
@@ -559,7 +560,13 @@ impl<W: LayoutElement> Monitor<W> {
     }
 
     pub fn add_workspace_bottom(&mut self) {
-        self.add_workspace_at(self.workspaces.len());
+        // The bottom of the visible region — hidden workspaces stay past it.
+        let visible_end = self
+            .workspaces
+            .iter()
+            .position(|ws| ws.hidden)
+            .unwrap_or(self.workspaces.len());
+        self.add_workspace_at(visible_end);
     }
 
     pub fn activate_workspace(&mut self, idx: usize) {
@@ -875,6 +882,7 @@ impl<W: LayoutElement> Monitor<W> {
 
             if !self.workspaces[idx].has_windows_or_name() {
                 self.workspaces.remove(idx);
+                self.shift_hidden_original_indices_for_removal(idx);
                 if self.active_workspace_idx > idx {
                     self.active_workspace_idx -= 1;
                 }
@@ -882,12 +890,42 @@ impl<W: LayoutElement> Monitor<W> {
         }
 
         // Special case handling when empty_workspace_above_first is set and all workspaces
-        // are empty.
-        if self.options.layout.empty_workspace_above_first && self.workspaces.len() == 2 {
+        // are empty. With a hidden workspace present ([empty, hidden-named]) there is
+        // nothing to collapse.
+        if self.options.layout.empty_workspace_above_first
+            && self.workspaces.len() == 2
+            && !self.workspaces.iter().any(|ws| ws.hidden)
+        {
             assert!(!self.workspaces[0].has_windows_or_name());
             assert!(!self.workspaces[1].has_windows_or_name());
             self.workspaces.remove(1);
             self.active_workspace_idx = 0;
+        }
+    }
+
+    // Stored original_idx values of hidden workspaces refer to positions in the
+    // visible region; keep them in sync when that region shrinks or grows.
+    pub(super) fn shift_hidden_original_indices_for_removal(&mut self, removed_idx: usize) {
+        for ws in &mut self.workspaces {
+            if ws.hidden {
+                if let Some(original_idx) = &mut ws.original_idx {
+                    if *original_idx > removed_idx {
+                        *original_idx -= 1;
+                    }
+                }
+            }
+        }
+    }
+
+    fn shift_hidden_original_indices_for_insertion(&mut self, inserted_idx: usize) {
+        for ws in &mut self.workspaces {
+            if ws.hidden {
+                if let Some(original_idx) = &mut ws.original_idx {
+                    if *original_idx >= inserted_idx {
+                        *original_idx += 1;
+                    }
+                }
+            }
         }
     }
 
@@ -972,12 +1010,13 @@ impl<W: LayoutElement> Monitor<W> {
         true
     }
 
-    pub fn hide_workspace_by_idx(&mut self, idx: usize) {
+    pub fn hide_workspace_by_idx(&mut self, mut idx: usize) {
         if idx == self.workspaces.len() - 1 {
             return;
         }
         if self.options.layout.empty_workspace_above_first && idx == 0 {
             self.add_workspace_top();
+            idx += 1;
         }
 
         self.workspaces[idx].hidden = true;
@@ -1005,6 +1044,8 @@ impl<W: LayoutElement> Monitor<W> {
         // so we preserve its output.
         if !ws.hidden {
             ws.set_output(None);
+            // Removing a visible workspace shifts the visible region.
+            self.shift_hidden_original_indices_for_removal(idx);
         }
 
         // For monitor current workspace removal, we focus previous rather than next (<= rather
@@ -1040,6 +1081,9 @@ impl<W: LayoutElement> Monitor<W> {
         self.workspaces.insert(idx, ws);
         self.workspace_switch = None;
         self.clean_up_workspaces();
+        // The monitor may not have had a hidden block before this insert; make sure
+        // the block ends up guarded by an empty workspace.
+        self.ensure_empty_before_hidden();
     }
 
     // Returns the index the workspace actually ended up at. This can differ from `idx`:
@@ -1052,6 +1096,19 @@ impl<W: LayoutElement> Monitor<W> {
         mut idx: usize,
         activate: bool,
     ) -> usize {
+        // A hidden workspace never belongs in the visible region (this happens when
+        // moving a hidden workspace to another output). Route it to the hidden
+        // block; it stays named, so it remains reachable, and can't be activated.
+        if ws.hidden {
+            let id = ws.id();
+            self.insert_hidden_workspace(ws, idx);
+            return self
+                .workspaces
+                .iter()
+                .position(|w| w.id() == id)
+                .unwrap_or(self.workspaces.len() - 1);
+        }
+
         ws.set_output(Some(self.output.clone()));
         ws.update_config(self.options.clone());
 
@@ -1080,6 +1137,7 @@ impl<W: LayoutElement> Monitor<W> {
 
         let id = ws.id();
         self.workspaces.insert(idx, ws);
+        self.shift_hidden_original_indices_for_insertion(idx);
 
         if idx <= self.active_workspace_idx {
             self.active_workspace_idx += 1;
@@ -1109,13 +1167,32 @@ impl<W: LayoutElement> Monitor<W> {
             ws.update_config(self.options.clone());
         }
 
-        let empty_was_focused = self.active_workspace_idx == self.workspaces.len() - 1;
+        // Incoming hidden workspaces go to the hidden block; their recorded
+        // original_idx refers to the dead monitor's layout and is meaningless here.
+        let (incoming_visible, mut incoming_hidden): (Vec<_>, Vec<_>) =
+            workspaces.into_iter().partition(|ws| !ws.hidden);
+        for ws in &mut incoming_hidden {
+            ws.original_idx = None;
+        }
 
-        // Push the workspaces from the removed monitor in the end, right before the
-        // last, empty, workspace.
-        let empty = self.workspaces.remove(self.workspaces.len() - 1);
-        self.workspaces.extend(workspaces);
-        self.workspaces.push(empty);
+        // The visible region ends with the empty trailing workspace (which also
+        // guards the hidden block when one exists). Splice the incoming visible
+        // workspaces right before it, and append incoming hidden ones at the end.
+        let visible_end = self
+            .workspaces
+            .iter()
+            .position(|ws| ws.hidden)
+            .unwrap_or(self.workspaces.len());
+        let empty_idx = visible_end - 1;
+        let empty_id = self.workspaces[empty_idx].id();
+        let empty_was_focused = self.active_workspace_idx == empty_idx;
+
+        for _ in 0..incoming_visible.len() {
+            self.shift_hidden_original_indices_for_insertion(empty_idx);
+        }
+        self.workspaces
+            .splice(empty_idx..empty_idx, incoming_visible);
+        self.workspaces.extend(incoming_hidden);
 
         // If empty_workspace_above_first is set and the first workspace is now no longer empty,
         // add a new empty workspace on top.
@@ -1127,7 +1204,11 @@ impl<W: LayoutElement> Monitor<W> {
 
         // If the empty workspace was focused on the primary monitor, keep it focused.
         if empty_was_focused {
-            self.active_workspace_idx = self.workspaces.len() - 1;
+            self.active_workspace_idx = self
+                .workspaces
+                .iter()
+                .position(|ws| ws.id() == empty_id)
+                .unwrap();
         }
 
         // FIXME: if we're adding workspaces to currently invisible positions
@@ -1685,14 +1766,20 @@ impl<W: LayoutElement> Monitor<W> {
     }
 
     pub fn move_workspace_down(&mut self) {
-        let mut new_idx = min(self.active_workspace_idx + 1, self.workspaces.len() - 1);
+        // Stay within the visible region: hidden workspaces sit past its end.
+        let visible_end = self
+            .workspaces
+            .iter()
+            .position(|ws| ws.hidden)
+            .unwrap_or(self.workspaces.len());
+        let mut new_idx = min(self.active_workspace_idx + 1, visible_end - 1);
         if new_idx == self.active_workspace_idx {
             return;
         }
 
         self.workspaces.swap(self.active_workspace_idx, new_idx);
 
-        if new_idx == self.workspaces.len() - 1 {
+        if new_idx == visible_end - 1 {
             // Insert a new empty workspace.
             self.add_workspace_bottom();
         }
@@ -1718,7 +1805,12 @@ impl<W: LayoutElement> Monitor<W> {
 
         self.workspaces.swap(self.active_workspace_idx, new_idx);
 
-        if self.active_workspace_idx == self.workspaces.len() - 1 {
+        let visible_end = self
+            .workspaces
+            .iter()
+            .position(|ws| ws.hidden)
+            .unwrap_or(self.workspaces.len());
+        if self.active_workspace_idx == visible_end - 1 {
             // Insert a new empty workspace.
             self.add_workspace_bottom();
         }
@@ -1740,8 +1832,18 @@ impl<W: LayoutElement> Monitor<W> {
         if self.workspaces.len() <= old_idx {
             return;
         }
+        // Hidden workspaces have no meaningful position; reordering must stay
+        // within the visible region.
+        if self.workspaces[old_idx].hidden {
+            return;
+        }
+        let visible_end = self
+            .workspaces
+            .iter()
+            .position(|ws| ws.hidden)
+            .unwrap_or(self.workspaces.len());
 
-        let mut new_idx = new_idx.clamp(0, self.workspaces.len() - 1);
+        let mut new_idx = new_idx.clamp(0, visible_end - 1);
         if old_idx == new_idx {
             return;
         }
@@ -1750,7 +1852,7 @@ impl<W: LayoutElement> Monitor<W> {
         self.workspaces.insert(new_idx, ws);
 
         if new_idx > old_idx {
-            if new_idx == self.workspaces.len() - 1 {
+            if new_idx == visible_end - 1 {
                 // Insert a new empty workspace.
                 self.add_workspace_bottom();
             }
@@ -1760,7 +1862,7 @@ impl<W: LayoutElement> Monitor<W> {
                 new_idx += 1;
             }
         } else {
-            if old_idx == self.workspaces.len() - 1 {
+            if old_idx == visible_end - 1 {
                 // Insert a new empty workspace.
                 self.add_workspace_bottom();
             }
@@ -3043,9 +3145,31 @@ impl<W: LayoutElement> Monitor<W> {
             assert!(after_idx < self.workspaces.len());
         }
 
+        // Hidden workspaces are contiguous at the end of the vec and always named
+        // (unhide and toggle-visibility look workspaces up by name).
+        let visible_count = self
+            .workspaces
+            .iter()
+            .position(|ws| ws.hidden)
+            .unwrap_or(self.workspaces.len());
+        for ws in &self.workspaces[visible_count..] {
+            assert!(
+                ws.hidden,
+                "hidden workspaces must be contiguous at the end of the workspace vec"
+            );
+            assert!(ws.name.is_some(), "hidden workspaces must be named");
+        }
         assert!(
-            !self.workspaces.last().unwrap().has_windows(),
-            "monitor must have an empty workspace in the end"
+            visible_count > 0,
+            "monitor must have at least one visible workspace"
+        );
+
+        // The visible region ends with an empty unnamed workspace. When a hidden
+        // block exists, that same workspace is the guard directly before the block.
+        let last_visible = &self.workspaces[visible_count - 1];
+        assert!(
+            !last_visible.has_windows(),
+            "monitor must have an empty workspace at the end of the visible region"
         );
         if self.options.layout.empty_workspace_above_first {
             assert!(
@@ -3055,8 +3179,8 @@ impl<W: LayoutElement> Monitor<W> {
         }
 
         assert!(
-            self.workspaces.last().unwrap().name.is_none(),
-            "monitor must have an unnamed workspace in the end"
+            last_visible.name.is_none(),
+            "monitor must have an unnamed workspace at the end of the visible region"
         );
         if self.options.layout.empty_workspace_above_first {
             assert!(
@@ -3065,35 +3189,28 @@ impl<W: LayoutElement> Monitor<W> {
             )
         }
 
-        if self.options.layout.empty_workspace_above_first {
+        if self.options.layout.empty_workspace_above_first && visible_count == self.workspaces.len()
+        {
             assert!(
                 self.workspaces.len() != 2,
                 "if empty_workspace_above_first is set there must be just 1 or 3+ workspaces"
             )
         }
 
-        // If there's no workspace switch in progress, there can't be any non-last non-active
-        // empty workspaces. If empty_workspace_above_first is set then the first workspace
-        // will be empty too.
+        // If there's no workspace switch in progress, there can't be any non-last
+        // non-active empty workspaces in the visible region. If
+        // empty_workspace_above_first is set then the first workspace will be empty too.
         let pre_skip = if self.options.layout.empty_workspace_above_first {
             1
         } else {
             0
         };
         if self.workspace_switch.is_none() {
-            for (idx, ws) in self
-                .workspaces
-                .iter()
-                .enumerate()
-                .skip(pre_skip)
-                .rev()
-                // skip last
-                .skip(1)
-            {
-                if idx != self.active_workspace_idx {
+            for (idx, ws) in self.workspaces[..visible_count].iter().enumerate() {
+                if idx >= pre_skip && idx != visible_count - 1 && idx != self.active_workspace_idx {
                     assert!(
                         ws.has_windows_or_name(),
-                        "non-active workspace can't be empty and unnamed except the last one"
+                        "non-active workspace can't be empty and unnamed except the last visible one"
                     );
                 }
             }

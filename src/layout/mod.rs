@@ -997,9 +997,9 @@ impl<W: LayoutElement> Layout<W> {
                         ws.update_config(self.options.clone());
                     }
 
-                    if workspaces.is_empty()
-                        && !(self.interactive_move.is_some() && sticky_tiles.is_empty())
-                    {
+                    // Sticky tiles need a workspace to live in; an empty unnamed
+                    // workspace is otherwise not allowed in NoOutputs.
+                    if workspaces.is_empty() && !sticky_tiles.is_empty() {
                         workspaces.push(Workspace::new_no_outputs(
                             self.clock.clone(),
                             self.options.clone(),
@@ -1356,6 +1356,7 @@ impl<W: LayoutElement> Layout<W> {
                                 && mon.workspace_switch.is_none()
                             {
                                 mon.workspaces.remove(idx);
+                                mon.shift_hidden_original_indices_for_removal(idx);
 
                                 if idx < mon.active_workspace_idx {
                                     mon.active_workspace_idx -= 1;
@@ -1363,10 +1364,12 @@ impl<W: LayoutElement> Layout<W> {
                             }
 
                             // Special case handling when empty_workspace_above_first is set and all
-                            // workspaces are empty.
+                            // workspaces are empty. With a hidden workspace present
+                            // ([empty, hidden-named]) there is nothing to collapse.
                             if mon.options.layout.empty_workspace_above_first
                                 && mon.workspaces.len() == 2
                                 && mon.workspace_switch.is_none()
+                                && !mon.workspaces.iter().any(|ws| ws.hidden)
                             {
                                 assert!(!mon.workspaces[0].has_windows_or_name());
                                 assert!(!mon.workspaces[1].has_windows_or_name());
@@ -6134,13 +6137,15 @@ impl<W: LayoutElement> Layout<W> {
         // Conversely, if `ws` was the last workspace on a monitor, an
         // empty workspace needs to be added after.
 
-        if let MonitorSet::Normal {
-            monitors,
-            active_monitor_idx,
-            ..
-        } = &mut self.monitor_set
-        {
-            let monitor = &mut monitors[*active_monitor_idx];
+        if let MonitorSet::Normal { monitors, .. } = &mut self.monitor_set {
+            // Apply the compensation on the monitor that actually owns the
+            // workspace — it is not necessarily the active one.
+            let Some(monitor) = monitors
+                .iter_mut()
+                .find(|mon| mon.workspaces.iter().any(|ws| ws.id() == wsid))
+            else {
+                return;
+            };
             if monitor.options.layout.empty_workspace_above_first
                 && monitor
                     .workspaces
@@ -6149,11 +6154,15 @@ impl<W: LayoutElement> Layout<W> {
             {
                 monitor.add_workspace_top();
             }
-            if monitor
+            // The named workspace may have been the last visible one (the trailing
+            // empty, doubling as the hidden-block guard) — restore an empty one
+            // after it.
+            let visible_end = monitor
                 .workspaces
-                .last()
-                .is_some_and(|last| last.id() == wsid)
-            {
+                .iter()
+                .position(|ws| ws.hidden)
+                .unwrap_or(monitor.workspaces.len());
+            if visible_end > 0 && monitor.workspaces[visible_end - 1].id() == wsid {
                 monitor.add_workspace_bottom();
             }
         }
