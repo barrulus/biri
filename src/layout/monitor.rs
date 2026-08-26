@@ -543,6 +543,7 @@ impl<W: LayoutElement> Monitor<W> {
         );
 
         self.workspaces.insert(idx, ws);
+        self.shift_hidden_original_indices_for_insertion(idx);
         if idx <= self.active_workspace_idx {
             self.active_workspace_idx += 1;
         }
@@ -559,7 +560,13 @@ impl<W: LayoutElement> Monitor<W> {
     }
 
     pub fn add_workspace_bottom(&mut self) {
-        self.add_workspace_at(self.workspaces.len());
+        // The bottom of the visible region — hidden workspaces stay past it.
+        let visible_end = self
+            .workspaces
+            .iter()
+            .position(|ws| ws.hidden)
+            .unwrap_or(self.workspaces.len());
+        self.add_workspace_at(visible_end);
     }
 
     pub fn activate_workspace(&mut self, idx: usize) {
@@ -875,6 +882,7 @@ impl<W: LayoutElement> Monitor<W> {
 
             if !self.workspaces[idx].has_windows_or_name() {
                 self.workspaces.remove(idx);
+                self.shift_hidden_original_indices_for_removal(idx);
                 if self.active_workspace_idx > idx {
                     self.active_workspace_idx -= 1;
                 }
@@ -892,6 +900,32 @@ impl<W: LayoutElement> Monitor<W> {
             assert!(!self.workspaces[1].has_windows_or_name());
             self.workspaces.remove(1);
             self.active_workspace_idx = 0;
+        }
+    }
+
+    // Stored original_idx values of hidden workspaces refer to positions in the
+    // visible region; keep them in sync when that region shrinks or grows.
+    pub(super) fn shift_hidden_original_indices_for_removal(&mut self, removed_idx: usize) {
+        for ws in &mut self.workspaces {
+            if ws.hidden {
+                if let Some(original_idx) = &mut ws.original_idx {
+                    if *original_idx > removed_idx {
+                        *original_idx -= 1;
+                    }
+                }
+            }
+        }
+    }
+
+    fn shift_hidden_original_indices_for_insertion(&mut self, inserted_idx: usize) {
+        for ws in &mut self.workspaces {
+            if ws.hidden {
+                if let Some(original_idx) = &mut ws.original_idx {
+                    if *original_idx >= inserted_idx {
+                        *original_idx += 1;
+                    }
+                }
+            }
         }
     }
 
@@ -1009,6 +1043,8 @@ impl<W: LayoutElement> Monitor<W> {
         // so we preserve its output.
         if !ws.hidden {
             ws.set_output(None);
+            // Removing a visible workspace shifts the visible region.
+            self.shift_hidden_original_indices_for_removal(idx);
         }
 
         // For monitor current workspace removal, we focus previous rather than next (<= rather
@@ -1084,6 +1120,7 @@ impl<W: LayoutElement> Monitor<W> {
 
         let id = ws.id();
         self.workspaces.insert(idx, ws);
+        self.shift_hidden_original_indices_for_insertion(idx);
 
         if idx <= self.active_workspace_idx {
             self.active_workspace_idx += 1;

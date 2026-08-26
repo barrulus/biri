@@ -1822,6 +1822,107 @@ fn clean_up_workspaces_skips_two_workspace_collapse_with_hidden() {
 }
 
 #[test]
+fn close_window_in_hidden_workspace_with_empty_workspace_above_first() {
+    let options = Options {
+        layout: niri_config::Layout {
+            empty_workspace_above_first: true,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let ops = [
+        Op::AddOutput(1),
+        Op::AddWindow {
+            params: TestWindowParams::new(1),
+        },
+        Op::SetWorkspaceName {
+            new_ws_name: 1,
+            ws_name: None,
+        },
+    ];
+    // [emptyTop, "ws1"(win1), empty]
+    let mut layout = check_ops_with_options(options, ops);
+
+    // [emptyTop, "ws1"(hidden, win1)]
+    layout.toggle_workspace_visibility("ws1".to_string());
+    layout.verify_invariants();
+
+    // Closing the hidden workspace's window reaches remove_window's own
+    // two-workspace collapse; it must not assert on [empty, hidden-named].
+    Op::CloseWindow(1).apply(&mut layout);
+    layout.verify_invariants();
+}
+
+#[test]
+fn unhide_placement_survives_workspace_cleanup() {
+    let ops = [
+        Op::AddOutput(1),
+        Op::AddWindow {
+            params: TestWindowParams::new(1),
+        },
+        Op::FocusWorkspaceDown,
+        Op::AddWindow {
+            params: TestWindowParams::new(2),
+        },
+        Op::FocusWorkspaceDown,
+        Op::AddWindow {
+            params: TestWindowParams::new(3),
+        },
+        Op::SetWorkspaceName {
+            new_ws_name: 3,
+            ws_name: None,
+        },
+        Op::FocusWorkspaceDown,
+        Op::AddWindow {
+            params: TestWindowParams::new(4),
+        },
+    ];
+    // [win1, win2, "ws3"(win3), win4, empty]
+    let mut layout = check_ops(ops);
+
+
+    // Hide "ws3" (records original_idx 2): [win1, win2, win4, empty, H].
+    layout.toggle_workspace_visibility("ws3".to_string());
+    layout.verify_invariants();
+
+    // Close win1; its workspace empties out and gets cleaned up:
+    // [win2, win4, empty, H]. The stored original_idx must follow (2 -> 1).
+    Op::CloseWindow(1).apply(&mut layout);
+    Op::AdvanceAnimations { msec_delta: 1000 }.apply(&mut layout);
+    layout.verify_invariants();
+
+    // Unhide: "ws3" must reappear between win2 and win4, its original relative
+    // position — not dumped at the end of the visible region.
+    layout.toggle_workspace_visibility("ws3".to_string());
+    layout.verify_invariants();
+
+    let monitor = match &layout.monitor_set {
+        MonitorSet::Normal { monitors, .. } => &monitors[0],
+        MonitorSet::NoOutputs { .. } => unreachable!(),
+    };
+    let pos_ws3 = monitor
+        .workspaces
+        .iter()
+        .position(|ws| ws.has_window(&3))
+        .unwrap();
+    let pos_win2 = monitor
+        .workspaces
+        .iter()
+        .position(|ws| ws.has_window(&2))
+        .unwrap();
+    let pos_win4 = monitor
+        .workspaces
+        .iter()
+        .position(|ws| ws.has_window(&4))
+        .unwrap();
+    assert!(
+        pos_win2 < pos_ws3 && pos_ws3 < pos_win4,
+        "unhidden workspace must return to its original relative position \
+         (got win2={pos_win2}, ws3={pos_ws3}, win4={pos_win4})"
+    );
+}
+
+#[test]
 fn unhide_next_to_remaining_hidden_block_keeps_empty_workspace_before_it() {
     let ops = [
         Op::AddOutput(1),

@@ -1356,6 +1356,7 @@ impl<W: LayoutElement> Layout<W> {
                                 && mon.workspace_switch.is_none()
                             {
                                 mon.workspaces.remove(idx);
+                                mon.shift_hidden_original_indices_for_removal(idx);
 
                                 if idx < mon.active_workspace_idx {
                                     mon.active_workspace_idx -= 1;
@@ -1363,10 +1364,12 @@ impl<W: LayoutElement> Layout<W> {
                             }
 
                             // Special case handling when empty_workspace_above_first is set and all
-                            // workspaces are empty.
+                            // workspaces are empty. With a hidden workspace present
+                            // ([empty, hidden-named]) there is nothing to collapse.
                             if mon.options.layout.empty_workspace_above_first
                                 && mon.workspaces.len() == 2
                                 && mon.workspace_switch.is_none()
+                                && !mon.workspaces.iter().any(|ws| ws.hidden)
                             {
                                 assert!(!mon.workspaces[0].has_windows_or_name());
                                 assert!(!mon.workspaces[1].has_windows_or_name());
