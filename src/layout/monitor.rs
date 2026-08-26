@@ -1046,7 +1046,12 @@ impl<W: LayoutElement> Monitor<W> {
     // the clamp below keeps it out of the hidden block, and clean_up_workspaces() at the
     // end can remove empty workspaces ahead of it, so the final position is re-resolved
     // by id rather than trusted from the pre-cleanup insertion point.
-    pub fn insert_workspace(&mut self, mut ws: Workspace<W>, mut idx: usize, activate: bool) -> usize {
+    pub fn insert_workspace(
+        &mut self,
+        mut ws: Workspace<W>,
+        mut idx: usize,
+        activate: bool,
+    ) -> usize {
         ws.set_output(Some(self.output.clone()));
         ws.update_config(self.options.clone());
 

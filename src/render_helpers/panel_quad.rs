@@ -32,9 +32,15 @@ pub fn tilted_panel_corners(
 /// Axis-aligned bounding box (x, y, w, h) of a quad.
 pub fn bounding_box(corners: &[[f64; 2]; 4]) -> (f64, f64, f64, f64) {
     let min_x = corners.iter().map(|c| c[0]).fold(f64::INFINITY, f64::min);
-    let max_x = corners.iter().map(|c| c[0]).fold(f64::NEG_INFINITY, f64::max);
+    let max_x = corners
+        .iter()
+        .map(|c| c[0])
+        .fold(f64::NEG_INFINITY, f64::max);
     let min_y = corners.iter().map(|c| c[1]).fold(f64::INFINITY, f64::min);
-    let max_y = corners.iter().map(|c| c[1]).fold(f64::NEG_INFINITY, f64::max);
+    let max_y = corners
+        .iter()
+        .map(|c| c[1])
+        .fold(f64::NEG_INFINITY, f64::max);
     (min_x, min_y, max_x - min_x, max_y - min_y)
 }
 
@@ -98,16 +104,21 @@ pub fn sampling_matrix(corners: &[[f64; 2]; 4]) -> Option<glam::Mat3> {
     if bw <= 0. || bh <= 0. {
         return None;
     }
-    let norm: [[f64; 2]; 4] = std::array::from_fn(|i| {
-        [(corners[i][0] - bx) / bw, (corners[i][1] - by) / bh]
-    });
+    let norm: [[f64; 2]; 4] =
+        std::array::from_fn(|i| [(corners[i][0] - bx) / bw, (corners[i][1] - by) / bh]);
     let h = unit_to_quad_homography(&norm)?;
     let inv = invert_3x3(&h)?;
     // Column-major for glam / GLSL.
     Some(glam::Mat3::from_cols_array(&[
-        inv[0][0] as f32, inv[1][0] as f32, inv[2][0] as f32,
-        inv[0][1] as f32, inv[1][1] as f32, inv[2][1] as f32,
-        inv[0][2] as f32, inv[1][2] as f32, inv[2][2] as f32,
+        inv[0][0] as f32,
+        inv[1][0] as f32,
+        inv[2][0] as f32,
+        inv[0][1] as f32,
+        inv[1][1] as f32,
+        inv[2][1] as f32,
+        inv[0][2] as f32,
+        inv[1][2] as f32,
+        inv[2][2] as f32,
     ]))
 }
 
@@ -118,11 +129,7 @@ pub fn sampling_matrix(corners: &[[f64; 2]; 4]) -> Option<glam::Mat3> {
 pub fn point_in_quad_uv(corners: &[[f64; 2]; 4], p: (f64, f64)) -> Option<(f64, f64)> {
     let m = sampling_matrix(corners)?;
     let (bx, by, bw, bh) = bounding_box(corners);
-    let norm = glam::Vec3::new(
-        ((p.0 - bx) / bw) as f32,
-        ((p.1 - by) / bh) as f32,
-        1.0,
-    );
+    let norm = glam::Vec3::new(((p.0 - bx) / bw) as f32, ((p.1 - by) / bh) as f32, 1.0);
     let s = m * norm;
     if s.z == 0.0 {
         return None;
@@ -146,10 +153,10 @@ mod tests {
     #[test]
     fn zero_yaw_is_flat_rect() {
         let c = tilted_panel_corners((100., 50.), (80., 40.), 0., 1000.);
-        assert_close(c[0][0], 60.);  // TL x
-        assert_close(c[0][1], 30.);  // TL y
+        assert_close(c[0][0], 60.); // TL x
+        assert_close(c[0][1], 30.); // TL y
         assert_close(c[2][0], 140.); // BR x
-        assert_close(c[2][1], 70.);  // BR y
+        assert_close(c[2][1], 70.); // BR y
     }
 
     #[test]
@@ -159,11 +166,22 @@ mod tests {
         let c = tilted_panel_corners((0., 0.), (100., 60.), 0.5, 300.);
         let left_h = c[3][1] - c[0][1];
         let right_h = c[2][1] - c[1][1];
-        assert!(right_h < left_h, "right edge must be shorter: {right_h} vs {left_h}");
-        assert!(c[1][0] < 50., "right edge pulled toward center: {}", c[1][0]);
+        assert!(
+            right_h < left_h,
+            "right edge must be shorter: {right_h} vs {left_h}"
+        );
+        assert!(
+            c[1][0] < 50.,
+            "right edge pulled toward center: {}",
+            c[1][0]
+        );
         // Left edge is nearer to the camera: it magnifies (taller), though its
         // x still pulls inward because cos-foreshortening dominates at this yaw.
-        assert!(c[0][0] > -50., "near edge pulled toward center: {}", c[0][0]);
+        assert!(
+            c[0][0] > -50.,
+            "near edge pulled toward center: {}",
+            c[0][0]
+        );
         let left_h = c[3][1] - c[0][1];
         assert!(left_h > 60., "near edge magnifies vertically: {left_h}");
     }
@@ -229,9 +247,19 @@ mod tests {
         let c = tilted_panel_corners((0., 0.), (100., 60.), -0.5, 300.);
         let left_h = c[3][1] - c[0][1];
         let right_h = c[2][1] - c[1][1];
-        assert!(left_h < right_h, "left edge must be shorter: {left_h} vs {right_h}");
-        assert!(c[0][0] > -50., "left edge pulled toward center: {}", c[0][0]);
-        assert!(right_h > 60., "near (right) edge magnifies vertically: {right_h}");
+        assert!(
+            left_h < right_h,
+            "left edge must be shorter: {left_h} vs {right_h}"
+        );
+        assert!(
+            c[0][0] > -50.,
+            "left edge pulled toward center: {}",
+            c[0][0]
+        );
+        assert!(
+            right_h > 60.,
+            "near (right) edge magnifies vertically: {right_h}"
+        );
     }
 
     #[test]

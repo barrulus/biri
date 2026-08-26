@@ -223,10 +223,16 @@ mod tests {
         let assembled = panel_placement((1920., 1080.), 1.0, 1.0).unwrap();
         let half = panel_placement((1920., 1080.), 1.0, 0.5).unwrap();
         let start = panel_placement((1920., 1080.), 1.0, 0.0);
-        assert!(half.center.0 > assembled.center.0, "mid-reveal sits further right");
+        assert!(
+            half.center.0 > assembled.center.0,
+            "mid-reveal sits further right"
+        );
         // at reveal 0 the panel is fully off-screen (or not placed at all)
         if let Some(p) = start {
-            assert!(p.center.0 - p.size.0 / 2. >= 1920., "off-screen at reveal 0");
+            assert!(
+                p.center.0 - p.size.0 / 2. >= 1920.,
+                "off-screen at reveal 0"
+            );
         }
     }
 
