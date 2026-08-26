@@ -882,8 +882,12 @@ impl<W: LayoutElement> Monitor<W> {
         }
 
         // Special case handling when empty_workspace_above_first is set and all workspaces
-        // are empty.
-        if self.options.layout.empty_workspace_above_first && self.workspaces.len() == 2 {
+        // are empty. With a hidden workspace present ([empty, hidden-named]) there is
+        // nothing to collapse.
+        if self.options.layout.empty_workspace_above_first
+            && self.workspaces.len() == 2
+            && !self.workspaces.iter().any(|ws| ws.hidden)
+        {
             assert!(!self.workspaces[0].has_windows_or_name());
             assert!(!self.workspaces[1].has_windows_or_name());
             self.workspaces.remove(1);

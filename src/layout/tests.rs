@@ -1784,6 +1784,44 @@ fn verify_invariants_accepts_hidden_workspaces() {
 }
 
 #[test]
+fn clean_up_workspaces_skips_two_workspace_collapse_with_hidden() {
+    let options = Options {
+        layout: niri_config::Layout {
+            empty_workspace_above_first: true,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+
+    let ops = [
+        Op::AddOutput(1),
+        Op::AddWindow {
+            params: TestWindowParams::new(1),
+        },
+        Op::SetWorkspaceName {
+            new_ws_name: 1,
+            ws_name: None,
+        },
+    ];
+    // [emptyTop, "ws1"(win1), empty]
+    let mut layout = check_ops_with_options(options, ops);
+
+    // Hiding "ws1" collapses the two remaining empties and re-adds the hidden
+    // one at the end: [emptyTop, "ws1"(hidden)].
+    layout.toggle_workspace_visibility("ws1".to_string());
+    layout.verify_invariants();
+
+    // A later cleanup (e.g. after a workspace-switch gesture ends) must not
+    // assert on the legal [empty, hidden-named] state.
+    let monitor = match &mut layout.monitor_set {
+        MonitorSet::Normal { monitors, .. } => &mut monitors[0],
+        MonitorSet::NoOutputs { .. } => unreachable!(),
+    };
+    monitor.clean_up_workspaces();
+    layout.verify_invariants();
+}
+
+#[test]
 fn unhide_next_to_remaining_hidden_block_keeps_empty_workspace_before_it() {
     let ops = [
         Op::AddOutput(1),
