@@ -123,7 +123,6 @@ pub enum Request {
     Casts,
 }
 
-
 /// Reply from niri to client.
 ///
 /// Every request gets one reply.

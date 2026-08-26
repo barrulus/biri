@@ -898,6 +898,10 @@ impl<W: LayoutElement> Monitor<W> {
         };
         let ws = &mut self.workspaces[idx];
 
+        // Unnaming removes the only way to unhide this workspace later, so it must
+        // not be left pending a hide-on-switch-away (the unhide call above only
+        // clears this when the workspace was actually hidden).
+        ws.needs_hidden = false;
         ws.unname();
 
         if self.workspace_switch.is_none() {
@@ -922,6 +926,13 @@ impl<W: LayoutElement> Monitor<W> {
             return None;
         };
 
+        // Nothing to do if the workspace isn't actually hidden. Avoid the
+        // remove/reinsert work below, which resets workspace_switch and
+        // reorders the workspace vec even though nothing needs to move.
+        if !self.workspaces[idx].hidden {
+            return None;
+        }
+
         // Hidden workspaces are positioned physically after visible workspaces in their
         // workspace vec, because of this on unhide we need to position them to match
         // where they were originally on unhide.
@@ -930,8 +941,12 @@ impl<W: LayoutElement> Monitor<W> {
         ws.hidden = false;
         ws.needs_hidden = needs_hidden;
         ws.original_idx = None;
-        self.insert_workspace(ws, original_idx, false);
-        return Some(original_idx);
+        // original_idx was recorded at hide time and can now be stale (the vec may
+        // have shrunk while this workspace stayed hidden, or grown a new hidden
+        // block ahead of it). insert_workspace() clamps it to a safe position and
+        // returns where the workspace actually landed.
+        let final_idx = self.insert_workspace(ws, original_idx, false);
+        return Some(final_idx);
     }
 
     pub fn hide_workspace_by_name(&mut self, name: &str) {
@@ -1027,12 +1042,34 @@ impl<W: LayoutElement> Monitor<W> {
         self.clean_up_workspaces();
     }
 
-    pub fn insert_workspace(&mut self, mut ws: Workspace<W>, mut idx: usize, activate: bool) {
+    // Returns the index the workspace actually ended up at. This can differ from `idx`:
+    // the clamp below keeps it out of the hidden block, and clean_up_workspaces() at the
+    // end can remove empty workspaces ahead of it, so the final position is re-resolved
+    // by id rather than trusted from the pre-cleanup insertion point.
+    pub fn insert_workspace(
+        &mut self,
+        mut ws: Workspace<W>,
+        mut idx: usize,
+        activate: bool,
+    ) -> usize {
         ws.set_output(Some(self.output.clone()));
         ws.update_config(self.options.clone());
 
-        // Don't insert past the last empty workspace.
-        if idx == self.workspaces.len() {
+        // Hidden workspaces must stay contiguous at the end of the vec: never insert a
+        // visible workspace into or past that block. The visible region ends at the
+        // first hidden workspace, or at the vec end if there is none.
+        let visible_end = self
+            .workspaces
+            .iter()
+            .position(|ws| ws.hidden)
+            .unwrap_or(self.workspaces.len());
+        idx = idx.min(visible_end);
+
+        // Don't insert past the last empty workspace: the trailing empty when there is
+        // no hidden block, or the empty workspace guarding the hidden block (inserting
+        // between that empty and the block would get the empty removed by
+        // clean_up_workspaces below, breaking the empty-before-hidden invariant).
+        if idx == visible_end && idx > 0 {
             idx -= 1;
         }
         if idx == 0 && self.options.layout.empty_workspace_above_first {
@@ -1041,6 +1078,7 @@ impl<W: LayoutElement> Monitor<W> {
             idx += 1;
         }
 
+        let id = ws.id();
         self.workspaces.insert(idx, ws);
 
         if idx <= self.active_workspace_idx {
@@ -1054,6 +1092,11 @@ impl<W: LayoutElement> Monitor<W> {
 
         self.workspace_switch = None;
         self.clean_up_workspaces();
+
+        self.workspaces
+            .iter()
+            .position(|w| w.id() == id)
+            .unwrap_or_else(|| idx.min(self.workspaces.len().saturating_sub(1)))
     }
 
     pub fn append_workspaces(&mut self, mut workspaces: Vec<Workspace<W>>) {

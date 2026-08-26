@@ -186,9 +186,7 @@ impl PanelRenderElement {
     }
 
     pub fn has_shader(renderer: &mut impl NiriRenderer) -> bool {
-        Shaders::get(renderer)
-            .program(ProgramType::Panel)
-            .is_some()
+        Shaders::get(renderer).program(ProgramType::Panel).is_some()
     }
 }
 

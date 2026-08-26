@@ -1750,6 +1750,65 @@ fn toggle_sticky_restores_window_to_original_workspace() {
 }
 
 #[test]
+fn unhide_next_to_remaining_hidden_block_keeps_empty_workspace_before_it() {
+    let ops = [
+        Op::AddOutput(1),
+        Op::AddWindow {
+            params: TestWindowParams::new(1),
+        },
+        Op::FocusWorkspaceDown,
+        Op::AddWindow {
+            params: TestWindowParams::new(2),
+        },
+        Op::SetWorkspaceName {
+            new_ws_name: 2,
+            ws_name: None,
+        },
+        Op::FocusWorkspaceDown,
+        Op::AddWindow {
+            params: TestWindowParams::new(3),
+        },
+        Op::SetWorkspaceName {
+            new_ws_name: 3,
+            ws_name: None,
+        },
+    ];
+
+    // [win1, "ws2"(win2), "ws3"(win3), empty]
+    let mut layout = check_ops(ops);
+
+    // Hide "ws3" (records original_idx 2), then "ws2"; the hidden block now sits at
+    // the end with an empty workspace right before it.
+    layout.toggle_workspace_visibility("ws3".to_string());
+    layout.toggle_workspace_visibility("ws2".to_string());
+
+    // Unhiding "ws3" reinserts at original_idx 2, which is exactly where the hidden
+    // block starts. It must land before the empty workspace guarding the block, not
+    // between the empty workspace and the block.
+    layout.toggle_workspace_visibility("ws3".to_string());
+
+    let monitor = match &layout.monitor_set {
+        MonitorSet::Normal { monitors, .. } => &monitors[0],
+        MonitorSet::NoOutputs { .. } => unreachable!(),
+    };
+
+    assert!(
+        monitor.workspaces.iter().any(|ws| ws.has_window(&3)),
+        "unhidden workspace must still exist"
+    );
+    let first_hidden = monitor
+        .workspaces
+        .iter()
+        .position(|ws| ws.hidden)
+        .expect("\"ws2\" must still be hidden");
+    assert!(first_hidden > 0);
+    assert!(
+        !monitor.workspaces[first_hidden - 1].has_windows_or_name(),
+        "workspace before the hidden block must stay empty and unnamed"
+    );
+}
+
+#[test]
 fn operations_dont_panic() {
     if std::env::var_os("RUN_SLOW_TESTS").is_none() {
         eprintln!("ignoring slow test");
