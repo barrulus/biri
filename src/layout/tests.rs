@@ -1854,6 +1854,59 @@ fn close_window_in_hidden_workspace_with_empty_workspace_above_first() {
 }
 
 #[test]
+fn move_hidden_workspace_to_other_output_keeps_it_hidden() {
+    let ops = [
+        Op::AddOutput(1),
+        Op::AddOutput(2),
+        Op::AddWindow {
+            params: TestWindowParams::new(1),
+        },
+        Op::SetWorkspaceName {
+            new_ws_name: 1,
+            ws_name: None,
+        },
+    ];
+    let mut layout = check_ops(ops);
+
+    layout.toggle_workspace_visibility("ws1".to_string());
+    layout.verify_invariants();
+
+    // Move the hidden workspace to output 2.
+    let (old_idx, old_output, new_output) = match &layout.monitor_set {
+        MonitorSet::Normal { monitors, .. } => {
+            let old_idx = monitors[0]
+                .workspaces
+                .iter()
+                .position(|ws| ws.name.as_deref() == Some("ws1"))
+                .unwrap();
+            (
+                old_idx,
+                monitors[0].output.clone(),
+                monitors[1].output.clone(),
+            )
+        }
+        MonitorSet::NoOutputs { .. } => unreachable!(),
+    };
+    layout.move_workspace_to_output_by_id(old_idx, Some(old_output), &new_output);
+    layout.verify_invariants();
+
+    // The workspace lives on monitor 1 now, still hidden, still reachable by name.
+    let monitor = match &layout.monitor_set {
+        MonitorSet::Normal { monitors, .. } => &monitors[1],
+        MonitorSet::NoOutputs { .. } => unreachable!(),
+    };
+    let ws = monitor
+        .workspaces
+        .iter()
+        .find(|ws| ws.name.as_deref() == Some("ws1"))
+        .expect("moved workspace must be on the target monitor");
+    assert!(ws.hidden, "moved workspace must stay hidden");
+
+    layout.toggle_workspace_visibility("ws1".to_string());
+    layout.verify_invariants();
+}
+
+#[test]
 fn unhide_placement_survives_workspace_cleanup() {
     let ops = [
         Op::AddOutput(1),

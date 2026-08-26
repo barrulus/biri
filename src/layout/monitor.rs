@@ -1080,6 +1080,9 @@ impl<W: LayoutElement> Monitor<W> {
         self.workspaces.insert(idx, ws);
         self.workspace_switch = None;
         self.clean_up_workspaces();
+        // The monitor may not have had a hidden block before this insert; make sure
+        // the block ends up guarded by an empty workspace.
+        self.ensure_empty_before_hidden();
     }
 
     // Returns the index the workspace actually ended up at. This can differ from `idx`:
@@ -1092,6 +1095,19 @@ impl<W: LayoutElement> Monitor<W> {
         mut idx: usize,
         activate: bool,
     ) -> usize {
+        // A hidden workspace never belongs in the visible region (this happens when
+        // moving a hidden workspace to another output). Route it to the hidden
+        // block; it stays named, so it remains reachable, and can't be activated.
+        if ws.hidden {
+            let id = ws.id();
+            self.insert_hidden_workspace(ws, idx);
+            return self
+                .workspaces
+                .iter()
+                .position(|w| w.id() == id)
+                .unwrap_or(self.workspaces.len() - 1);
+        }
+
         ws.set_output(Some(self.output.clone()));
         ws.update_config(self.options.clone());
 
