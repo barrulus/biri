@@ -1907,6 +1907,51 @@ fn move_hidden_workspace_to_other_output_keeps_it_hidden() {
 }
 
 #[test]
+fn output_disconnect_preserves_hidden_blocks() {
+    let ops = [
+        Op::AddOutput(1),
+        Op::AddOutput(2),
+        // Window + named workspace on output 1 (primary).
+        Op::AddWindow {
+            params: TestWindowParams::new(1),
+        },
+        Op::SetWorkspaceName {
+            new_ws_name: 1,
+            ws_name: None,
+        },
+        // Window + named workspace on output 2.
+        Op::FocusOutput(2),
+        Op::AddWindow {
+            params: TestWindowParams::new(2),
+        },
+        Op::SetWorkspaceName {
+            new_ws_name: 2,
+            ws_name: None,
+        },
+        // A visible workspace on output 2 too, so the incoming set mixes
+        // visible and hidden workspaces.
+        Op::FocusWorkspaceDown,
+        Op::AddWindow {
+            params: TestWindowParams::new(3),
+        },
+    ];
+    let mut layout = check_ops(ops);
+    layout.toggle_workspace_visibility("ws1".to_string());
+    layout.toggle_workspace_visibility("ws2".to_string());
+    layout.verify_invariants();
+
+    // Disconnect output 2; its workspaces (incl. the hidden one) land on output 1.
+    Op::RemoveOutput(2).apply(&mut layout);
+    layout.verify_invariants();
+
+    // Both hidden workspaces must be reachable again.
+    layout.toggle_workspace_visibility("ws1".to_string());
+    layout.verify_invariants();
+    layout.toggle_workspace_visibility("ws2".to_string());
+    layout.verify_invariants();
+}
+
+#[test]
 fn unhide_placement_survives_workspace_cleanup() {
     let ops = [
         Op::AddOutput(1),

@@ -1166,13 +1166,31 @@ impl<W: LayoutElement> Monitor<W> {
             ws.update_config(self.options.clone());
         }
 
-        let empty_was_focused = self.active_workspace_idx == self.workspaces.len() - 1;
+        // Incoming hidden workspaces go to the hidden block; their recorded
+        // original_idx refers to the dead monitor's layout and is meaningless here.
+        let (incoming_visible, mut incoming_hidden): (Vec<_>, Vec<_>) =
+            workspaces.into_iter().partition(|ws| !ws.hidden);
+        for ws in &mut incoming_hidden {
+            ws.original_idx = None;
+        }
 
-        // Push the workspaces from the removed monitor in the end, right before the
-        // last, empty, workspace.
-        let empty = self.workspaces.remove(self.workspaces.len() - 1);
-        self.workspaces.extend(workspaces);
-        self.workspaces.push(empty);
+        // The visible region ends with the empty trailing workspace (which also
+        // guards the hidden block when one exists). Splice the incoming visible
+        // workspaces right before it, and append incoming hidden ones at the end.
+        let visible_end = self
+            .workspaces
+            .iter()
+            .position(|ws| ws.hidden)
+            .unwrap_or(self.workspaces.len());
+        let empty_idx = visible_end - 1;
+        let empty_id = self.workspaces[empty_idx].id();
+        let empty_was_focused = self.active_workspace_idx == empty_idx;
+
+        for _ in 0..incoming_visible.len() {
+            self.shift_hidden_original_indices_for_insertion(empty_idx);
+        }
+        self.workspaces.splice(empty_idx..empty_idx, incoming_visible);
+        self.workspaces.extend(incoming_hidden);
 
         // If empty_workspace_above_first is set and the first workspace is now no longer empty,
         // add a new empty workspace on top.
@@ -1184,7 +1202,11 @@ impl<W: LayoutElement> Monitor<W> {
 
         // If the empty workspace was focused on the primary monitor, keep it focused.
         if empty_was_focused {
-            self.active_workspace_idx = self.workspaces.len() - 1;
+            self.active_workspace_idx = self
+                .workspaces
+                .iter()
+                .position(|ws| ws.id() == empty_id)
+                .unwrap();
         }
 
         // FIXME: if we're adding workspaces to currently invisible positions
