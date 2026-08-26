@@ -6137,13 +6137,15 @@ impl<W: LayoutElement> Layout<W> {
         // Conversely, if `ws` was the last workspace on a monitor, an
         // empty workspace needs to be added after.
 
-        if let MonitorSet::Normal {
-            monitors,
-            active_monitor_idx,
-            ..
-        } = &mut self.monitor_set
-        {
-            let monitor = &mut monitors[*active_monitor_idx];
+        if let MonitorSet::Normal { monitors, .. } = &mut self.monitor_set {
+            // Apply the compensation on the monitor that actually owns the
+            // workspace — it is not necessarily the active one.
+            let Some(monitor) = monitors
+                .iter_mut()
+                .find(|mon| mon.workspaces.iter().any(|ws| ws.id() == wsid))
+            else {
+                return;
+            };
             if monitor.options.layout.empty_workspace_above_first
                 && monitor
                     .workspaces
@@ -6152,11 +6154,15 @@ impl<W: LayoutElement> Layout<W> {
             {
                 monitor.add_workspace_top();
             }
-            if monitor
+            // The named workspace may have been the last visible one (the trailing
+            // empty, doubling as the hidden-block guard) — restore an empty one
+            // after it.
+            let visible_end = monitor
                 .workspaces
-                .last()
-                .is_some_and(|last| last.id() == wsid)
-            {
+                .iter()
+                .position(|ws| ws.hidden)
+                .unwrap_or(monitor.workspaces.len());
+            if visible_end > 0 && monitor.workspaces[visible_end - 1].id() == wsid {
                 monitor.add_workspace_bottom();
             }
         }

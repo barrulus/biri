@@ -1952,6 +1952,62 @@ fn output_disconnect_preserves_hidden_blocks() {
 }
 
 #[test]
+fn naming_workspace_on_non_active_monitor_compensates_there() {
+    let options = Options {
+        layout: niri_config::Layout {
+            empty_workspace_above_first: true,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let ops = [Op::AddOutput(1), Op::AddOutput(2)];
+    // Focus stays on output 1 (the active monitor).
+    let mut layout = check_ops_with_options(options, ops);
+
+    // Name the FIRST workspace of the non-active monitor by id. The compensating
+    // empty workspace must be added on that monitor, not the active one.
+    let wsid = match &layout.monitor_set {
+        MonitorSet::Normal { monitors, .. } => monitors[1].workspaces[0].id(),
+        MonitorSet::NoOutputs { .. } => unreachable!(),
+    };
+    layout.set_workspace_name("ws1".to_string(), Some(WorkspaceReference::Id(wsid.get())));
+    layout.verify_invariants();
+}
+
+#[test]
+fn hide_workspace_at_index_zero_hides_the_right_workspace() {
+    let options = Options {
+        layout: niri_config::Layout {
+            empty_workspace_above_first: true,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let ops = [
+        Op::AddOutput(1),
+        Op::AddWindow {
+            params: TestWindowParams::new(1),
+        },
+    ];
+    let mut layout = check_ops_with_options(options, ops);
+
+    let monitor = match &mut layout.monitor_set {
+        MonitorSet::Normal { monitors, .. } => &mut monitors[0],
+        MonitorSet::NoOutputs { .. } => unreachable!(),
+    };
+    // Manufacture a named workspace at idx 0 (as a release build with the old
+    // set_workspace_name defect could).
+    monitor.workspaces[0].name = Some("ws1".to_string());
+
+    monitor.hide_workspace_by_idx(0);
+
+    // The named workspace must be the hidden one — not the freshly added empty.
+    let hidden: Vec<_> = monitor.workspaces.iter().filter(|ws| ws.hidden).collect();
+    assert_eq!(hidden.len(), 1);
+    assert_eq!(hidden[0].name.as_deref(), Some("ws1"));
+}
+
+#[test]
 fn unhide_placement_survives_workspace_cleanup() {
     let ops = [
         Op::AddOutput(1),
