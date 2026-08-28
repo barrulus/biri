@@ -20,6 +20,8 @@
 >
 > Everything documented for upstream niri still applies. Bugs you hit here should be reported to this fork, not to upstream niri.
 
+https://github.com/user-attachments/assets/a5e2b72b-a5a3-4aab-a83d-51973a75f6cc
+
 ## Fork Features
 
 These exist only in biri, not in upstream niri. Unless noted, each is off by default and inert when unconfigured.
