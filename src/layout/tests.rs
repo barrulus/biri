@@ -1754,6 +1754,31 @@ fn toggle_sticky_restores_window_to_original_workspace() {
 }
 
 #[test]
+fn workspace_switch_gesture_clamps_to_visible_region() {
+    // Minimized from a CI proptest run: hide the active (named) workspace, then a touchpad
+    // workspace-switch gesture with a large delta — the gesture must clamp to the visible
+    // region, not scroll into the hidden block.
+    check_ops([
+        Op::AddOutput(3),
+        Op::SetWorkspaceName {
+            new_ws_name: 5,
+            ws_name: None,
+        },
+        Op::ToggleWorkspaceVisibility(5),
+        Op::WorkspaceSwitchGestureBegin {
+            output_idx: 3,
+            is_touchpad: true,
+        },
+        Op::WorkspaceSwitchGestureUpdate {
+            delta: 331.1446917951993,
+            timestamp: Duration::ZERO,
+            is_touchpad: true,
+        },
+        Op::WorkspaceSwitchGestureEnd { is_touchpad: None },
+    ]);
+}
+
+#[test]
 fn move_window_to_hidden_workspace_with_empty_above_first() {
     // Minimized from proptest: with empty-workspace-above-first, moving the active window
     // into the hidden workspace and focusing down must not leave the active workspace inside

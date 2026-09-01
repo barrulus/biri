@@ -2154,6 +2154,14 @@ impl<W: LayoutElement> Monitor<W> {
         self.overview_progress.as_ref().map(|p| p.value())
     }
 
+    /// Number of workspaces in the visible region — hidden workspaces sit past its end.
+    pub(super) fn visible_workspace_count(&self) -> usize {
+        self.workspaces
+            .iter()
+            .position(|ws| ws.hidden)
+            .unwrap_or(self.workspaces.len())
+    }
+
     pub fn workspace_render_idx(&self) -> f64 {
         // If workspace switch and overview progress are matching animations, then compute a
         // correction term to make the movement appear monotonic.
@@ -2974,6 +2982,7 @@ impl<W: LayoutElement> Monitor<W> {
         } else {
             self.workspace_size_with_gap(1.).h
         };
+        let visible_count = self.visible_workspace_count();
 
         let Some(WorkspaceSwitch::Gesture(gesture)) = &mut self.workspace_switch else {
             return None;
@@ -2994,7 +3003,7 @@ impl<W: LayoutElement> Monitor<W> {
 
         let pos = gesture.tracker.pos() / total_height;
 
-        let (min, max) = gesture.min_max(self.workspaces.len());
+        let (min, max) = gesture.min_max(visible_count);
         let new_idx = gesture.start_idx + pos;
         let new_idx = rubber_band.clamp(min, max, new_idx);
 
@@ -3008,6 +3017,7 @@ impl<W: LayoutElement> Monitor<W> {
 
     pub fn dnd_scroll_gesture_scroll(&mut self, pos: Point<f64, Logical>, speed: f64) -> bool {
         let zoom = self.overview_zoom();
+        let visible_count = self.visible_workspace_count();
 
         let Some(WorkspaceSwitch::Gesture(gesture)) = &mut self.workspace_switch else {
             return false;
@@ -3081,7 +3091,7 @@ impl<W: LayoutElement> Monitor<W> {
         let pos = gesture.tracker.pos() / total_height;
         let unclamped = gesture.start_idx + pos;
 
-        let (min, max) = gesture.min_max(self.workspaces.len());
+        let (min, max) = gesture.min_max(visible_count);
         let clamped = unclamped.clamp(min, max);
 
         // Make sure that DnD scrolling too much outside the min/max does not "build up".
@@ -3108,6 +3118,7 @@ impl<W: LayoutElement> Monitor<W> {
         } else {
             self.workspace_size_with_gap(1.).h
         };
+        let visible_count = self.visible_workspace_count();
 
         let Some(WorkspaceSwitch::Gesture(gesture)) = &mut self.workspace_switch else {
             return false;
@@ -3124,7 +3135,7 @@ impl<W: LayoutElement> Monitor<W> {
         let current_pos = gesture.tracker.pos() / total_height;
         let pos = gesture.tracker.projected_end_pos() / total_height;
 
-        let (min, max) = gesture.min_max(self.workspaces.len());
+        let (min, max) = gesture.min_max(visible_count);
         let new_idx = gesture.start_idx + pos;
 
         let new_idx = new_idx.clamp(min, max);
