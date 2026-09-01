@@ -617,10 +617,16 @@ impl<W: LayoutElement> Monitor<W> {
                     // The re-hide shuffled the list (and may have cleaned up workspaces), so
                     // both the recorded target index and the captured render position are
                     // stale. Re-resolve the target by id and switch instantly — the re-hide
-                    // already reset any in-progress switch.
-                    let idx = self
-                        .idx_of_ws(target_id)
-                        .unwrap_or_else(|| min(idx, self.workspaces.len() - 1));
+                    // already reset any in-progress switch. If the target itself is gone,
+                    // fall back to the last visible workspace, never into the hidden block.
+                    let idx = self.idx_of_ws(target_id).unwrap_or_else(|| {
+                        let visible_end = self
+                            .workspaces
+                            .iter()
+                            .position(|ws| ws.hidden)
+                            .unwrap_or(self.workspaces.len());
+                        min(idx, visible_end - 1)
+                    });
                     self.active_workspace_idx = idx;
                     return;
                 }

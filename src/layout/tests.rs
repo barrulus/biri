@@ -1754,6 +1754,38 @@ fn toggle_sticky_restores_window_to_original_workspace() {
 }
 
 #[test]
+fn move_window_to_hidden_workspace_with_empty_above_first() {
+    // Minimized from proptest: with empty-workspace-above-first, moving the active window
+    // into the hidden workspace and focusing down must not leave the active workspace inside
+    // the hidden block.
+    check_ops([
+        Op::AddNamedWorkspace {
+            ws_name: 1,
+            output_name: None,
+            layout_config: None,
+        },
+        Op::UpdateConfig {
+            layout_config: Box::new(niri_config::LayoutPart {
+                empty_workspace_above_first: Some(niri_config::utils::Flag(true)),
+                ..Default::default()
+            }),
+        },
+        Op::AddWindowToNamedWorkspace {
+            params: TestWindowParams::new(1),
+            ws_name: 1,
+        },
+        Op::AddOutput(1),
+        Op::MoveWindowToWorkspaceUp(false),
+        Op::ToggleWorkspaceVisibility(1),
+        Op::MoveWindowToWorkspace {
+            window_id: None,
+            workspace_idx: 3,
+        },
+        Op::FocusWorkspaceDown,
+    ]);
+}
+
+#[test]
 fn dnd_scroll_workspace_down_skips_hidden() {
     // Minimized from proptest: during a DnD workspace scroll, switching down clamps to the
     // last workspace in the list — which must be the last visible one, not the hidden block.
