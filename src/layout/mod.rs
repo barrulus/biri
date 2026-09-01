@@ -909,9 +909,16 @@ impl<W: LayoutElement> Layout<W> {
                 // Also if empty_workspace_above_first is set and there are only 2 workspaces left,
                 // both will be empty and one of them needs to be removed. clean_up_workspaces
                 // takes care of this.
+                //
+                // The second case can also be hit with a workspace switch still active (nothing
+                // was moved to the new output, but e.g. an overview gesture is in progress) —
+                // there, len == 2 may include a hidden workspace rather than two empty ones, and
+                // clean_up_workspaces asserts no switch is active. Defer to the cleanup that runs
+                // when the switch finishes.
 
                 if stopped_primary_ws_switch
-                    || (primary.options.layout.empty_workspace_above_first
+                    || (primary.workspace_switch.is_none()
+                        && primary.options.layout.empty_workspace_above_first
                         && primary.workspaces.len() == 2)
                 {
                     primary.clean_up_workspaces();

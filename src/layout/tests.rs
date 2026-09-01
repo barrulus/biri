@@ -1788,6 +1788,38 @@ fn verify_invariants_accepts_hidden_workspaces() {
 }
 
 #[test]
+fn add_output_during_overview_gesture_with_hidden_workspace() {
+    // Minimized from proptest: adding an output while an overview gesture (and its DnD
+    // workspace switch) is active must not trip clean_up_workspaces' workspace_switch assert.
+    let options = Options {
+        layout: niri_config::Layout {
+            empty_workspace_above_first: true,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    check_ops_with_options(
+        options,
+        [
+            Op::AddNamedWorkspace {
+                ws_name: 2,
+                output_name: None,
+                layout_config: None,
+            },
+            Op::AddOutput(1),
+            Op::OverviewGestureBegin,
+            Op::ToggleWorkspaceVisibility(2),
+            Op::DndUpdate {
+                output_idx: 1,
+                px: 0.0,
+                py: 0.0,
+            },
+            Op::AddOutput(2),
+        ],
+    );
+}
+
+#[test]
 fn clean_up_workspaces_skips_two_workspace_collapse_with_hidden() {
     let options = Options {
         layout: niri_config::Layout {
