@@ -799,8 +799,12 @@ impl<W: LayoutElement> Monitor<W> {
     ) {
         let (mut workspace_idx, target) = self.resolve_add_window_target(target);
 
-        // Force-unhide the workspace if requested and it's hidden.
-        if force_unhide_workspace && self.workspaces[workspace_idx].hidden {
+        // Force-unhide the workspace if requested and it's hidden. Also unhide whenever this
+        // tile is going to activate its workspace: a hidden workspace must never become the
+        // active one, since it isn't rendered. This is the same condition used to activate
+        // below, evaluated before anything moves.
+        let will_activate = allow_to_activate_workspace && activate.map_smart(|| false);
+        if (force_unhide_workspace || will_activate) && self.workspaces[workspace_idx].hidden {
             let ws_id = self.workspaces[workspace_idx].id();
             if let Some(idx) = self.unhide_workspace_by_id(ws_id, true) {
                 workspace_idx = idx;
@@ -859,7 +863,7 @@ impl<W: LayoutElement> Monitor<W> {
 
     pub fn add_tile_to_column(
         &mut self,
-        workspace_idx: usize,
+        mut workspace_idx: usize,
         column_idx: usize,
         tile_idx: Option<usize>,
         tile: Tile<W>,
@@ -867,6 +871,15 @@ impl<W: LayoutElement> Monitor<W> {
         // FIXME: Refactor ActivateWindow enum to make this better.
         allow_to_activate_workspace: bool,
     ) {
+        // A hidden workspace must never become the active one; unhide it first if this tile
+        // is going to activate it.
+        if allow_to_activate_workspace && activate && self.workspaces[workspace_idx].hidden {
+            let ws_id = self.workspaces[workspace_idx].id();
+            if let Some(idx) = self.unhide_workspace_by_id(ws_id, true) {
+                workspace_idx = idx;
+            }
+        }
+
         let workspace = &mut self.workspaces[workspace_idx];
 
         workspace.add_tile_to_column(column_idx, tile_idx, tile, activate);
