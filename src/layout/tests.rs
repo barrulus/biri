@@ -1788,6 +1788,64 @@ fn verify_invariants_accepts_hidden_workspaces() {
 }
 
 #[test]
+fn interactive_move_drop_below_workspaces_with_one_hidden() {
+    // Dropping an interactively-moved window below all visible workspaces resolves to "reuse
+    // the bottom empty workspace" — which must be the last visible one, not a hidden one at
+    // the end of the list.
+    check_ops([
+        Op::AddNamedWorkspace {
+            ws_name: 1,
+            output_name: None,
+            layout_config: None,
+        },
+        Op::AddOutput(1),
+        Op::ToggleWorkspaceVisibility(1),
+        Op::AddWindow {
+            params: TestWindowParams::new(1),
+        },
+        Op::ToggleOverview,
+        Op::InteractiveMoveBegin {
+            window: 1,
+            output_idx: 1,
+            px: 0.,
+            py: 0.,
+        },
+        Op::InteractiveMoveUpdate {
+            window: 1,
+            dx: 0.,
+            dy: 5000.,
+            output_idx: 1,
+            px: 0.,
+            py: 5000.,
+        },
+        Op::InteractiveMoveEnd { window: 1 },
+    ]);
+}
+
+#[test]
+fn move_window_to_output_into_hidden_workspace() {
+    // Minimized from proptest: move-window-to-output targeting a hidden workspace index on
+    // the same output must not activate the hidden workspace in place.
+    check_ops([
+        Op::AddNamedWorkspace {
+            ws_name: 1,
+            output_name: None,
+            layout_config: None,
+        },
+        Op::AddOutput(5),
+        Op::ToggleWorkspaceVisibility(1),
+        Op::AddWindow {
+            params: TestWindowParams::new(1),
+        },
+        Op::MoveWindowToOutput {
+            window_id: None,
+            output_id: 5,
+            target_ws_idx: Some(2),
+        },
+    ]);
+}
+
+#[test]
 fn move_window_into_hidden_workspace_then_move_workspace_down() {
     // Minimized from proptest: moving a window into a hidden workspace by index and then
     // moving the active workspace down must keep the hidden block contiguous at the end.

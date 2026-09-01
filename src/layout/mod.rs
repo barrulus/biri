@@ -4783,7 +4783,7 @@ impl<W: LayoutElement> Layout<W> {
                         && mon.active_window().map(|win| win.id()) == Some(win)
                 })
             });
-            let activate = if activate {
+            let activate_window = if activate {
                 ActivateWindow::Yes
             } else {
                 ActivateWindow::No
@@ -4807,15 +4807,17 @@ impl<W: LayoutElement> Layout<W> {
                     id: ws_id,
                     column_idx: None,
                 },
-                activate,
+                activate_window,
                 true,
                 removed.width,
                 removed.is_full_width,
                 removed.is_floating,
                 None,
-                false,
+                // When focus follows the window into a hidden workspace, force-unhide it —
+                // activating a workspace inside the hidden block is invalid.
+                activate,
             );
-            if activate.map_smart(|| false) {
+            if activate {
                 *active_monitor_idx = new_idx;
             }
 
