@@ -612,7 +612,18 @@ impl<W: LayoutElement> Monitor<W> {
                 }
 
                 // remove hidden if the previous active workspace was forced unhidden
-                self.hide_needs_hidden(prev_active_idx);
+                let target_id = self.workspaces[idx].id();
+                if self.hide_needs_hidden(prev_active_idx) {
+                    // The re-hide shuffled the list (and may have cleaned up workspaces), so
+                    // both the recorded target index and the captured render position are
+                    // stale. Re-resolve the target by id and switch instantly — the re-hide
+                    // already reset any in-progress switch.
+                    let idx = self
+                        .idx_of_ws(target_id)
+                        .unwrap_or_else(|| min(idx, self.workspaces.len() - 1));
+                    self.active_workspace_idx = idx;
+                    return;
+                }
 
                 self.workspace_switch = Some(WorkspaceSwitch::Animation(Animation::new(
                     self.clock.clone(),

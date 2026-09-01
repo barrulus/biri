@@ -1754,6 +1754,54 @@ fn toggle_sticky_restores_window_to_original_workspace() {
 }
 
 #[test]
+fn focus_after_column_move_unhides_workspace() {
+    // Minimized from proptest: moving a column into a hidden workspace force-unhides it and
+    // starts a switch animation; focusing again must not leave the switch animation pointing
+    // past the end of the workspace list.
+    check_ops([
+        Op::AddNamedWorkspace {
+            ws_name: 1,
+            output_name: None,
+            layout_config: None,
+        },
+        Op::AddOutput(1),
+        Op::ToggleWorkspaceVisibility(1),
+        Op::AddWindow {
+            params: TestWindowParams::new(1),
+        },
+        Op::MoveColumnToWorkspace(2, true),
+        Op::FocusWorkspace(2),
+    ]);
+}
+
+#[test]
+fn unsticky_restores_into_hidden_origin_workspace() {
+    // A sticky window whose origin workspace was hidden in the meantime: unsticky restores
+    // it there, which must not activate the hidden workspace in place.
+    let mut layout = check_ops([
+        Op::AddOutput(1),
+        Op::AddWindow {
+            params: TestWindowParams::new(1),
+        },
+        Op::SetWorkspaceName {
+            new_ws_name: 1,
+            ws_name: None,
+        },
+    ]);
+
+    layout.toggle_window_sticky(Some(&1));
+    layout.verify_invariants();
+    assert!(layout.is_sticky_window(&1));
+
+    layout.toggle_workspace_visibility("ws1".to_string());
+    layout.verify_invariants();
+
+    layout.toggle_window_sticky(Some(&1));
+    layout.verify_invariants();
+    assert!(!layout.is_sticky_window(&1));
+}
+
+#[test]
 fn verify_invariants_accepts_hidden_workspaces() {
     let ops = [
         Op::AddOutput(1),

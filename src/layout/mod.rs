@@ -4346,6 +4346,19 @@ impl<W: LayoutElement> Layout<W> {
                 })
                 .unwrap_or((mon_idx, monitors[mon_idx].active_workspace_idx));
 
+            // If the origin workspace was hidden while the window was sticky and focus follows
+            // the restore, force-unhide it — activating a workspace inside the hidden block is
+            // invalid.
+            let target_ws_idx = if activate && monitors[target_mon_idx].workspaces[target_ws_idx].hidden
+            {
+                let ws_id = monitors[target_mon_idx].workspaces[target_ws_idx].id();
+                monitors[target_mon_idx]
+                    .unhide_workspace_by_id(ws_id, true)
+                    .unwrap_or(target_ws_idx)
+            } else {
+                target_ws_idx
+            };
+
             let target_ws_id = monitors[target_mon_idx].workspaces[target_ws_idx].id();
             let activate_window = if activate {
                 ActivateWindow::Yes
