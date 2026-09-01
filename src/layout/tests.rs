@@ -1788,6 +1788,27 @@ fn verify_invariants_accepts_hidden_workspaces() {
 }
 
 #[test]
+fn move_last_visible_workspace_away_from_hidden_block() {
+    // Minimized from proptest: moving the active workspace to another monitor when the
+    // source monitor's only other workspace is hidden must not underflow in
+    // clean_up_workspaces (first hidden index 0) or leave the hidden block mid-list.
+    check_ops([
+        Op::AddNamedWorkspace {
+            ws_name: 4,
+            output_name: None,
+            layout_config: None,
+        },
+        Op::AddOutput(1),
+        Op::AddOutput(3),
+        Op::ToggleWorkspaceVisibility(4),
+        Op::MoveWorkspaceToMonitor {
+            ws_name: None,
+            output_id: 3,
+        },
+    ]);
+}
+
+#[test]
 fn add_output_during_overview_gesture_with_hidden_workspace() {
     // Minimized from proptest: adding an output while an overview gesture (and its DnD
     // workspace switch) is active must not trip clean_up_workspaces' workspace_switch assert.
