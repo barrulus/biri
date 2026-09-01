@@ -1754,6 +1754,28 @@ fn toggle_sticky_restores_window_to_original_workspace() {
 }
 
 #[test]
+fn dnd_scroll_workspace_down_skips_hidden() {
+    // Minimized from proptest: during a DnD workspace scroll, switching down clamps to the
+    // last workspace in the list — which must be the last visible one, not the hidden block.
+    check_ops([
+        Op::OverviewGestureBegin,
+        Op::AddOutput(5),
+        Op::AddNamedWorkspace {
+            ws_name: 1,
+            output_name: None,
+            layout_config: None,
+        },
+        Op::ToggleWorkspaceVisibility(1),
+        Op::DndUpdate {
+            output_idx: 5,
+            px: 0.0,
+            py: 0.0,
+        },
+        Op::FocusWorkspaceDown,
+    ]);
+}
+
+#[test]
 fn focus_after_column_move_unhides_workspace() {
     // Minimized from proptest: moving a column into a hidden workspace force-unhides it and
     // starts a switch animation; focusing again must not leave the switch animation pointing

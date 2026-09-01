@@ -1488,9 +1488,15 @@ impl<W: LayoutElement> Monitor<W> {
         let new_idx = match &self.workspace_switch {
             // During a DnD scroll, select the next apparent workspace.
             Some(WorkspaceSwitch::Gesture(gesture)) if gesture.dnd_last_event_time.is_some() => {
+                // Clamp to the visible region: hidden workspaces sit past its end.
+                let visible_end = self
+                    .workspaces
+                    .iter()
+                    .position(|ws| ws.hidden)
+                    .unwrap_or(self.workspaces.len());
                 let current = gesture.current_idx;
                 let new = current.floor() + 1.;
-                new.clamp(0., (self.workspaces.len() - 1) as f64) as usize
+                new.clamp(0., (visible_end - 1) as f64) as usize
             }
             // If the workspace is hidden, we shouldn't switch to it.
             // Instead we need to bump the workspace down
