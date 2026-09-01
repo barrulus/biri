@@ -72,7 +72,7 @@ impl Layout {
             ..Default::default()
         };
         let mut layout = niri::layout::Layout::with_options(clock.clone(), options);
-        layout.add_output(output.clone(), None);
+        layout.add_output(output.clone(), None, false);
 
         let start_time = clock.now_unadjusted();
 
@@ -278,6 +278,7 @@ impl TestCase for Layout {
             renderer,
             target: RenderTarget::Output,
             xray: None,
+            shader_time: 0.0,
         };
         self.layout
             .monitor_for_output(&self.output)
