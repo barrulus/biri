@@ -1754,6 +1754,133 @@ fn toggle_sticky_restores_window_to_original_workspace() {
 }
 
 #[test]
+fn workspace_switch_gesture_clamps_to_visible_region() {
+    // Minimized from a CI proptest run: hide the active (named) workspace, then a touchpad
+    // workspace-switch gesture with a large delta — the gesture must clamp to the visible
+    // region, not scroll into the hidden block.
+    check_ops([
+        Op::AddOutput(3),
+        Op::SetWorkspaceName {
+            new_ws_name: 5,
+            ws_name: None,
+        },
+        Op::ToggleWorkspaceVisibility(5),
+        Op::WorkspaceSwitchGestureBegin {
+            output_idx: 3,
+            is_touchpad: true,
+        },
+        Op::WorkspaceSwitchGestureUpdate {
+            delta: 331.1446917951993,
+            timestamp: Duration::ZERO,
+            is_touchpad: true,
+        },
+        Op::WorkspaceSwitchGestureEnd { is_touchpad: None },
+    ]);
+}
+
+#[test]
+fn move_window_to_hidden_workspace_with_empty_above_first() {
+    // Minimized from proptest: with empty-workspace-above-first, moving the active window
+    // into the hidden workspace and focusing down must not leave the active workspace inside
+    // the hidden block.
+    check_ops([
+        Op::AddNamedWorkspace {
+            ws_name: 1,
+            output_name: None,
+            layout_config: None,
+        },
+        Op::UpdateConfig {
+            layout_config: Box::new(niri_config::LayoutPart {
+                empty_workspace_above_first: Some(niri_config::utils::Flag(true)),
+                ..Default::default()
+            }),
+        },
+        Op::AddWindowToNamedWorkspace {
+            params: TestWindowParams::new(1),
+            ws_name: 1,
+        },
+        Op::AddOutput(1),
+        Op::MoveWindowToWorkspaceUp(false),
+        Op::ToggleWorkspaceVisibility(1),
+        Op::MoveWindowToWorkspace {
+            window_id: None,
+            workspace_idx: 3,
+        },
+        Op::FocusWorkspaceDown,
+    ]);
+}
+
+#[test]
+fn dnd_scroll_workspace_down_skips_hidden() {
+    // Minimized from proptest: during a DnD workspace scroll, switching down clamps to the
+    // last workspace in the list — which must be the last visible one, not the hidden block.
+    check_ops([
+        Op::OverviewGestureBegin,
+        Op::AddOutput(5),
+        Op::AddNamedWorkspace {
+            ws_name: 1,
+            output_name: None,
+            layout_config: None,
+        },
+        Op::ToggleWorkspaceVisibility(1),
+        Op::DndUpdate {
+            output_idx: 5,
+            px: 0.0,
+            py: 0.0,
+        },
+        Op::FocusWorkspaceDown,
+    ]);
+}
+
+#[test]
+fn focus_after_column_move_unhides_workspace() {
+    // Minimized from proptest: moving a column into a hidden workspace force-unhides it and
+    // starts a switch animation; focusing again must not leave the switch animation pointing
+    // past the end of the workspace list.
+    check_ops([
+        Op::AddNamedWorkspace {
+            ws_name: 1,
+            output_name: None,
+            layout_config: None,
+        },
+        Op::AddOutput(1),
+        Op::ToggleWorkspaceVisibility(1),
+        Op::AddWindow {
+            params: TestWindowParams::new(1),
+        },
+        Op::MoveColumnToWorkspace(2, true),
+        Op::FocusWorkspace(2),
+    ]);
+}
+
+#[test]
+fn unsticky_restores_into_hidden_origin_workspace() {
+    // A sticky window whose origin workspace was hidden in the meantime: unsticky restores
+    // it there, which must not activate the hidden workspace in place.
+    let mut layout = check_ops([
+        Op::AddOutput(1),
+        Op::AddWindow {
+            params: TestWindowParams::new(1),
+        },
+        Op::SetWorkspaceName {
+            new_ws_name: 1,
+            ws_name: None,
+        },
+    ]);
+
+    layout.toggle_window_sticky(Some(&1));
+    layout.verify_invariants();
+    assert!(layout.is_sticky_window(&1));
+
+    layout.toggle_workspace_visibility("ws1".to_string());
+    layout.verify_invariants();
+
+    layout.toggle_window_sticky(Some(&1));
+    layout.verify_invariants();
+    assert!(!layout.is_sticky_window(&1));
+}
+
+#[test]
 fn verify_invariants_accepts_hidden_workspaces() {
     let ops = [
         Op::AddOutput(1),
@@ -1785,6 +1912,185 @@ fn verify_invariants_accepts_hidden_workspaces() {
     layout.verify_invariants();
     layout.toggle_workspace_visibility("ws3".to_string());
     layout.verify_invariants();
+}
+
+#[test]
+fn move_column_into_hidden_workspace() {
+    // Minimized from proptest: move-column-to-workspace targeting a hidden workspace index
+    // must not activate the hidden workspace in place.
+    check_ops([
+        Op::AddWindow {
+            params: TestWindowParams::new(1),
+        },
+        Op::AddNamedWorkspace {
+            ws_name: 4,
+            output_name: None,
+            layout_config: None,
+        },
+        Op::AddOutput(1),
+        Op::ToggleWorkspaceVisibility(4),
+        Op::MoveColumnToWorkspace(2, true),
+    ]);
+}
+
+#[test]
+fn move_window_down_from_last_visible_workspace_stays_visible() {
+    // Relative moves clamp to the visible region: moving the window down from the last
+    // visible workspace must not target the hidden block (not even by unhiding it).
+    let layout = check_ops([
+        Op::AddNamedWorkspace {
+            ws_name: 1,
+            output_name: None,
+            layout_config: None,
+        },
+        Op::AddOutput(1),
+        Op::ToggleWorkspaceVisibility(1),
+        Op::AddWindow {
+            params: TestWindowParams::new(1),
+        },
+        Op::MoveWindowToWorkspaceDown(true),
+        Op::MoveWindowToWorkspaceDown(true),
+        Op::MoveColumnToWorkspaceDown(true),
+    ]);
+
+    let hidden = layout
+        .workspaces()
+        .find_map(|(_, _, ws)| (ws.name() == Some(&"ws1".to_string())).then_some(ws.hidden));
+    assert_eq!(hidden, Some(true), "ws1 must remain hidden");
+}
+
+#[test]
+fn interactive_move_drop_below_workspaces_with_one_hidden() {
+    // Dropping an interactively-moved window below all visible workspaces resolves to "reuse
+    // the bottom empty workspace" — which must be the last visible one, not a hidden one at
+    // the end of the list.
+    check_ops([
+        Op::AddNamedWorkspace {
+            ws_name: 1,
+            output_name: None,
+            layout_config: None,
+        },
+        Op::AddOutput(1),
+        Op::ToggleWorkspaceVisibility(1),
+        Op::AddWindow {
+            params: TestWindowParams::new(1),
+        },
+        Op::ToggleOverview,
+        Op::InteractiveMoveBegin {
+            window: 1,
+            output_idx: 1,
+            px: 0.,
+            py: 0.,
+        },
+        Op::InteractiveMoveUpdate {
+            window: 1,
+            dx: 0.,
+            dy: 5000.,
+            output_idx: 1,
+            px: 0.,
+            py: 5000.,
+        },
+        Op::InteractiveMoveEnd { window: 1 },
+    ]);
+}
+
+#[test]
+fn move_window_to_output_into_hidden_workspace() {
+    // Minimized from proptest: move-window-to-output targeting a hidden workspace index on
+    // the same output must not activate the hidden workspace in place.
+    check_ops([
+        Op::AddNamedWorkspace {
+            ws_name: 1,
+            output_name: None,
+            layout_config: None,
+        },
+        Op::AddOutput(5),
+        Op::ToggleWorkspaceVisibility(1),
+        Op::AddWindow {
+            params: TestWindowParams::new(1),
+        },
+        Op::MoveWindowToOutput {
+            window_id: None,
+            output_id: 5,
+            target_ws_idx: Some(2),
+        },
+    ]);
+}
+
+#[test]
+fn move_window_into_hidden_workspace_then_move_workspace_down() {
+    // Minimized from proptest: moving a window into a hidden workspace by index and then
+    // moving the active workspace down must keep the hidden block contiguous at the end.
+    check_ops([
+        Op::AddNamedWorkspace {
+            ws_name: 2,
+            output_name: None,
+            layout_config: None,
+        },
+        Op::AddOutput(1),
+        Op::ToggleWorkspaceVisibility(2),
+        Op::AddWindow {
+            params: TestWindowParams::new(1),
+        },
+        Op::MoveWindowToWorkspace {
+            window_id: None,
+            workspace_idx: 2,
+        },
+        Op::MoveWorkspaceDown,
+    ]);
+}
+
+#[test]
+fn move_last_visible_workspace_away_from_hidden_block() {
+    // Minimized from proptest: moving the active workspace to another monitor when the
+    // source monitor's only other workspace is hidden must not underflow in
+    // clean_up_workspaces (first hidden index 0) or leave the hidden block mid-list.
+    check_ops([
+        Op::AddNamedWorkspace {
+            ws_name: 4,
+            output_name: None,
+            layout_config: None,
+        },
+        Op::AddOutput(1),
+        Op::AddOutput(3),
+        Op::ToggleWorkspaceVisibility(4),
+        Op::MoveWorkspaceToMonitor {
+            ws_name: None,
+            output_id: 3,
+        },
+    ]);
+}
+
+#[test]
+fn add_output_during_overview_gesture_with_hidden_workspace() {
+    // Minimized from proptest: adding an output while an overview gesture (and its DnD
+    // workspace switch) is active must not trip clean_up_workspaces' workspace_switch assert.
+    let options = Options {
+        layout: niri_config::Layout {
+            empty_workspace_above_first: true,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    check_ops_with_options(
+        options,
+        [
+            Op::AddNamedWorkspace {
+                ws_name: 2,
+                output_name: None,
+                layout_config: None,
+            },
+            Op::AddOutput(1),
+            Op::OverviewGestureBegin,
+            Op::ToggleWorkspaceVisibility(2),
+            Op::DndUpdate {
+                output_idx: 1,
+                px: 0.0,
+                py: 0.0,
+            },
+            Op::AddOutput(2),
+        ],
+    );
 }
 
 #[test]

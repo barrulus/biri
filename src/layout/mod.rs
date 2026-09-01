@@ -909,9 +909,16 @@ impl<W: LayoutElement> Layout<W> {
                 // Also if empty_workspace_above_first is set and there are only 2 workspaces left,
                 // both will be empty and one of them needs to be removed. clean_up_workspaces
                 // takes care of this.
+                //
+                // The second case can also be hit with a workspace switch still active (nothing
+                // was moved to the new output, but e.g. an overview gesture is in progress) —
+                // there, len == 2 may include a hidden workspace rather than two empty ones, and
+                // clean_up_workspaces asserts no switch is active. Defer to the cleanup that runs
+                // when the switch finishes.
 
                 if stopped_primary_ws_switch
-                    || (primary.options.layout.empty_workspace_above_first
+                    || (primary.workspace_switch.is_none()
+                        && primary.options.layout.empty_workspace_above_first
                         && primary.workspaces.len() == 2)
                 {
                     primary.clean_up_workspaces();
@@ -4339,6 +4346,19 @@ impl<W: LayoutElement> Layout<W> {
                 })
                 .unwrap_or((mon_idx, monitors[mon_idx].active_workspace_idx));
 
+            // If the origin workspace was hidden while the window was sticky and focus follows
+            // the restore, force-unhide it — activating a workspace inside the hidden block is
+            // invalid.
+            let target_ws_idx =
+                if activate && monitors[target_mon_idx].workspaces[target_ws_idx].hidden {
+                    let ws_id = monitors[target_mon_idx].workspaces[target_ws_idx].id();
+                    monitors[target_mon_idx]
+                        .unhide_workspace_by_id(ws_id, true)
+                        .unwrap_or(target_ws_idx)
+                } else {
+                    target_ws_idx
+                };
+
             let target_ws_id = monitors[target_mon_idx].workspaces[target_ws_idx].id();
             let activate_window = if activate {
                 ActivateWindow::Yes
@@ -4776,7 +4796,7 @@ impl<W: LayoutElement> Layout<W> {
                         && mon.active_window().map(|win| win.id()) == Some(win)
                 })
             });
-            let activate = if activate {
+            let activate_window = if activate {
                 ActivateWindow::Yes
             } else {
                 ActivateWindow::No
@@ -4800,15 +4820,17 @@ impl<W: LayoutElement> Layout<W> {
                     id: ws_id,
                     column_idx: None,
                 },
-                activate,
+                activate_window,
                 true,
                 removed.width,
                 removed.is_full_width,
                 removed.is_floating,
                 None,
-                false,
+                // When focus follows the window into a hidden workspace, force-unhide it —
+                // activating a workspace inside the hidden block is invalid.
+                activate,
             );
-            if activate.map_smart(|| false) {
+            if activate {
                 *active_monitor_idx = new_idx;
             }
 

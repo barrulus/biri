@@ -612,7 +612,24 @@ impl<W: LayoutElement> Monitor<W> {
                 }
 
                 // remove hidden if the previous active workspace was forced unhidden
-                self.hide_needs_hidden(prev_active_idx);
+                let target_id = self.workspaces[idx].id();
+                if self.hide_needs_hidden(prev_active_idx) {
+                    // The re-hide shuffled the list (and may have cleaned up workspaces), so
+                    // both the recorded target index and the captured render position are
+                    // stale. Re-resolve the target by id and switch instantly — the re-hide
+                    // already reset any in-progress switch. If the target itself is gone,
+                    // fall back to the last visible workspace, never into the hidden block.
+                    let idx = self.idx_of_ws(target_id).unwrap_or_else(|| {
+                        let visible_end = self
+                            .workspaces
+                            .iter()
+                            .position(|ws| ws.hidden)
+                            .unwrap_or(self.workspaces.len());
+                        min(idx, visible_end - 1)
+                    });
+                    self.active_workspace_idx = idx;
+                    return;
+                }
 
                 self.workspace_switch = Some(WorkspaceSwitch::Animation(Animation::new(
                     self.clock.clone(),
@@ -723,6 +740,16 @@ impl<W: LayoutElement> Monitor<W> {
         activate: bool,
         anim: Option<niri_config::Animation>,
     ) {
+        // When focus follows the column into a hidden workspace, force-unhide it first
+        // (matching add_window's force_unhide_workspace behavior) — activating a workspace
+        // inside the hidden block is invalid.
+        if activate && self.workspaces[workspace_idx].hidden {
+            let ws_id = self.workspaces[workspace_idx].id();
+            if let Some(idx) = self.unhide_workspace_by_id(ws_id, true) {
+                workspace_idx = idx;
+            }
+        }
+
         let first_hidden_idx = self.workspaces.iter().position(|ws| ws.hidden);
         let is_last_visible = first_hidden_idx
             .map(|hidden_idx| workspace_idx + 1 == hidden_idx)
@@ -772,8 +799,12 @@ impl<W: LayoutElement> Monitor<W> {
     ) {
         let (mut workspace_idx, target) = self.resolve_add_window_target(target);
 
-        // Force-unhide the workspace if requested and it's hidden.
-        if force_unhide_workspace && self.workspaces[workspace_idx].hidden {
+        // Force-unhide the workspace if requested and it's hidden. Also unhide whenever this
+        // tile is going to activate its workspace: a hidden workspace must never become the
+        // active one, since it isn't rendered. This is the same condition used to activate
+        // below, evaluated before anything moves.
+        let will_activate = allow_to_activate_workspace && activate.map_smart(|| false);
+        if (force_unhide_workspace || will_activate) && self.workspaces[workspace_idx].hidden {
             let ws_id = self.workspaces[workspace_idx].id();
             if let Some(idx) = self.unhide_workspace_by_id(ws_id, true) {
                 workspace_idx = idx;
@@ -832,7 +863,7 @@ impl<W: LayoutElement> Monitor<W> {
 
     pub fn add_tile_to_column(
         &mut self,
-        workspace_idx: usize,
+        mut workspace_idx: usize,
         column_idx: usize,
         tile_idx: Option<usize>,
         tile: Tile<W>,
@@ -840,6 +871,15 @@ impl<W: LayoutElement> Monitor<W> {
         // FIXME: Refactor ActivateWindow enum to make this better.
         allow_to_activate_workspace: bool,
     ) {
+        // A hidden workspace must never become the active one; unhide it first if this tile
+        // is going to activate it.
+        if allow_to_activate_workspace && activate && self.workspaces[workspace_idx].hidden {
+            let ws_id = self.workspaces[workspace_idx].id();
+            if let Some(idx) = self.unhide_workspace_by_id(ws_id, true) {
+                workspace_idx = idx;
+            }
+        }
+
         let workspace = &mut self.workspaces[workspace_idx];
 
         workspace.add_tile_to_column(column_idx, tile_idx, tile, activate);
@@ -1028,8 +1068,16 @@ impl<W: LayoutElement> Monitor<W> {
     }
 
     pub fn remove_workspace_by_idx(&mut self, mut idx: usize) -> Workspace<W> {
-        // Don't add a new workspace if we're removing a hidden one
-        if idx == self.workspaces.len() - 1 && !self.workspaces[idx].hidden {
+        // Don't add a new workspace if we're removing a hidden one. The comparison must be
+        // against the end of the visible region, not the list: with a hidden block at the end,
+        // removing the last visible workspace would otherwise leave the monitor with only
+        // hidden workspaces.
+        let visible_end = self
+            .workspaces
+            .iter()
+            .position(|ws| ws.hidden)
+            .unwrap_or(self.workspaces.len());
+        if idx + 1 == visible_end && !self.workspaces[idx].hidden {
             self.add_workspace_bottom();
         }
         if self.options.layout.empty_workspace_above_first && idx == 0 {
@@ -1247,7 +1295,13 @@ impl<W: LayoutElement> Monitor<W> {
     }
 
     pub fn move_to_workspace_down(&mut self, activate: ActivateWindow) {
-        let new_idx = min(self.active_workspace_idx + 1, self.workspaces.len() - 1);
+        // Relative moves stay within the visible region: hidden workspaces sit past its end.
+        let visible_end = self
+            .workspaces
+            .iter()
+            .position(|ws| ws.hidden)
+            .unwrap_or(self.workspaces.len());
+        let new_idx = min(self.active_workspace_idx + 1, visible_end - 1);
         self.move_to_workspace(None, new_idx, activate);
     }
 
@@ -1314,7 +1368,10 @@ impl<W: LayoutElement> Monitor<W> {
             removed.is_full_width,
             removed.is_floating,
             Some(config),
-            false,
+            // When focus follows the window into a hidden workspace, force-unhide it (like
+            // switch_workspace does) — activating a workspace inside the hidden block would
+            // leave active_workspace_idx pointing past the visible region.
+            activate,
         );
 
         if self.workspace_switch.is_none() {
@@ -1347,7 +1404,13 @@ impl<W: LayoutElement> Monitor<W> {
     }
 
     pub fn move_column_to_workspace_down(&mut self, activate: bool) {
-        let new_idx = min(self.active_workspace_idx + 1, self.workspaces.len() - 1);
+        // Relative moves stay within the visible region: hidden workspaces sit past its end.
+        let visible_end = self
+            .workspaces
+            .iter()
+            .position(|ws| ws.hidden)
+            .unwrap_or(self.workspaces.len());
+        let new_idx = min(self.active_workspace_idx + 1, visible_end - 1);
         self.move_column_to_workspace(new_idx, activate);
     }
 
@@ -1444,9 +1507,15 @@ impl<W: LayoutElement> Monitor<W> {
         let new_idx = match &self.workspace_switch {
             // During a DnD scroll, select the next apparent workspace.
             Some(WorkspaceSwitch::Gesture(gesture)) if gesture.dnd_last_event_time.is_some() => {
+                // Clamp to the visible region: hidden workspaces sit past its end.
+                let visible_end = self
+                    .workspaces
+                    .iter()
+                    .position(|ws| ws.hidden)
+                    .unwrap_or(self.workspaces.len());
                 let current = gesture.current_idx;
                 let new = current.floor() + 1.;
-                new.clamp(0., (self.workspaces.len() - 1) as f64) as usize
+                new.clamp(0., (visible_end - 1) as f64) as usize
             }
             // If the workspace is hidden, we shouldn't switch to it.
             // Instead we need to bump the workspace down
@@ -2096,6 +2165,14 @@ impl<W: LayoutElement> Monitor<W> {
     #[cfg(test)]
     pub(super) fn overview_progress_value(&self) -> Option<f64> {
         self.overview_progress.as_ref().map(|p| p.value())
+    }
+
+    /// Number of workspaces in the visible region — hidden workspaces sit past its end.
+    pub(super) fn visible_workspace_count(&self) -> usize {
+        self.workspaces
+            .iter()
+            .position(|ws| ws.hidden)
+            .unwrap_or(self.workspaces.len())
     }
 
     pub fn workspace_render_idx(&self) -> f64 {
@@ -2918,6 +2995,7 @@ impl<W: LayoutElement> Monitor<W> {
         } else {
             self.workspace_size_with_gap(1.).h
         };
+        let visible_count = self.visible_workspace_count();
 
         let Some(WorkspaceSwitch::Gesture(gesture)) = &mut self.workspace_switch else {
             return None;
@@ -2938,7 +3016,7 @@ impl<W: LayoutElement> Monitor<W> {
 
         let pos = gesture.tracker.pos() / total_height;
 
-        let (min, max) = gesture.min_max(self.workspaces.len());
+        let (min, max) = gesture.min_max(visible_count);
         let new_idx = gesture.start_idx + pos;
         let new_idx = rubber_band.clamp(min, max, new_idx);
 
@@ -2952,6 +3030,7 @@ impl<W: LayoutElement> Monitor<W> {
 
     pub fn dnd_scroll_gesture_scroll(&mut self, pos: Point<f64, Logical>, speed: f64) -> bool {
         let zoom = self.overview_zoom();
+        let visible_count = self.visible_workspace_count();
 
         let Some(WorkspaceSwitch::Gesture(gesture)) = &mut self.workspace_switch else {
             return false;
@@ -3025,7 +3104,7 @@ impl<W: LayoutElement> Monitor<W> {
         let pos = gesture.tracker.pos() / total_height;
         let unclamped = gesture.start_idx + pos;
 
-        let (min, max) = gesture.min_max(self.workspaces.len());
+        let (min, max) = gesture.min_max(visible_count);
         let clamped = unclamped.clamp(min, max);
 
         // Make sure that DnD scrolling too much outside the min/max does not "build up".
@@ -3052,6 +3131,7 @@ impl<W: LayoutElement> Monitor<W> {
         } else {
             self.workspace_size_with_gap(1.).h
         };
+        let visible_count = self.visible_workspace_count();
 
         let Some(WorkspaceSwitch::Gesture(gesture)) = &mut self.workspace_switch else {
             return false;
@@ -3068,7 +3148,7 @@ impl<W: LayoutElement> Monitor<W> {
         let current_pos = gesture.tracker.pos() / total_height;
         let pos = gesture.tracker.projected_end_pos() / total_height;
 
-        let (min, max) = gesture.min_max(self.workspaces.len());
+        let (min, max) = gesture.min_max(visible_count);
         let new_idx = gesture.start_idx + pos;
 
         let new_idx = new_idx.clamp(min, max);
@@ -3162,6 +3242,10 @@ impl<W: LayoutElement> Monitor<W> {
         assert!(
             visible_count > 0,
             "monitor must have at least one visible workspace"
+        );
+        assert!(
+            self.active_workspace_idx < visible_count,
+            "active workspace must not be inside the hidden block"
         );
 
         // The visible region ends with an empty unnamed workspace. When a hidden
