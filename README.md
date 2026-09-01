@@ -36,6 +36,8 @@ A GLSL fragment shader pipeline layered on top of niri's rendering, in three sco
 
 Supporting machinery:
 
+- Named **`window-shaders` presets** driven by the `toggle-window-shader` and `cycle-window-shader` binds: flip the focused window's shader off/on, or rotate it through your presets at runtime — no config editing or reload needed.
+
 - Two API flavours: a native `niri` mode and a `hyprland` mode that accepts most Hyprland `screen_shader` files with light edits.
 - Multi-pass chains via repeatable `pass {}` blocks, where each pass reads the previous pass's output.
 - A previous-frame feedback buffer (`niri_prev` / `tex2D_prev`) plus a dedicated `global_buffer` pass for trails and accumulation effects.

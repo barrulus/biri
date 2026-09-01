@@ -330,6 +330,12 @@ pub trait LayoutElement {
 
     fn rules(&self) -> &ResolvedWindowRules;
 
+    /// The shader that should render for this window right now: the runtime override (from the
+    /// toggle/cycle-window-shader actions) if one is active, the window-rule shader otherwise.
+    fn effective_shader(&self) -> Option<&crate::window::ResolvedShader> {
+        self.rules().shader.as_ref()
+    }
+
     /// Runs periodic clean-up tasks.
     fn refresh(&self);
 

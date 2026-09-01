@@ -44,6 +44,7 @@ pub mod recent_windows;
 pub mod region_shader;
 pub mod utils;
 pub mod window_rule;
+pub mod window_shaders;
 pub mod workspace;
 
 pub use crate::animations::{Animation, Animations};
@@ -67,6 +68,7 @@ pub use crate::window_rule::{
     FloatingPosition, OnXdgActivate, PopupsRule, RelativeTo, ResolvedPopupsRules, ShaderRule,
     WindowRule,
 };
+pub use crate::window_shaders::{WindowShaderPreset, WindowShadersPart};
 pub use crate::workspace::{Workspace, WorkspaceLayoutPart};
 
 const RECURSION_LIMIT: u8 = 10;
@@ -103,6 +105,7 @@ pub struct Config {
     pub workspaces: Vec<Workspace>,
     pub recent_windows: RecentWindows,
     pub region_shaders: Vec<RegionShader>,
+    pub window_shaders: Vec<WindowShaderPreset>,
 }
 
 #[derive(Debug, Clone)]
@@ -181,6 +184,7 @@ where
                     | "layer-rule"
                     | "workspace"
                     | "region-shader"
+                    | "window-shaders"
                     | "include"
             ) && !seen.insert(name)
             {
@@ -234,6 +238,10 @@ where
                 "region-shader" => {
                     let part = RegionShaderPart::decode_node(node, ctx)?;
                     config.borrow_mut().region_shaders.push(part.into());
+                }
+                "window-shaders" => {
+                    let part = WindowShadersPart::decode_node(node, ctx)?;
+                    config.borrow_mut().window_shaders.extend(part.presets);
                 }
 
                 // Single-part sections.
@@ -2495,6 +2503,7 @@ mod tests {
                 ],
             },
             region_shaders: [],
+            window_shaders: [],
         }
         "#);
     }

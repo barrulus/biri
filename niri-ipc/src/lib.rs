@@ -823,6 +823,22 @@ pub enum Action {
         #[cfg_attr(feature = "clap", arg(long))]
         id: Option<u64>,
     },
+    /// Toggle the window's shader on or off.
+    ToggleWindowShader {
+        /// Id of the window to toggle.
+        ///
+        /// If `None`, uses the focused window.
+        #[cfg_attr(feature = "clap", arg(long))]
+        id: Option<u64>,
+    },
+    /// Cycle the window's shader through the configured window-shaders presets.
+    CycleWindowShader {
+        /// Id of the window to cycle.
+        ///
+        /// If `None`, uses the focused window.
+        #[cfg_attr(feature = "clap", arg(long))]
+        id: Option<u64>,
+    },
     /// Toggle whether a window is sticky across all workspaces on the current output.
     ToggleWindowSticky {
         /// Id of the window to toggle.

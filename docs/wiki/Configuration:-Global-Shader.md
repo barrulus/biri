@@ -569,6 +569,30 @@ window-rule {
 }
 ```
 
+#### Window shader presets (`window-shaders`)
+
+A top-level `window-shaders {}` block defines **named shader presets** that can be applied to any window at runtime, without editing window rules:
+
+```kdl
+window-shaders {
+    preset "grayscale" {
+        source "vec4 global_color(vec3 c){ vec3 s=tex2D_screen(c.xy).rgb; float g=dot(s,vec3(0.299,0.587,0.114)); return vec4(vec3(g),1.0); }"
+    }
+    preset "fire" {
+        path "~/.config/niri/shaders/fire.frag"
+    }
+}
+```
+
+Each `preset` takes a name argument followed by the same source fields as a window-rule `shader {}` block (`source`, `path`, `mode`, `pass`). Presets are compiled at config load, and repeated `window-shaders {}` blocks accumulate in order.
+
+Two bindable actions drive them (both also available as `niri msg action ... [--id <window-id>]`):
+
+- `toggle-window-shader` — turns the focused window's shader off and back on. Works on the window-rule shader as well as a selected preset.
+- `cycle-window-shader` — rotates the focused window through: default (the window-rule shader, or none) → first preset → … → last preset → back to default. Cycling always re-enables a shader that was toggled off.
+
+The selection is per-window runtime state: it survives config reloads (presets are re-resolved by name) but is not persisted across compositor restarts. A preset whose name has disappeared from the config falls back to rendering no shader, and the next `cycle-window-shader` restarts at the first preset.
+
 ---
 
 ### Shaders in screencast / screenshots

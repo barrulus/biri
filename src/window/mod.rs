@@ -38,6 +38,51 @@ pub struct ResolvedShader {
     pub key: u64,
 }
 
+/// Runtime per-window shader override, driven by the `toggle-window-shader` /
+/// `cycle-window-shader` actions. Lives outside `ResolvedWindowRules` so rule recomputation and
+/// config reload don't clobber the user's choice.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct WindowShaderState {
+    /// Selected `window-shaders` preset name; `None` = the window-rule shader (or nothing).
+    pub preset: Option<String>,
+    /// When true, no shader renders for this window regardless of preset or rule.
+    pub disabled: bool,
+}
+
+impl WindowShaderState {
+    /// Flip the shader on/off, keeping the preset selection.
+    pub fn toggle(&mut self) {
+        self.disabled = !self.disabled;
+    }
+
+    /// Advance to the next stop in default → preset 1 → … → preset N → default, re-enabling the
+    /// shader. A preset name no longer in the config restarts at the first preset.
+    pub fn cycle(&mut self, presets: &[String]) {
+        self.disabled = false;
+        self.preset = match &self.preset {
+            None => presets.first().cloned(),
+            Some(cur) => match presets.iter().position(|p| p == cur) {
+                Some(i) => presets.get(i + 1).cloned(),
+                None => presets.first().cloned(),
+            },
+        };
+    }
+}
+
+/// Resolve a `window-shaders` preset by name into its pass list and cache key.
+pub fn resolve_window_shader_preset(
+    name: &str,
+    config: &niri_config::Config,
+) -> Option<ResolvedShader> {
+    let preset = config.window_shaders.iter().find(|p| p.name == name)?;
+    let passes = preset.pass_sources(crate::niri::read_scoped_shader_path);
+    if passes.is_empty() {
+        return None;
+    }
+    let key = crate::render_helpers::shaders::scoped_key(&passes);
+    Some(ResolvedShader { passes, key })
+}
+
 /// Rules fully resolved for a window.
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct ResolvedWindowRules {
@@ -501,4 +546,101 @@ fn window_matches(window: WindowRef, role: &XdgToplevelSurfaceRoleAttributes, m:
     }
 
     true
+}
+
+#[cfg(test)]
+mod shader_state_tests {
+    use super::*;
+
+    fn presets() -> Vec<String> {
+        vec!["fire".to_owned(), "crt".to_owned()]
+    }
+
+    #[test]
+    fn cycle_rotates_through_presets_and_back_to_default() {
+        let mut state = WindowShaderState::default();
+        state.cycle(&presets());
+        assert_eq!(state.preset.as_deref(), Some("fire"));
+        state.cycle(&presets());
+        assert_eq!(state.preset.as_deref(), Some("crt"));
+        state.cycle(&presets());
+        assert_eq!(state.preset, None);
+        state.cycle(&presets());
+        assert_eq!(state.preset.as_deref(), Some("fire"));
+    }
+
+    #[test]
+    fn cycle_clears_disabled() {
+        let mut state = WindowShaderState {
+            preset: None,
+            disabled: true,
+        };
+        state.cycle(&presets());
+        assert!(!state.disabled);
+        assert_eq!(state.preset.as_deref(), Some("fire"));
+    }
+
+    #[test]
+    fn cycle_with_stale_preset_restarts_at_first() {
+        let mut state = WindowShaderState {
+            preset: Some("gone".to_owned()),
+            disabled: false,
+        };
+        state.cycle(&presets());
+        assert_eq!(state.preset.as_deref(), Some("fire"));
+    }
+
+    #[test]
+    fn cycle_with_no_presets_is_a_noop_but_reenables() {
+        let mut state = WindowShaderState {
+            preset: None,
+            disabled: true,
+        };
+        state.cycle(&[]);
+        assert_eq!(state.preset, None);
+        assert!(!state.disabled);
+    }
+
+    #[test]
+    fn toggle_flips_disabled() {
+        let mut state = WindowShaderState::default();
+        state.toggle();
+        assert!(state.disabled);
+        state.toggle();
+        assert!(!state.disabled);
+    }
+
+    #[test]
+    fn preset_chains_are_compiled() {
+        let config = niri_config::Config::parse_mem(
+            r##"
+            window-shaders {
+                preset "fire" {
+                    source "vec4 global_color(vec3 c){ return tex2D_screen(c.xy).bgra; }"
+                }
+            }
+            "##,
+        )
+        .unwrap();
+        let chains = crate::niri::scoped_shader_chains(&config);
+        assert!(chains.iter().any(|c| c[0].0.contains("bgra")));
+    }
+
+    #[test]
+    fn resolve_preset_by_name() {
+        let config = niri_config::Config::parse_mem(
+            r##"
+            window-shaders {
+                preset "fire" {
+                    source "vec4 global_color(vec3 c){ return tex2D_screen(c.xy).bgra; }"
+                }
+            }
+            "##,
+        )
+        .unwrap();
+        let resolved = resolve_window_shader_preset("fire", &config).unwrap();
+        assert_eq!(resolved.passes.len(), 1);
+        assert!(resolved.passes[0].0.contains("bgra"));
+        assert!(resolve_window_shader_preset("nope", &config).is_none());
+    }
 }
