@@ -1322,7 +1322,10 @@ impl<W: LayoutElement> Monitor<W> {
             removed.is_full_width,
             removed.is_floating,
             Some(config),
-            false,
+            // When focus follows the window into a hidden workspace, force-unhide it (like
+            // switch_workspace does) — activating a workspace inside the hidden block would
+            // leave active_workspace_idx pointing past the visible region.
+            activate,
         );
 
         if self.workspace_switch.is_none() {
@@ -3170,6 +3173,10 @@ impl<W: LayoutElement> Monitor<W> {
         assert!(
             visible_count > 0,
             "monitor must have at least one visible workspace"
+        );
+        assert!(
+            self.active_workspace_idx < visible_count,
+            "active workspace must not be inside the hidden block"
         );
 
         // The visible region ends with an empty unnamed workspace. When a hidden

@@ -1788,6 +1788,29 @@ fn verify_invariants_accepts_hidden_workspaces() {
 }
 
 #[test]
+fn move_window_into_hidden_workspace_then_move_workspace_down() {
+    // Minimized from proptest: moving a window into a hidden workspace by index and then
+    // moving the active workspace down must keep the hidden block contiguous at the end.
+    check_ops([
+        Op::AddNamedWorkspace {
+            ws_name: 2,
+            output_name: None,
+            layout_config: None,
+        },
+        Op::AddOutput(1),
+        Op::ToggleWorkspaceVisibility(2),
+        Op::AddWindow {
+            params: TestWindowParams::new(1),
+        },
+        Op::MoveWindowToWorkspace {
+            window_id: None,
+            workspace_idx: 2,
+        },
+        Op::MoveWorkspaceDown,
+    ]);
+}
+
+#[test]
 fn move_last_visible_workspace_away_from_hidden_block() {
     // Minimized from proptest: moving the active workspace to another monitor when the
     // source monitor's only other workspace is hidden must not underflow in
