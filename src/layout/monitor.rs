@@ -723,6 +723,16 @@ impl<W: LayoutElement> Monitor<W> {
         activate: bool,
         anim: Option<niri_config::Animation>,
     ) {
+        // When focus follows the column into a hidden workspace, force-unhide it first
+        // (matching add_window's force_unhide_workspace behavior) — activating a workspace
+        // inside the hidden block is invalid.
+        if activate && self.workspaces[workspace_idx].hidden {
+            let ws_id = self.workspaces[workspace_idx].id();
+            if let Some(idx) = self.unhide_workspace_by_id(ws_id, true) {
+                workspace_idx = idx;
+            }
+        }
+
         let first_hidden_idx = self.workspaces.iter().position(|ws| ws.hidden);
         let is_last_visible = first_hidden_idx
             .map(|hidden_idx| workspace_idx + 1 == hidden_idx)
@@ -1255,7 +1265,13 @@ impl<W: LayoutElement> Monitor<W> {
     }
 
     pub fn move_to_workspace_down(&mut self, activate: ActivateWindow) {
-        let new_idx = min(self.active_workspace_idx + 1, self.workspaces.len() - 1);
+        // Relative moves stay within the visible region: hidden workspaces sit past its end.
+        let visible_end = self
+            .workspaces
+            .iter()
+            .position(|ws| ws.hidden)
+            .unwrap_or(self.workspaces.len());
+        let new_idx = min(self.active_workspace_idx + 1, visible_end - 1);
         self.move_to_workspace(None, new_idx, activate);
     }
 
@@ -1358,7 +1374,13 @@ impl<W: LayoutElement> Monitor<W> {
     }
 
     pub fn move_column_to_workspace_down(&mut self, activate: bool) {
-        let new_idx = min(self.active_workspace_idx + 1, self.workspaces.len() - 1);
+        // Relative moves stay within the visible region: hidden workspaces sit past its end.
+        let visible_end = self
+            .workspaces
+            .iter()
+            .position(|ws| ws.hidden)
+            .unwrap_or(self.workspaces.len());
+        let new_idx = min(self.active_workspace_idx + 1, visible_end - 1);
         self.move_column_to_workspace(new_idx, activate);
     }
 

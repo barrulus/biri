@@ -1788,6 +1788,51 @@ fn verify_invariants_accepts_hidden_workspaces() {
 }
 
 #[test]
+fn move_column_into_hidden_workspace() {
+    // Minimized from proptest: move-column-to-workspace targeting a hidden workspace index
+    // must not activate the hidden workspace in place.
+    check_ops([
+        Op::AddWindow {
+            params: TestWindowParams::new(1),
+        },
+        Op::AddNamedWorkspace {
+            ws_name: 4,
+            output_name: None,
+            layout_config: None,
+        },
+        Op::AddOutput(1),
+        Op::ToggleWorkspaceVisibility(4),
+        Op::MoveColumnToWorkspace(2, true),
+    ]);
+}
+
+#[test]
+fn move_window_down_from_last_visible_workspace_stays_visible() {
+    // Relative moves clamp to the visible region: moving the window down from the last
+    // visible workspace must not target the hidden block (not even by unhiding it).
+    let layout = check_ops([
+        Op::AddNamedWorkspace {
+            ws_name: 1,
+            output_name: None,
+            layout_config: None,
+        },
+        Op::AddOutput(1),
+        Op::ToggleWorkspaceVisibility(1),
+        Op::AddWindow {
+            params: TestWindowParams::new(1),
+        },
+        Op::MoveWindowToWorkspaceDown(true),
+        Op::MoveWindowToWorkspaceDown(true),
+        Op::MoveColumnToWorkspaceDown(true),
+    ]);
+
+    let hidden = layout
+        .workspaces()
+        .find_map(|(_, _, ws)| (ws.name() == Some(&"ws1".to_string())).then_some(ws.hidden));
+    assert_eq!(hidden, Some(true), "ws1 must remain hidden");
+}
+
+#[test]
 fn interactive_move_drop_below_workspaces_with_one_hidden() {
     // Dropping an interactively-moved window below all visible workspaces resolves to "reuse
     // the bottom empty workspace" — which must be the last visible one, not a hidden one at
