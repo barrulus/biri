@@ -2350,6 +2350,56 @@ impl State {
                     }
                 }
             }
+            Action::ToggleWindowShader => {
+                let active_window = self
+                    .niri
+                    .layout
+                    .active_workspace_mut()
+                    .and_then(|ws| ws.active_window_mut());
+                if let Some(window) = active_window {
+                    window.toggle_window_shader();
+                    // FIXME: granular
+                    self.niri.queue_redraw_all();
+                }
+            }
+            Action::ToggleWindowShaderById(id) => {
+                let window = self
+                    .niri
+                    .layout
+                    .workspaces_mut()
+                    .find_map(|ws| ws.windows_mut().find(|w| w.id().get() == id));
+                if let Some(window) = window {
+                    window.toggle_window_shader();
+                    // FIXME: granular
+                    self.niri.queue_redraw_all();
+                }
+            }
+            Action::CycleWindowShader => {
+                let config = self.niri.config.clone();
+                let active_window = self
+                    .niri
+                    .layout
+                    .active_workspace_mut()
+                    .and_then(|ws| ws.active_window_mut());
+                if let Some(window) = active_window {
+                    window.cycle_window_shader(&config.borrow());
+                    // FIXME: granular
+                    self.niri.queue_redraw_all();
+                }
+            }
+            Action::CycleWindowShaderById(id) => {
+                let config = self.niri.config.clone();
+                let window = self
+                    .niri
+                    .layout
+                    .workspaces_mut()
+                    .find_map(|ws| ws.windows_mut().find(|w| w.id().get() == id));
+                if let Some(window) = window {
+                    window.cycle_window_shader(&config.borrow());
+                    // FIXME: granular
+                    self.niri.queue_redraw_all();
+                }
+            }
             Action::SetDynamicCastWindow => {
                 let id = self
                     .niri

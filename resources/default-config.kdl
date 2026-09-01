@@ -319,6 +319,17 @@ animations {
 //     // reads-cursor     // forces software cursor so the shader can read/transform the cursor
 // }
 
+// Named per-window shader presets for the toggle-window-shader and
+// cycle-window-shader binds (applied to the focused window at runtime).
+// window-shaders {
+//     preset "grayscale" {
+//         source "vec4 global_color(vec3 c) { vec3 s = tex2D_screen(c.xy).rgb; float g = dot(s, vec3(0.299, 0.587, 0.114)); return vec4(vec3(g), 1.0); }"
+//     }
+//     preset "fire" {
+//         path "~/.config/niri/shaders/fire.frag"
+//     }
+// }
+
 // Settings for the overview (Mod+O).
 // overview {
 //     // How much workspaces zoom out in the overview. Ranges from 0 to 0.75.

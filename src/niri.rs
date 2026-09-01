@@ -1925,10 +1925,15 @@ impl State {
 
         if config.region_shaders != old_config.region_shaders
             || config.window_rules != old_config.window_rules
+            || config.window_shaders != old_config.window_shaders
         {
             let chains = scoped_shader_chains(&config);
             self.backend.with_primary_renderer(|renderer| {
                 shaders::set_scoped_programs(renderer, &chains);
+            });
+            // Preset selections are stored by name; re-resolve them against the new config.
+            self.niri.layout.with_windows_mut(|mapped, _| {
+                mapped.update_shader_preset(&config);
             });
             shaders_changed = true;
         }
@@ -5913,7 +5918,7 @@ impl Niri {
             // zoomed out (and the per-tile visible flag reflects normal-view culling), so there we
             // fall back to scanning all windows to keep their shaders animating as before.
             let shader_animates = |win: &Mapped| {
-                win.rules().shader.as_ref().map_or(false, |shader| {
+                win.effective_shader().map_or(false, |shader| {
                     niri_config::GlobalShaderCaps::scan_chain(&shader.passes).is_animating()
                 })
             };
@@ -7969,6 +7974,12 @@ pub(crate) fn scoped_shader_chains(config: &niri_config::Config) -> Vec<Vec<(Str
             if !chain.is_empty() {
                 chains.push(chain);
             }
+        }
+    }
+    for preset in &config.window_shaders {
+        let chain = preset.pass_sources(read_scoped_shader_path);
+        if !chain.is_empty() {
+            chains.push(chain);
         }
     }
     chains

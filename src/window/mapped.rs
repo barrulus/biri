@@ -21,7 +21,9 @@ use smithay::wayland::shell::xdg::{
 };
 use wayland_backend::server::Credentials;
 
-use super::{ResolvedWindowRules, WindowRef};
+use super::{
+    resolve_window_shader_preset, ResolvedShader, ResolvedWindowRules, WindowRef, WindowShaderState,
+};
 use crate::handlers::KdeDecorationsModeState;
 use crate::layout::{
     ConfigureIntent, InteractiveResizeData, LayoutElement, LayoutElementRenderElement,
@@ -104,6 +106,11 @@ pub struct Mapped {
 
     /// Whether this window should ignore opacity set through window rules.
     ignore_opacity_window_rule: bool,
+
+    /// Runtime shader override (toggle/cycle-window-shader actions).
+    shader_state: WindowShaderState,
+    /// Resolved shader for `shader_state.preset`; re-resolved on config reload.
+    shader_preset: Option<ResolvedShader>,
 
     /// Buffer to draw instead of the window when it should be blocked out.
     block_out_buffer: RefCell<SolidColorBuffer>,
@@ -294,6 +301,8 @@ impl Mapped {
             is_sticky: false,
             is_window_cast_target: false,
             ignore_opacity_window_rule: false,
+            shader_state: WindowShaderState::default(),
+            shader_preset: None,
             block_out_buffer: RefCell::new(SolidColorBuffer::new((0., 0.), [0., 0., 0., 1.])),
             blur_config: config.blur,
             animate_next_configure: false,
@@ -392,6 +401,31 @@ impl Mapped {
 
     pub fn toggle_ignore_opacity_window_rule(&mut self) {
         self.ignore_opacity_window_rule = !self.ignore_opacity_window_rule;
+    }
+
+    /// Flip this window's shader on/off, keeping the preset selection.
+    pub fn toggle_window_shader(&mut self) {
+        self.shader_state.toggle();
+    }
+
+    /// Rotate this window's shader through the configured `window-shaders` presets.
+    pub fn cycle_window_shader(&mut self, config: &niri_config::Config) {
+        let names: Vec<String> = config
+            .window_shaders
+            .iter()
+            .map(|p| p.name.clone())
+            .collect();
+        self.shader_state.cycle(&names);
+        self.update_shader_preset(config);
+    }
+
+    /// Re-resolve the selected preset against the current config (call on config reload).
+    pub fn update_shader_preset(&mut self, config: &niri_config::Config) {
+        self.shader_preset = self
+            .shader_state
+            .preset
+            .as_deref()
+            .and_then(|name| resolve_window_shader_preset(name, config));
     }
 
     pub fn set_is_focused(&mut self, is_focused: bool) {
@@ -1376,6 +1410,16 @@ impl LayoutElement for Mapped {
 
     fn rules(&self) -> &ResolvedWindowRules {
         &self.rules
+    }
+
+    fn effective_shader(&self) -> Option<&ResolvedShader> {
+        if self.shader_state.disabled {
+            return None;
+        }
+        if self.shader_state.preset.is_some() {
+            return self.shader_preset.as_ref();
+        }
+        self.rules.shader.as_ref()
     }
 
     fn take_animation_snapshot(&mut self) -> Option<LayoutElementRenderSnapshot> {
