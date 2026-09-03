@@ -62,7 +62,7 @@ pub use crate::output::{Output, OutputName, Outputs, Position, Vrr};
 use crate::recent_windows::RecentWindowsPart;
 pub use crate::recent_windows::{MruDirection, MruFilter, MruPreviews, MruScope, RecentWindows};
 pub use crate::region_shader::{Geometry, RegionShader, RegionShaderPart};
-pub use crate::utils::FloatOrInt;
+pub use crate::utils::{BoolOrFloat, FloatOrInt};
 use crate::utils::{Flag, MergeWith as _};
 pub use crate::window_rule::{
     FloatingPosition, OnXdgActivate, PopupsRule, RelativeTo, ResolvedPopupsRules, ShaderRule,
@@ -1990,6 +1990,7 @@ mod tests {
                     background_effect: BackgroundEffectRule {
                         xray: None,
                         blur: None,
+                        ignore_opacity: None,
                         noise: None,
                         saturation: None,
                     },
@@ -2000,6 +2001,7 @@ mod tests {
                         background_effect: BackgroundEffectRule {
                             xray: None,
                             blur: None,
+                            ignore_opacity: None,
                             noise: None,
                             saturation: None,
                         },
@@ -2042,6 +2044,7 @@ mod tests {
                     background_effect: BackgroundEffectRule {
                         xray: None,
                         blur: None,
+                        ignore_opacity: None,
                         noise: None,
                         saturation: None,
                     },
@@ -2051,6 +2054,7 @@ mod tests {
                         background_effect: BackgroundEffectRule {
                             xray: None,
                             blur: None,
+                            ignore_opacity: None,
                             noise: None,
                             saturation: None,
                         },
