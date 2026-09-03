@@ -560,6 +560,8 @@ enum Op {
         ws_name: Option<usize>,
     },
     ToggleWorkspaceVisibility(#[proptest(strategy = "1..=5usize")] usize),
+    HideWorkspace(#[proptest(strategy = "1..=5usize")] usize),
+    UnhideWorkspace(#[proptest(strategy = "1..=5usize")] usize),
     MoveWindowToOutput {
         #[proptest(strategy = "proptest::option::of(1..=5usize)")]
         window_id: Option<usize>,
@@ -899,6 +901,12 @@ impl Op {
             }
             Op::ToggleWorkspaceVisibility(ws_name) => {
                 layout.toggle_workspace_visibility(format!("ws{ws_name}"));
+            }
+            Op::HideWorkspace(ws_name) => {
+                layout.hide_workspace(&format!("ws{ws_name}"));
+            }
+            Op::UnhideWorkspace(ws_name) => {
+                layout.unhide_workspace(&format!("ws{ws_name}"));
             }
             Op::AddWindow { mut params } => {
                 if layout.has_window(&params.id) {
@@ -1851,6 +1859,75 @@ fn focus_after_column_move_unhides_workspace() {
         Op::MoveColumnToWorkspace(2, true),
         Op::FocusWorkspace(2),
     ]);
+}
+
+#[test]
+fn hide_unhide_workspace_by_name() {
+    let mut layout = check_ops([
+        Op::AddOutput(1),
+        Op::AddWindow {
+            params: TestWindowParams::new(1),
+        },
+        Op::SetWorkspaceName {
+            new_ws_name: 1,
+            ws_name: None,
+        },
+        Op::FocusWorkspaceDown,
+    ]);
+
+    fn ws1_state(layout: &Layout<TestWindow>) -> Option<(bool, bool)> {
+        layout.workspaces().find_map(|(_, _, ws)| {
+            (ws.name() == Some(&"ws1".to_string())).then_some((ws.hidden, ws.needs_hidden))
+        })
+    }
+
+    assert_eq!(layout.hide_workspace("nope"), None);
+    assert_eq!(layout.unhide_workspace("nope"), None);
+    assert_eq!(layout.toggle_workspace_visibility("nope".to_string()), None);
+
+    assert_eq!(layout.hide_workspace("ws1"), Some(true));
+    layout.verify_invariants();
+    assert_eq!(ws1_state(&layout), Some((true, false)));
+
+    // Hiding again is a no-op.
+    assert_eq!(layout.hide_workspace("ws1"), Some(false));
+    layout.verify_invariants();
+    assert_eq!(ws1_state(&layout), Some((true, false)));
+
+    assert_eq!(layout.unhide_workspace("ws1"), Some(true));
+    layout.verify_invariants();
+    assert_eq!(ws1_state(&layout), Some((false, false)));
+
+    assert_eq!(layout.unhide_workspace("ws1"), Some(false));
+    layout.verify_invariants();
+
+    // Toggle reports the new visibility.
+    assert_eq!(
+        layout.toggle_workspace_visibility("ws1".to_string()),
+        Some(false)
+    );
+    layout.verify_invariants();
+    assert_eq!(ws1_state(&layout), Some((true, false)));
+    assert_eq!(
+        layout.toggle_workspace_visibility("ws1".to_string()),
+        Some(true)
+    );
+    layout.verify_invariants();
+    assert_eq!(ws1_state(&layout), Some((false, false)));
+
+    // Focusing a hidden workspace by name shows it temporarily; an explicit unhide makes
+    // that permanent.
+    assert_eq!(layout.hide_workspace("ws1"), Some(true));
+    let idx = layout
+        .workspaces()
+        .position(|(_, _, ws)| ws.name() == Some(&"ws1".to_string()))
+        .unwrap();
+    layout.switch_workspace(idx, true);
+    layout.verify_invariants();
+    assert_eq!(ws1_state(&layout), Some((false, true)));
+    assert_eq!(layout.unhide_workspace("ws1"), Some(true));
+    layout.verify_invariants();
+    assert_eq!(ws1_state(&layout), Some((false, false)));
 }
 
 #[test]

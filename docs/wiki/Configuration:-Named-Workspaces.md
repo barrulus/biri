@@ -95,3 +95,44 @@ workspace "uncentered" {
     }
 }
 ```
+
+### Hidden Workspaces
+
+<sup>biri only</sup>
+
+A named workspace can be hidden.
+It keeps its windows, but disappears from the workspace strip, the overview and workspace switching until it is shown again.
+
+Declare a workspace hidden at startup with `hidden true`:
+
+```kdl
+workspace "scratch" {
+    hidden true
+}
+```
+
+Three actions change visibility at runtime.
+All of them take the workspace name and are available both as binds and through `niri msg action`:
+
+- `toggle-workspace-visibility "name"`: hide the workspace if it is visible, show it if it is hidden.
+- `hide-workspace "name"`: hide the workspace. Does nothing if it is already hidden.
+- `unhide-workspace "name"`: show the workspace. Does nothing if it is already visible.
+
+`toggle-workspace-visibility` and `unhide-workspace` accept a `focus=true` property (`--focus true` on the command line) to also focus the workspace once it is visible:
+
+```kdl
+binds {
+    // Show scratch and jump to it; hide it again on the next press.
+    Mod+Slash { toggle-workspace-visibility "scratch" focus=true; }
+    Mod+Shift+Slash { hide-workspace "scratch"; }
+}
+```
+
+```sh
+niri msg action unhide-workspace scratch --focus true
+```
+
+Focusing a hidden workspace by name with `focus-workspace "name"` shows it temporarily: it hides itself again as soon as you switch away.
+Use `unhide-workspace` (or `toggle-workspace-visibility`) when you want it to stay visible.
+
+`niri msg workspaces` reports the hidden state of each workspace in the `is_hidden` field, so scripts can decide between `hide-workspace` and `unhide-workspace` instead of toggling.

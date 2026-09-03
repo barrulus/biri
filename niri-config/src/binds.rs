@@ -329,7 +329,15 @@ pub enum Action {
     ExpandColumnToAvailableWidth,
     SwitchLayout(#[knuffel(argument, str)] LayoutSwitchTarget),
     ShowHotkeyOverlay,
-    ToggleWorkspaceVisibility(#[knuffel(argument, str)] String),
+    ToggleWorkspaceVisibility(
+        #[knuffel(argument, str)] String,
+        #[knuffel(property(name = "focus"), default = false)] bool,
+    ),
+    HideWorkspace(#[knuffel(argument, str)] String),
+    UnhideWorkspace(
+        #[knuffel(argument, str)] String,
+        #[knuffel(property(name = "focus"), default = false)] bool,
+    ),
     MoveWorkspaceToMonitorLeft,
     MoveWorkspaceToMonitorRight,
     MoveWorkspaceToMonitorDown,
@@ -530,6 +538,11 @@ impl From<niri_ipc::Action> for Action {
                 Self::FocusWorkspace(WorkspaceReference::from(reference))
             }
             niri_ipc::Action::FocusWorkspacePrevious {} => Self::FocusWorkspacePrevious,
+            niri_ipc::Action::ToggleWorkspaceVisibility { name, focus } => {
+                Self::ToggleWorkspaceVisibility(name, focus)
+            }
+            niri_ipc::Action::HideWorkspace { name } => Self::HideWorkspace(name),
+            niri_ipc::Action::UnhideWorkspace { name, focus } => Self::UnhideWorkspace(name, focus),
             niri_ipc::Action::MoveWindowToWorkspaceDown { focus } => {
                 Self::MoveWindowToWorkspaceDown(focus)
             }
