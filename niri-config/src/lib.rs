@@ -694,6 +694,62 @@ mod tests {
     }
 
     #[test]
+    fn parse_hidden_workspace_actions() {
+        let parsed = do_parse(
+            r#"
+            binds {
+                Mod+A { toggle-workspace-visibility "scratch"; }
+                Mod+B { toggle-workspace-visibility "scratch" focus=true; }
+                Mod+C { hide-workspace "scratch"; }
+                Mod+D { unhide-workspace "scratch"; }
+                Mod+E { unhide-workspace "scratch" focus=true; }
+            }
+            "#,
+        );
+
+        let actions: Vec<_> = parsed
+            .binds
+            .0
+            .iter()
+            .map(|bind| bind.action.clone())
+            .collect();
+        let name = || "scratch".to_string();
+        assert_eq!(
+            actions,
+            vec![
+                Action::ToggleWorkspaceVisibility(name(), false),
+                Action::ToggleWorkspaceVisibility(name(), true),
+                Action::HideWorkspace(name()),
+                Action::UnhideWorkspace(name(), false),
+                Action::UnhideWorkspace(name(), true),
+            ]
+        );
+
+        // IPC actions map onto the same config actions.
+        assert_eq!(
+            Action::from(niri_ipc::Action::ToggleWorkspaceVisibility {
+                name: name(),
+                focus: true,
+            }),
+            Action::ToggleWorkspaceVisibility(name(), true)
+        );
+        assert_eq!(
+            Action::from(niri_ipc::Action::HideWorkspace { name: name() }),
+            Action::HideWorkspace(name())
+        );
+        assert_eq!(
+            Action::from(niri_ipc::Action::UnhideWorkspace {
+                name: name(),
+                focus: false,
+            }),
+            Action::UnhideWorkspace(name(), false)
+        );
+
+        assert!(Config::parse_mem("binds { Mod+A { hide-workspace; } }").is_err());
+        assert!(Config::parse_mem("binds { Mod+A { hide-workspace 1; } }").is_err());
+    }
+
+    #[test]
     fn parse_background_effect_ignore_opacity() {
         let parsed = do_parse(
             r#"

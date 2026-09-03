@@ -828,25 +828,60 @@ impl<W: LayoutElement> Layout<W> {
         }
     }
 
-    pub fn toggle_workspace_visibility(&mut self, workspace_name: String) {
-        let Some(monitor) = self.monitor_for_workspace_mut(&workspace_name) else {
-            return;
-        };
-        let Some(ws_idx) = monitor.find_named_workspace_index(&workspace_name) else {
-            return;
-        };
+    /// Toggles a named workspace between hidden and visible.
+    ///
+    /// Returns the new visibility (`Some(true)` when the workspace is now visible), or `None`
+    /// when there is no workspace with that name.
+    pub fn toggle_workspace_visibility(&mut self, workspace_name: String) -> Option<bool> {
+        let monitor = self.monitor_for_workspace_mut(&workspace_name)?;
+        let ws_idx = monitor.find_named_workspace_index(&workspace_name)?;
 
-        let is_hidden = monitor.workspaces[ws_idx].hidden;
-
-        if is_hidden {
-            let Some(ws) = monitor.find_named_workspace(&workspace_name) else {
-                return;
-            };
-            monitor.unhide_workspace_by_id(ws.id(), false);
-            monitor.clean_up_workspaces();
+        if monitor.workspaces[ws_idx].hidden {
+            self.unhide_workspace(&workspace_name);
+            Some(true)
         } else {
-            monitor.hide_workspace_by_idx(ws_idx);
+            self.hide_workspace(&workspace_name);
+            Some(false)
         }
+    }
+
+    /// Hides a named workspace.
+    ///
+    /// Returns `Some(true)` if the workspace was hidden by this call, `Some(false)` if it was
+    /// already hidden, or `None` when there is no workspace with that name.
+    pub fn hide_workspace(&mut self, workspace_name: &str) -> Option<bool> {
+        let monitor = self.monitor_for_workspace_mut(workspace_name)?;
+        let ws_idx = monitor.find_named_workspace_index(workspace_name)?;
+
+        if monitor.workspaces[ws_idx].hidden {
+            return Some(false);
+        }
+
+        monitor.hide_workspace_by_idx(ws_idx);
+        Some(true)
+    }
+
+    /// Makes a named workspace permanently visible.
+    ///
+    /// A workspace that was only temporarily shown (focused by name while hidden, so it would
+    /// re-hide on leaving) becomes permanently visible too. Returns `Some(true)` if anything
+    /// changed, `Some(false)` if the workspace was already visible, or `None` when there is no
+    /// workspace with that name.
+    pub fn unhide_workspace(&mut self, workspace_name: &str) -> Option<bool> {
+        let monitor = self.monitor_for_workspace_mut(workspace_name)?;
+        let ws_idx = monitor.find_named_workspace_index(workspace_name)?;
+        let ws = &mut monitor.workspaces[ws_idx];
+
+        if !ws.hidden {
+            let was_temporary = ws.needs_hidden;
+            ws.needs_hidden = false;
+            return Some(was_temporary);
+        }
+
+        let id = ws.id();
+        monitor.unhide_workspace_by_id(id, false);
+        monitor.clean_up_workspaces();
+        Some(true)
     }
 
     pub fn add_output(

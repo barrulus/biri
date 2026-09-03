@@ -488,6 +488,37 @@ pub enum Action {
     },
     /// Focus the previous workspace.
     FocusWorkspacePrevious {},
+    /// Toggle whether a named workspace is hidden.
+    ///
+    /// A hidden workspace keeps its windows but is left out of the workspace strip, the
+    /// overview and workspace switching.
+    ToggleWorkspaceVisibility {
+        /// Name of the workspace to toggle.
+        #[cfg_attr(feature = "clap", arg())]
+        name: String,
+        /// Whether to focus the workspace when this makes it visible.
+        #[cfg_attr(feature = "clap", arg(long, action = clap::ArgAction::Set, default_value_t = false))]
+        focus: bool,
+    },
+    /// Hide a named workspace.
+    ///
+    /// Does nothing if the workspace is already hidden.
+    HideWorkspace {
+        /// Name of the workspace to hide.
+        #[cfg_attr(feature = "clap", arg())]
+        name: String,
+    },
+    /// Unhide a named workspace.
+    ///
+    /// Does nothing if the workspace is already visible, except focusing it when requested.
+    UnhideWorkspace {
+        /// Name of the workspace to unhide.
+        #[cfg_attr(feature = "clap", arg())]
+        name: String,
+        /// Whether to focus the workspace afterwards.
+        #[cfg_attr(feature = "clap", arg(long, action = clap::ArgAction::Set, default_value_t = false))]
+        focus: bool,
+    },
     /// Move the focused window to the workspace below.
     MoveWindowToWorkspaceDown {
         /// Whether the focus should follow the target workspace.

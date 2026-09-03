@@ -2704,8 +2704,33 @@ impl State {
                     self.niri.queue_redraw_mru_output();
                 }
             }
-            Action::ToggleWorkspaceVisibility(workspace_name) => {
-                self.niri.layout.toggle_workspace_visibility(workspace_name);
+            Action::ToggleWorkspaceVisibility(workspace_name, focus) => {
+                let now_visible = self
+                    .niri
+                    .layout
+                    .toggle_workspace_visibility(workspace_name.clone());
+                if focus && now_visible == Some(true) {
+                    let reference = WorkspaceReference::Name(workspace_name);
+                    self.do_action(Action::FocusWorkspace(reference), allow_when_locked);
+                } else {
+                    // FIXME: granular
+                    self.niri.queue_redraw_all();
+                }
+            }
+            Action::HideWorkspace(workspace_name) => {
+                self.niri.layout.hide_workspace(&workspace_name);
+                // FIXME: granular
+                self.niri.queue_redraw_all();
+            }
+            Action::UnhideWorkspace(workspace_name, focus) => {
+                let exists = self.niri.layout.unhide_workspace(&workspace_name).is_some();
+                if focus && exists {
+                    let reference = WorkspaceReference::Name(workspace_name);
+                    self.do_action(Action::FocusWorkspace(reference), allow_when_locked);
+                } else {
+                    // FIXME: granular
+                    self.niri.queue_redraw_all();
+                }
             }
         }
     }
