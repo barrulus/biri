@@ -6,7 +6,7 @@ Use it for effects such as colour grading, CRT scanlines, night-light tints, mot
 > [!NOTE]
 > The global shader runs on the **TTY/DRM backend only**.
 > It has no effect on the winit (nested/X11) backend.
-> By default, screenshots and screen recordings (screencopy / screencast) render **without** shader effects. See [Shaders in screencast / screenshots](#shaders-in-screencast--screenshots) to opt in via `shaders-in-capture`.
+> By default, screenshots and screen recordings (screencopy / screencast) render **without** shader effects. See [Shaders in screencast and screenshots](#shaders-in-screencast-and-screenshots) to opt in via `shaders-in-capture`.
 
 > [!WARNING]
 > **Performance cost — read this before enabling.** While a global shader is active, the compositor cannot take any of its normal power-saving shortcuts for that output:
@@ -595,7 +595,7 @@ The selection is per-window runtime state: it survives config reloads (presets a
 
 ---
 
-### Shaders in screencast / screenshots
+### Shaders in screencast and screenshots
 
 By default, shader effects — global, region, and per-window — do **not** appear in portal screencasts (Google Meet, OBS, browser screen-share, Zoom), `grim` screenshots, or `wl-screenrec` recordings. This keeps shaders as a local display effect and prevents them from leaking into shared or recorded content.
 
@@ -616,6 +616,6 @@ When the flag is present, the global shader, all region shaders, and all per-win
 
 ### Scope and Limitations
 
-- **TTY/DRM only.** The effect applies on the real (DRM/KMS) output. It is intentionally **not** applied on the nested winit backend (running niri in a window). By default it is also not applied to screenshots or screen recordings — use [`shaders-in-capture`](#shaders-in-screencast--screenshots) to opt in.
+- **TTY/DRM only.** The effect applies on the real (DRM/KMS) output. It is intentionally **not** applied on the nested winit backend (running niri in a window). By default it is also not applied to screenshots or screen recordings — use [`shaders-in-capture`](#shaders-in-screencast-and-screenshots) to opt in.
 - **Output transform.** The effect is verified on outputs with the default (`normal`) transform. On outputs configured with a non-default `transform` (e.g. `90`, `270`, `flipped`), the shader's view of `niri_screen`/`niri_prev` may be mis-oriented. If you use a rotated or flipped output, verify your shader there before relying on it.
 - **Whole-output `global-shader`.** The `global-shader` block applies to all outputs; per-output and per-layer global shaders are not supported. For sub-output scoping, use a [region shader](#region-shaders) (a screen rectangle) or a [per-window shader](#per-window-shaders) (`window-rule { shader {} }`). Multi-pass chains are supported (see [Multi-pass chains](#multi-pass-chains-pass)) but a chain of two or more passes is always whole-output (no `cursor-radius` region mode).
