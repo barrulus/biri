@@ -1,0 +1,61 @@
+name: Bug report
+description: Report a bug or a crash in biri
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        biri is a fork of [niri](https://github.com/niri-wm/niri). If the problem also happens on upstream niri, please report it there instead.
+        For feature ideas use [Discussions → Ideas](https://github.com/barrulus/biri/discussions/new?category=ideas); for questions use [Q&A](https://github.com/barrulus/biri/discussions/new?category=q-a).
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened
+      description: What did you do, what happened, and what did you expect instead?
+    validations:
+      required: true
+  - type: dropdown
+    id: theme
+    attributes:
+      label: Theme
+      description: Which part of biri is this about?
+      options:
+        - Not sure
+        - Shaders
+        - Overview
+        - Workspaces
+        - Floating
+        - Layout
+        - Window rules
+        - Input & binds
+        - Outputs
+        - IPC
+        - Capture
+        - Upstream sync
+        - Project
+    validations:
+      required: true
+  - type: textarea
+    id: config
+    attributes:
+      label: Config
+      description: Attaching the relevant part of your config.kdl (or all of it) helps a lot.
+      render: kdl
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: For crashes, attach the output of `journalctl --user -u niri` (or `biri.service`), or run with `RUST_BACKTRACE=1`.
+      render: shell
+  - type: textarea
+    id: system
+    attributes:
+      label: System information
+      description: Paste the output of `niri -V` (or `biri -V`), plus distro, GPU and CPU.
+      value: |
+        - biri version:
+        - Distro:
+        - GPU:
+        - CPU:
+    validations:
+      required: true
