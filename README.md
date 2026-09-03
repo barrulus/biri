@@ -20,6 +20,10 @@
 >
 > Everything documented for upstream niri still applies. Bugs you hit here should be reported to this fork, not to upstream niri.
 
+> [!WARNING]
+> **Branch rename (2026-09-03).** The fork's working branch is now `main` (formerly `barrulus-custom`), and the pristine upstream mirror is now `upstream` (formerly `main`).
+> Open pull requests against `main`. If you track this repo, update flake inputs, package scripts, and clones from `barrulus/biri/barrulus-custom` to `barrulus/biri/main`. The old `barrulus-custom` branch has been removed.
+
 https://github.com/user-attachments/assets/a5e2b72b-a5a3-4aab-a83d-51973a75f6cc
 
 ## Fork Features
