@@ -6,7 +6,7 @@ use glam::{Mat3, Vec2};
 use niri_config::CornerRadius;
 use smithay::backend::renderer::element::{Element, Id, RenderElement};
 use smithay::backend::renderer::gles::{
-    GlesError, GlesFrame, GlesRenderer, GlesTexProgram, Uniform,
+    ffi, GlesError, GlesFrame, GlesRenderer, GlesTexProgram, GlesTexture, Uniform,
 };
 use smithay::backend::renderer::utils::{CommitCounter, OpaqueRegions};
 use smithay::backend::renderer::Color32F;
@@ -14,11 +14,11 @@ use smithay::utils::user_data::UserDataMap;
 use smithay::utils::{Buffer, Logical, Physical, Point, Rectangle, Scale, Size, Transform};
 
 use crate::backend::tty::{TtyFrame, TtyRenderer, TtyRendererError};
-use crate::render_helpers::background_effect::RenderParams;
+use crate::render_helpers::background_effect::{AlphaMask, RenderParams, ALPHA_MASK_UNIT};
 use crate::render_helpers::effect_buffer::EffectBuffer;
 use crate::render_helpers::renderer::AsGlesFrame as _;
 use crate::render_helpers::shaders::{mat3_uniform, Shaders};
-use crate::render_helpers::{RenderCtx, RenderTarget};
+use crate::render_helpers::{aux_texture, RenderCtx, RenderTarget};
 use crate::utils::region::TransformedRegion;
 
 #[derive(Debug)]
@@ -81,6 +81,14 @@ pub struct XrayElement {
     saturation: f32,
     bg_color: Color32F,
     program: Option<GlesTexProgram>,
+    alpha_mask: Option<XrayAlphaMask>,
+}
+
+#[derive(Debug, Clone)]
+struct XrayAlphaMask {
+    surface_tex: GlesTexture,
+    surface_to_geo: Mat3,
+    threshold: f32,
 }
 
 impl Xray {
@@ -102,6 +110,7 @@ impl Xray {
         blur: bool,
         noise: f32,
         saturation: f32,
+        alpha_mask: Option<AlphaMask>,
         push: &mut dyn FnMut(XrayElement),
     ) {
         let program = Shaders::get(ctx.renderer).postprocess_and_clip.clone();
@@ -117,6 +126,27 @@ impl Xray {
         let clip_pos_in_backdrop = pos_in_backdrop + clip_offset.upscale(zoom);
 
         let geo_in_backdrop = Rectangle::new(pos_in_backdrop, params.geometry.size.upscale(zoom));
+
+        let clip_to_surface = alpha_mask.as_ref().and_then(|mask| {
+            if mask.surface_geo.size.w <= 0. || mask.surface_geo.size.h <= 0. {
+                return None;
+            }
+            let surface_size = Vec2::new(
+                mask.surface_geo.size.w as f32,
+                mask.surface_geo.size.h as f32,
+            );
+            let clip_loc = Vec2::new(clip_geo.loc.x as f32, clip_geo.loc.y as f32);
+            let surface_loc =
+                Vec2::new(mask.surface_geo.loc.x as f32, mask.surface_geo.loc.y as f32);
+            let clip_size_v = Vec2::new(clip_geo.size.w as f32, clip_geo.size.h as f32);
+            // clip_to_surface(p) = (clip_geo.loc + p * clip_geo.size - surface_geo.loc) /
+            // surface_geo.size
+            let m = mask.geo_to_uv()
+                * Mat3::from_scale(Vec2::ONE / surface_size)
+                * Mat3::from_translation(clip_loc - surface_loc)
+                * Mat3::from_scale(clip_size_v);
+            Some((m, mask.surface_tex.clone(), mask.threshold))
+        });
 
         let mut backdrop = self.backdrop[ctx.target as usize].borrow_mut();
         let backdrop_geo = Rectangle::from_size(backdrop.logical_size());
@@ -187,6 +217,15 @@ impl Xray {
                     Rectangle::new(crop.loc - geo_in_backdrop.loc, crop.size).downscale(zoom);
                 geometry.loc += params.geometry.loc;
 
+                let alpha_mask =
+                    clip_to_surface
+                        .as_ref()
+                        .map(|(m, tex, threshold)| XrayAlphaMask {
+                            surface_tex: tex.clone(),
+                            surface_to_geo: *m * input_to_clip_geo,
+                            threshold: *threshold,
+                        });
+
                 let elem = XrayElement {
                     buffer: self.background[ctx.target as usize].clone(),
                     id: background.id().clone(),
@@ -202,6 +241,7 @@ impl Xray {
                     saturation,
                     bg_color: *bg_color,
                     program: program.clone(),
+                    alpha_mask,
                 };
                 push(elem);
             }
@@ -237,6 +277,14 @@ impl Xray {
             let input_to_clip_geo = Mat3::from_scale(buf_size / clip_geo_size)
                 * Mat3::from_translation(-clip_pos_in_backdrop / buf_size);
 
+            let alpha_mask = clip_to_surface
+                .as_ref()
+                .map(|(m, tex, threshold)| XrayAlphaMask {
+                    surface_tex: tex.clone(),
+                    surface_to_geo: *m * input_to_clip_geo,
+                    threshold: *threshold,
+                });
+
             let elem = XrayElement {
                 buffer: self.backdrop[ctx.target as usize].clone(),
                 id: backdrop.id().clone(),
@@ -252,6 +300,7 @@ impl Xray {
                 saturation,
                 bg_color: self.backdrop_color,
                 program: program.clone(),
+                alpha_mask,
             };
             push(elem);
         }
@@ -259,7 +308,12 @@ impl Xray {
 }
 
 impl XrayElement {
-    fn compute_uniforms(&self) -> [Uniform<'static>; 7] {
+    fn compute_uniforms(&self) -> [Uniform<'static>; 11] {
+        let (surface_to_geo, alpha_mask_enabled, alpha_threshold) = match &self.alpha_mask {
+            Some(mask) => (mask.surface_to_geo, 1i32, mask.threshold),
+            None => (Mat3::IDENTITY, 0i32, 0.0),
+        };
+
         [
             Uniform::new("niri_scale", self.scale),
             Uniform::new("geo_size", <[f32; 2]>::from(self.clip_geo_size)),
@@ -268,6 +322,10 @@ impl XrayElement {
             Uniform::new("noise", self.noise),
             Uniform::new("saturation", self.saturation),
             Uniform::new("bg_color", self.bg_color.components()),
+            mat3_uniform("surface_to_geo", surface_to_geo),
+            Uniform::new("alpha_mask_enabled", alpha_mask_enabled),
+            Uniform::new("alpha_threshold", alpha_threshold),
+            Uniform::new("surface_tex", ALPHA_MASK_UNIT as i32),
         ]
     }
 }
@@ -342,7 +400,18 @@ impl RenderElement<GlesRenderer> for XrayElement {
         let uniforms = self.program.is_some().then(|| self.compute_uniforms());
         let uniforms = uniforms.as_ref().map_or(&[][..], |x| &x[..]);
 
-        frame.render_texture_from_to(
+        let surface_tex_id = self
+            .alpha_mask
+            .as_ref()
+            .filter(|_| self.program.is_some())
+            .map(|m| m.surface_tex.tex_id());
+        if let Some(tex_id) = surface_tex_id {
+            frame.with_context(|gl| unsafe {
+                aux_texture::bind(gl, ALPHA_MASK_UNIT, tex_id, ffi::CLAMP_TO_EDGE);
+            })?;
+        }
+
+        let result = frame.render_texture_from_to(
             &texture,
             src,
             dst,
@@ -353,7 +422,13 @@ impl RenderElement<GlesRenderer> for XrayElement {
             1.,
             self.program.as_ref(),
             uniforms,
-        )
+        );
+
+        if surface_tex_id.is_some() {
+            frame.with_context(|gl| unsafe { aux_texture::unbind(gl, ALPHA_MASK_UNIT) })?;
+        }
+
+        result
     }
 }
 

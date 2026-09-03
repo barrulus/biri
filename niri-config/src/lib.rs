@@ -62,7 +62,7 @@ pub use crate::output::{Output, OutputName, Outputs, Position, Vrr};
 use crate::recent_windows::RecentWindowsPart;
 pub use crate::recent_windows::{MruDirection, MruFilter, MruPreviews, MruScope, RecentWindows};
 pub use crate::region_shader::{Geometry, RegionShader, RegionShaderPart};
-pub use crate::utils::FloatOrInt;
+pub use crate::utils::{BoolOrFloat, FloatOrInt};
 use crate::utils::{Flag, MergeWith as _};
 pub use crate::window_rule::{
     FloatingPosition, OnXdgActivate, PopupsRule, RelativeTo, ResolvedPopupsRules, ShaderRule,
@@ -691,6 +691,62 @@ mod tests {
         Config::parse_mem(text)
             .map_err(miette::Report::new)
             .unwrap()
+    }
+
+    #[test]
+    fn parse_background_effect_ignore_opacity() {
+        let parsed = do_parse(
+            r#"
+            layer-rule { background-effect { ignore-opacity true; }; }
+            layer-rule { background-effect { ignore-opacity false; }; }
+            layer-rule { background-effect { ignore-opacity 0.7; }; }
+            layer-rule { background-effect { ignore-opacity 1; }; }
+            layer-rule { background-effect { blur true; }; }
+            window-rule { background-effect { ignore-opacity 0.25; }; }
+            "#,
+        );
+
+        let values: Vec<_> = parsed
+            .layer_rules
+            .iter()
+            .map(|rule| rule.background_effect.ignore_opacity)
+            .collect();
+        assert_eq!(
+            values,
+            vec![
+                Some(BoolOrFloat::True),
+                Some(BoolOrFloat::False),
+                Some(BoolOrFloat::Threshold(0.7)),
+                Some(BoolOrFloat::Threshold(1.0)),
+                None,
+            ]
+        );
+        assert_eq!(
+            parsed.window_rules[0].background_effect.ignore_opacity,
+            Some(BoolOrFloat::Threshold(0.25))
+        );
+
+        // Resolved thresholds: `true` means only fully transparent pixels are skipped,
+        // `false` disables masking.
+        let mut effect = BackgroundEffect::default();
+        effect.merge_with(&parsed.layer_rules[0].background_effect);
+        assert_eq!(effect.ignore_opacity, Some(0.0));
+        effect.merge_with(&parsed.layer_rules[2].background_effect);
+        assert_eq!(effect.ignore_opacity, Some(0.7));
+        effect.merge_with(&parsed.layer_rules[1].background_effect);
+        assert_eq!(effect.ignore_opacity, None);
+        // A rule that does not mention the option leaves the merged value alone.
+        effect.merge_with(&parsed.layer_rules[3].background_effect);
+        effect.merge_with(&parsed.layer_rules[4].background_effect);
+        assert_eq!(effect.ignore_opacity, Some(1.0));
+
+        for bad in ["1.5", "-0.1", "2", "\"yes\"", "null"] {
+            let text = format!("layer-rule {{ background-effect {{ ignore-opacity {bad}; }}; }}");
+            assert!(
+                Config::parse_mem(&text).is_err(),
+                "ignore-opacity {bad} should fail to parse"
+            );
+        }
     }
 
     #[test]
@@ -1990,6 +2046,7 @@ mod tests {
                     background_effect: BackgroundEffectRule {
                         xray: None,
                         blur: None,
+                        ignore_opacity: None,
                         noise: None,
                         saturation: None,
                     },
@@ -2000,6 +2057,7 @@ mod tests {
                         background_effect: BackgroundEffectRule {
                             xray: None,
                             blur: None,
+                            ignore_opacity: None,
                             noise: None,
                             saturation: None,
                         },
@@ -2042,6 +2100,7 @@ mod tests {
                     background_effect: BackgroundEffectRule {
                         xray: None,
                         blur: None,
+                        ignore_opacity: None,
                         noise: None,
                         saturation: None,
                     },
@@ -2051,6 +2110,7 @@ mod tests {
                         background_effect: BackgroundEffectRule {
                             xray: None,
                             blur: None,
+                            ignore_opacity: None,
                             noise: None,
                             saturation: None,
                         },

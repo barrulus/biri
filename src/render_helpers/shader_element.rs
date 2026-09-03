@@ -17,6 +17,7 @@ use super::renderer::AsGlesFrame;
 use super::resources::Resources;
 use super::shaders::{ProgramType, Shaders};
 use crate::backend::tty::{TtyFrame, TtyRenderer, TtyRendererError};
+use crate::render_helpers::aux_texture;
 
 /// Renders a shader with optional texture input, on the primary GPU.
 #[derive(Debug, Clone)]
@@ -387,20 +388,7 @@ impl RenderElement<GlesRenderer> for ShaderRenderElement {
 
             unsafe {
                 for (i, texture) in self.textures.values().enumerate() {
-                    gl.ActiveTexture(ffi::TEXTURE0 + i as u32);
-                    gl.BindTexture(ffi::TEXTURE_2D, texture.tex_id());
-                    gl.TexParameteri(ffi::TEXTURE_2D, ffi::TEXTURE_MIN_FILTER, ffi::LINEAR as i32);
-                    gl.TexParameteri(ffi::TEXTURE_2D, ffi::TEXTURE_MAG_FILTER, ffi::LINEAR as i32);
-                    gl.TexParameteri(
-                        ffi::TEXTURE_2D,
-                        ffi::TEXTURE_WRAP_S,
-                        ffi::CLAMP_TO_BORDER as i32,
-                    );
-                    gl.TexParameteri(
-                        ffi::TEXTURE_2D,
-                        ffi::TEXTURE_WRAP_T,
-                        ffi::CLAMP_TO_BORDER as i32,
-                    );
+                    aux_texture::bind(gl, i as u32, texture.tex_id(), ffi::CLAMP_TO_BORDER);
                 }
 
                 gl.UseProgram(program.program);
@@ -501,9 +489,9 @@ impl RenderElement<GlesRenderer> for ShaderRenderElement {
                 }
 
                 gl.BindBuffer(ffi::ARRAY_BUFFER, 0);
-                gl.BindTexture(ffi::TEXTURE_2D, 0);
-                gl.ActiveTexture(ffi::TEXTURE0);
-                gl.BindTexture(ffi::TEXTURE_2D, 0);
+                for i in 0..self.textures.len() {
+                    aux_texture::unbind(gl, i as u32);
+                }
                 gl.DisableVertexAttribArray(program.attrib_vert as u32);
                 gl.DisableVertexAttribArray(program.attrib_vert_position as u32);
             }

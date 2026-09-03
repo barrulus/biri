@@ -1013,6 +1013,7 @@ Override the background effect options for this window.
 
 - `xray`: set to `true` to enable the xray effect, or `false` to disable it.
 - `blur`: set to `true` to enable blur behind this window, or `false` to force-disable it.
+- `ignore-opacity`: skip the blurred backdrop on transparent parts of the window surface. Accepts `true` (equivalent to `0.0`, only fully-transparent pixels skipped), `false` to disable, or a number between `0.0` and `1.0` as the alpha threshold (pixels with alpha `<=` threshold are skipped). Mostly useful for floating windows whose buffers include transparent margins, e.g. client-side drop shadows.
 - `noise`: amount of pixel noise added to the background (helps with color banding from blur).
 - `saturation`: color saturation of the background (`0` is desaturated, `1` is normal, `2` is 200% saturation).
 

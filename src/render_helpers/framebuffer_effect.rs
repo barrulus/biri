@@ -4,7 +4,9 @@ use glam::{Mat3, Vec2};
 use niri_config::CornerRadius;
 use smithay::backend::allocator::Fourcc;
 use smithay::backend::renderer::element::{Element, Id, RenderElement};
-use smithay::backend::renderer::gles::{GlesError, GlesFrame, GlesRenderer, GlesTexture, Uniform};
+use smithay::backend::renderer::gles::{
+    ffi, GlesError, GlesFrame, GlesRenderer, GlesTexture, Uniform,
+};
 use smithay::backend::renderer::utils::CommitCounter;
 use smithay::backend::renderer::{Frame as _, FrameContext, Offscreen, Texture as _};
 use smithay::gpu_span_location;
@@ -12,11 +14,11 @@ use smithay::utils::user_data::UserDataMap;
 use smithay::utils::{Buffer, Logical, Physical, Rectangle, Scale, Transform};
 
 use crate::backend::tty::{TtyFrame, TtyRenderer, TtyRendererError};
-use crate::render_helpers::background_effect::RenderParams;
+use crate::render_helpers::background_effect::{AlphaMask, RenderParams, ALPHA_MASK_UNIT};
 use crate::render_helpers::blur::{Blur, BlurOptions};
-use crate::render_helpers::capture;
 use crate::render_helpers::renderer::AsGlesFrame as _;
 use crate::render_helpers::shaders::{mat3_uniform, Shaders};
+use crate::render_helpers::{aux_texture, capture};
 use crate::utils::region::TransformedRegion;
 
 #[derive(Debug)]
@@ -37,6 +39,7 @@ pub struct FramebufferEffectElement {
     blur_options: Option<BlurOptions>,
     noise: f32,
     saturation: f32,
+    alpha_mask: Option<AlphaMask>,
 }
 
 #[derive(Debug)]
@@ -67,6 +70,7 @@ impl FramebufferEffect {
         blur_options: Option<BlurOptions>,
         noise: f32,
         saturation: f32,
+        alpha_mask: Option<AlphaMask>,
     ) -> FramebufferEffectElement {
         let (clip_geo, corner_radius) = params
             .clip
@@ -88,6 +92,7 @@ impl FramebufferEffect {
             blur_options,
             noise,
             saturation,
+            alpha_mask,
         }
     }
 }
@@ -97,7 +102,7 @@ impl FramebufferEffectElement {
         &self,
         crop: Rectangle<f64, Logical>,
         transform: Transform,
-    ) -> [Uniform<'static>; 7] {
+    ) -> [Uniform<'static>; 11] {
         let offset = crop.loc - (self.clip_geo.loc - self.geometry.loc);
         let offset = Vec2::new(offset.x as f32, offset.y as f32);
         let crop_size = Vec2::new(crop.size.w as f32, crop.size.h as f32);
@@ -115,6 +120,21 @@ impl FramebufferEffectElement {
 
         let clip_geo_size = (self.clip_geo.size.w as f32, self.clip_geo.size.h as f32);
 
+        let (surface_to_geo, alpha_mask_enabled, alpha_threshold) = match &self.alpha_mask {
+            Some(mask) if mask.surface_geo.size.w > 0. && mask.surface_geo.size.h > 0. => {
+                let surface_offset = crop.loc - (mask.surface_geo.loc - self.geometry.loc);
+                let surface_offset = Vec2::new(surface_offset.x as f32, surface_offset.y as f32);
+                let surface_size = Vec2::new(
+                    mask.surface_geo.size.w as f32,
+                    mask.surface_geo.size.h as f32,
+                );
+                let s2g = Mat3::from_scale(crop_size / surface_size)
+                    * Mat3::from_translation(surface_offset / crop_size);
+                (mask.geo_to_uv() * s2g * transform_mat, 1i32, mask.threshold)
+            }
+            _ => (Mat3::IDENTITY, 0i32, 0.0),
+        };
+
         [
             Uniform::new("niri_scale", self.scale),
             Uniform::new("geo_size", clip_geo_size),
@@ -123,6 +143,10 @@ impl FramebufferEffectElement {
             Uniform::new("noise", self.noise),
             Uniform::new("saturation", self.saturation),
             Uniform::new("bg_color", [0f32, 0., 0., 0.]),
+            mat3_uniform("surface_to_geo", surface_to_geo),
+            Uniform::new("alpha_mask_enabled", alpha_mask_enabled),
+            Uniform::new("alpha_threshold", alpha_threshold),
+            Uniform::new("surface_tex", ALPHA_MASK_UNIT as i32),
         ]
     }
 }
@@ -349,7 +373,18 @@ impl RenderElement<GlesRenderer> for FramebufferEffectElement {
             .then(|| self.compute_uniforms(crop, frame.transformation()));
         let uniforms = uniforms.as_ref().map_or(&[][..], |x| &x[..]);
 
-        frame.render_texture_from_to(
+        let surface_tex_id = self
+            .alpha_mask
+            .as_ref()
+            .filter(|_| program.is_some())
+            .map(|mask| mask.surface_tex.tex_id());
+        if let Some(tex_id) = surface_tex_id {
+            frame.with_context(|gl| unsafe {
+                aux_texture::bind(gl, ALPHA_MASK_UNIT, tex_id, ffi::CLAMP_TO_EDGE);
+            })?;
+        }
+
+        let result = frame.render_texture_from_to(
             texture,
             Rectangle::from_size(texture.size().to_f64()),
             clamped_dst,
@@ -360,7 +395,13 @@ impl RenderElement<GlesRenderer> for FramebufferEffectElement {
             1.,
             program.as_ref(),
             uniforms,
-        )
+        );
+
+        if surface_tex_id.is_some() {
+            frame.with_context(|gl| unsafe { aux_texture::unbind(gl, ALPHA_MASK_UNIT) })?;
+        }
+
+        result
     }
 }
 
