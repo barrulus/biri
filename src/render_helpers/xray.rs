@@ -14,11 +14,11 @@ use smithay::utils::user_data::UserDataMap;
 use smithay::utils::{Buffer, Logical, Physical, Point, Rectangle, Scale, Size, Transform};
 
 use crate::backend::tty::{TtyFrame, TtyRenderer, TtyRendererError};
-use crate::render_helpers::background_effect::{AlphaMask, RenderParams};
+use crate::render_helpers::background_effect::{AlphaMask, RenderParams, ALPHA_MASK_UNIT};
 use crate::render_helpers::effect_buffer::EffectBuffer;
 use crate::render_helpers::renderer::AsGlesFrame as _;
 use crate::render_helpers::shaders::{mat3_uniform, Shaders};
-use crate::render_helpers::{RenderCtx, RenderTarget};
+use crate::render_helpers::{aux_texture, RenderCtx, RenderTarget};
 use crate::utils::region::TransformedRegion;
 
 #[derive(Debug)]
@@ -141,7 +141,8 @@ impl Xray {
             let clip_size_v = Vec2::new(clip_geo.size.w as f32, clip_geo.size.h as f32);
             // clip_to_surface(p) = (clip_geo.loc + p * clip_geo.size - surface_geo.loc) /
             // surface_geo.size
-            let m = Mat3::from_scale(Vec2::ONE / surface_size)
+            let m = mask.geo_to_uv()
+                * Mat3::from_scale(Vec2::ONE / surface_size)
                 * Mat3::from_translation(clip_loc - surface_loc)
                 * Mat3::from_scale(clip_size_v);
             Some((m, mask.surface_tex.clone(), mask.threshold))
@@ -324,8 +325,7 @@ impl XrayElement {
             mat3_uniform("surface_to_geo", surface_to_geo),
             Uniform::new("alpha_mask_enabled", alpha_mask_enabled),
             Uniform::new("alpha_threshold", alpha_threshold),
-            // Sampler uniform: read `surface_tex` from texture unit 1.
-            Uniform::new("surface_tex", 1i32),
+            Uniform::new("surface_tex", ALPHA_MASK_UNIT as i32),
         ]
     }
 }
@@ -407,21 +407,7 @@ impl RenderElement<GlesRenderer> for XrayElement {
             .map(|m| m.surface_tex.tex_id());
         if let Some(tex_id) = surface_tex_id {
             frame.with_context(|gl| unsafe {
-                gl.ActiveTexture(ffi::TEXTURE1);
-                gl.BindTexture(ffi::TEXTURE_2D, tex_id);
-                gl.TexParameteri(ffi::TEXTURE_2D, ffi::TEXTURE_MIN_FILTER, ffi::LINEAR as i32);
-                gl.TexParameteri(ffi::TEXTURE_2D, ffi::TEXTURE_MAG_FILTER, ffi::LINEAR as i32);
-                gl.TexParameteri(
-                    ffi::TEXTURE_2D,
-                    ffi::TEXTURE_WRAP_S,
-                    ffi::CLAMP_TO_EDGE as i32,
-                );
-                gl.TexParameteri(
-                    ffi::TEXTURE_2D,
-                    ffi::TEXTURE_WRAP_T,
-                    ffi::CLAMP_TO_EDGE as i32,
-                );
-                gl.ActiveTexture(ffi::TEXTURE0);
+                aux_texture::bind(gl, ALPHA_MASK_UNIT, tex_id, ffi::CLAMP_TO_EDGE);
             })?;
         }
 
@@ -439,11 +425,7 @@ impl RenderElement<GlesRenderer> for XrayElement {
         );
 
         if surface_tex_id.is_some() {
-            frame.with_context(|gl| unsafe {
-                gl.ActiveTexture(ffi::TEXTURE1);
-                gl.BindTexture(ffi::TEXTURE_2D, 0);
-                gl.ActiveTexture(ffi::TEXTURE0);
-            })?;
+            frame.with_context(|gl| unsafe { aux_texture::unbind(gl, ALPHA_MASK_UNIT) })?;
         }
 
         result

@@ -1,5 +1,6 @@
 use std::sync::{Arc, Mutex};
 
+use glam::{Mat3, Vec2};
 use niri_config::CornerRadius;
 use smithay::backend::renderer::gles::{GlesRenderer, GlesTexture};
 use smithay::backend::renderer::utils::{import_surface, RendererSurfaceStateUserData};
@@ -219,11 +220,26 @@ impl BackgroundEffect {
     }
 }
 
+/// Texture unit the alpha-mask surface texture is bound to (`surface_tex` sampler).
+pub const ALPHA_MASK_UNIT: u32 = 1;
+
 #[derive(Debug, Clone)]
 pub struct AlphaMask {
     pub surface_tex: GlesTexture,
     pub surface_geo: Rectangle<f64, Logical>,
     pub threshold: f32,
+}
+
+impl AlphaMask {
+    /// Matrix mapping normalized surface-geometry coordinates (0..1 across `surface_geo`, y
+    /// down) to texture UVs, accounting for y-inverted (EGL/dmabuf) surface textures.
+    pub fn geo_to_uv(&self) -> Mat3 {
+        if self.surface_tex.is_y_inverted() {
+            Mat3::from_translation(Vec2::new(0., 1.)) * Mat3::from_scale(Vec2::new(1., -1.))
+        } else {
+            Mat3::IDENTITY
+        }
+    }
 }
 
 fn render_params_for_tile(

@@ -26,6 +26,7 @@ use self::texture::{TextureBuffer, TextureRenderElement};
 use crate::render_helpers::renderer::AsGlesRenderer;
 use crate::render_helpers::xray::Xray;
 
+pub mod aux_texture;
 pub mod background_effect;
 pub mod blur;
 pub mod border;
