@@ -1,0 +1,3021 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://niri-wm.github.io/niri/Configuration%3A-Global-Shader.html">
+      
+      
+        <link rel="prev" href="Configuration%3A-Animations.html">
+      
+      
+        <link rel="next" href="Configuration%3A-Gestures.html">
+      
+      
+      <link rel="icon" href="_assets/icons/logo.svg">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.15">
+    
+    
+      
+        <title>Global Shader - niri</title>
+      
+    
+    
+      <link rel="stylesheet" href="assets/stylesheets/main.342714a4.min.css">
+      
+        
+        <link rel="stylesheet" href="assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="_assets/stylesheets/niri.css">
+    
+    <script>__md_scope=new URL(".",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#overview" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="." title="niri" class="md-header__button md-logo" aria-label="niri" data-md-component="logo">
+      
+  <img src="_assets/icons/logo.svg" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            niri
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Global Shader
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme)" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m14.3 16-.7-2h-3.2l-.7 2H7.8L11 7h2l3.2 9zM20 8.69V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12zm-9.15 3.96h2.3L12 9z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_2" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="custom" data-md-color-accent="indigo"  aria-label="Switch to system preference"  type="radio" name="__palette" id="__palette_2">
+    
+      <label class="md-header__button md-icon" title="Switch to system preference" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/niri-wm/niri" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="." title="niri" class="md-nav__button md-logo" aria-label="niri" data-md-component="logo">
+      
+  <img src="_assets/icons/logo.svg" alt="logo">
+
+    </a>
+    niri
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/niri-wm/niri" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1" >
+        
+          
+          <label class="md-nav__link" for="__nav_1" id="__nav_1_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Usage
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_1">
+            <span class="md-nav__icon md-icon"></span>
+            Usage
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="Getting-Started.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Getting Started
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="Example-systemd-Setup.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Example systemd Setup
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="Important-Software.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Important Software
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="Workspaces.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Workspaces
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="Floating-Windows.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Floating Windows
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="Tabs.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Tabs
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="Overview.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="Screencasting.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Screencasting
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="Layer%E2%80%90Shell-Components.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Layer‐Shell Components
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="IPC.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    IPC, niri msg
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="Application-Issues.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Application-Specific Issues
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="Nvidia.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Nvidia
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="Xwayland.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Xwayland
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="Gestures.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Gestures
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="Fullscreen-and-Maximize.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Fullscreen and Maximize
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="Window-Effects.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Window Effects
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="Packaging-niri.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Packaging niri
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="Integrating-niri.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Integrating niri
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="Security-Model.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Security Model
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="Accessibility.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Accessibility
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="Name-and-Logo.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Name and Logo
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="FAQ.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    FAQ
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Configuration
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            Configuration
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="Configuration%3A-Introduction.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Introduction
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="Configuration%3A-Input.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Input
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="Configuration%3A-Outputs.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Outputs
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="Configuration%3A-Key-Bindings.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Key Bindings
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="Configuration%3A-Switch-Events.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Switch Events
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="Configuration%3A-Layout.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Layout
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="Configuration%3A-Named-Workspaces.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Named Workspaces
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="Configuration%3A-Miscellaneous.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Miscellaneous
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="Configuration%3A-Window-Rules.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Window Rules
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="Configuration%3A-Layer-Rules.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Layer Rules
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="Configuration%3A-Animations.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Animations
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    Global Shader
+    
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="Configuration%3A-Global-Shader.html" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    Global Shader
+    
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      Overview
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#configuration-block" class="md-nav__link">
+    <span class="md-ellipsis">
+      Configuration Block
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#niri-mode-default" class="md-nav__link">
+    <span class="md-ellipsis">
+      niri Mode (default)
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="niri Mode (default)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#available-uniforms-and-helpers" class="md-nav__link">
+    <span class="md-ellipsis">
+      Available uniforms and helpers
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#example-warm-tint" class="md-nav__link">
+    <span class="md-ellipsis">
+      Example: warm tint
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#example-feedback-trail" class="md-nav__link">
+    <span class="md-ellipsis">
+      Example: feedback trail
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#example-animated-vignette" class="md-nav__link">
+    <span class="md-ellipsis">
+      Example: animated vignette
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dedicated-feedback-buffer-global_buffer" class="md-nav__link">
+    <span class="md-ellipsis">
+      Dedicated feedback buffer (global_buffer)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#multi-pass-chains-pass" class="md-nav__link">
+    <span class="md-ellipsis">
+      Multi-pass chains (pass)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hyprland-mode" class="md-nav__link">
+    <span class="md-ellipsis">
+      hyprland Mode
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="hyprland Mode">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#compatibility-caveat" class="md-nav__link">
+    <span class="md-ellipsis">
+      Compatibility caveat
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#example-load-a-hyprland-shader-from-a-file" class="md-nav__link">
+    <span class="md-ellipsis">
+      Example: load a Hyprland shader from a file
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#reads-cursor" class="md-nav__link">
+    <span class="md-ellipsis">
+      reads-cursor
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hot-reload" class="md-nav__link">
+    <span class="md-ellipsis">
+      Hot-Reload
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#redraw-scheduling" class="md-nav__link">
+    <span class="md-ellipsis">
+      Redraw scheduling
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#shader-animation-max-fps" class="md-nav__link">
+    <span class="md-ellipsis">
+      shader-animation-max-fps
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cursor-radius-region-mode" class="md-nav__link">
+    <span class="md-ellipsis">
+      cursor-radius (region mode)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#performance-summary" class="md-nav__link">
+    <span class="md-ellipsis">
+      Performance Summary
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#region-shaders" class="md-nav__link">
+    <span class="md-ellipsis">
+      Region shaders
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Region shaders">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fields" class="md-nav__link">
+    <span class="md-ellipsis">
+      Fields
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#shader-contract" class="md-nav__link">
+    <span class="md-ellipsis">
+      Shader contract
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#v1-limits" class="md-nav__link">
+    <span class="md-ellipsis">
+      v1 limits
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#example-channel-swap-over-a-rectangle" class="md-nav__link">
+    <span class="md-ellipsis">
+      Example: channel-swap over a rectangle
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#example-two-independent-regions" class="md-nav__link">
+    <span class="md-ellipsis">
+      Example: two independent regions
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#example-region-multi-pass-chain" class="md-nav__link">
+    <span class="md-ellipsis">
+      Example: region multi-pass chain
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#per-window-shaders" class="md-nav__link">
+    <span class="md-ellipsis">
+      Per-window shaders
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Per-window shaders">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fields_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      Fields
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#shader-contract_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      Shader contract
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#animation" class="md-nav__link">
+    <span class="md-ellipsis">
+      Animation
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#limits" class="md-nav__link">
+    <span class="md-ellipsis">
+      Limits
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#example-grayscale-on-one-app" class="md-nav__link">
+    <span class="md-ellipsis">
+      Example: grayscale on one app
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#example-invert-one-window" class="md-nav__link">
+    <span class="md-ellipsis">
+      Example: invert one window
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#example-window-multi-pass-chain" class="md-nav__link">
+    <span class="md-ellipsis">
+      Example: window multi-pass chain
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#window-shader-presets-window-shaders" class="md-nav__link">
+    <span class="md-ellipsis">
+      Window shader presets (window-shaders)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#shaders-in-screencast-and-screenshots" class="md-nav__link">
+    <span class="md-ellipsis">
+      Shaders in screencast and screenshots
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#scope-and-limitations" class="md-nav__link">
+    <span class="md-ellipsis">
+      Scope and Limitations
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="Configuration%3A-Gestures.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Gestures
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="Configuration%3A-Recent-Windows.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Recent Windows
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="Configuration%3A-Debug-Options.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Debug Options
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="Configuration%3A-Include.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Include
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Development
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            Development
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="Development%3A-Design-Principles.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Design Principles
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="Development%3A-Developing-niri.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Developing niri
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="Development%3A-Documenting-niri.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Documenting niri
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="Development%3A-Releasing-niri.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Releasing niri
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="Development%3A-Fractional-Layout.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Fractional Layout
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="Development%3A-Redraw-Loop.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Redraw Loop
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="Development%3A-Animation-Timing.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Animation Timing
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      Overview
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#configuration-block" class="md-nav__link">
+    <span class="md-ellipsis">
+      Configuration Block
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#niri-mode-default" class="md-nav__link">
+    <span class="md-ellipsis">
+      niri Mode (default)
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="niri Mode (default)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#available-uniforms-and-helpers" class="md-nav__link">
+    <span class="md-ellipsis">
+      Available uniforms and helpers
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#example-warm-tint" class="md-nav__link">
+    <span class="md-ellipsis">
+      Example: warm tint
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#example-feedback-trail" class="md-nav__link">
+    <span class="md-ellipsis">
+      Example: feedback trail
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#example-animated-vignette" class="md-nav__link">
+    <span class="md-ellipsis">
+      Example: animated vignette
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dedicated-feedback-buffer-global_buffer" class="md-nav__link">
+    <span class="md-ellipsis">
+      Dedicated feedback buffer (global_buffer)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#multi-pass-chains-pass" class="md-nav__link">
+    <span class="md-ellipsis">
+      Multi-pass chains (pass)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hyprland-mode" class="md-nav__link">
+    <span class="md-ellipsis">
+      hyprland Mode
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="hyprland Mode">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#compatibility-caveat" class="md-nav__link">
+    <span class="md-ellipsis">
+      Compatibility caveat
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#example-load-a-hyprland-shader-from-a-file" class="md-nav__link">
+    <span class="md-ellipsis">
+      Example: load a Hyprland shader from a file
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#reads-cursor" class="md-nav__link">
+    <span class="md-ellipsis">
+      reads-cursor
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hot-reload" class="md-nav__link">
+    <span class="md-ellipsis">
+      Hot-Reload
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#redraw-scheduling" class="md-nav__link">
+    <span class="md-ellipsis">
+      Redraw scheduling
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#shader-animation-max-fps" class="md-nav__link">
+    <span class="md-ellipsis">
+      shader-animation-max-fps
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cursor-radius-region-mode" class="md-nav__link">
+    <span class="md-ellipsis">
+      cursor-radius (region mode)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#performance-summary" class="md-nav__link">
+    <span class="md-ellipsis">
+      Performance Summary
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#region-shaders" class="md-nav__link">
+    <span class="md-ellipsis">
+      Region shaders
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Region shaders">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fields" class="md-nav__link">
+    <span class="md-ellipsis">
+      Fields
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#shader-contract" class="md-nav__link">
+    <span class="md-ellipsis">
+      Shader contract
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#v1-limits" class="md-nav__link">
+    <span class="md-ellipsis">
+      v1 limits
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#example-channel-swap-over-a-rectangle" class="md-nav__link">
+    <span class="md-ellipsis">
+      Example: channel-swap over a rectangle
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#example-two-independent-regions" class="md-nav__link">
+    <span class="md-ellipsis">
+      Example: two independent regions
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#example-region-multi-pass-chain" class="md-nav__link">
+    <span class="md-ellipsis">
+      Example: region multi-pass chain
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#per-window-shaders" class="md-nav__link">
+    <span class="md-ellipsis">
+      Per-window shaders
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Per-window shaders">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fields_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      Fields
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#shader-contract_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      Shader contract
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#animation" class="md-nav__link">
+    <span class="md-ellipsis">
+      Animation
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#limits" class="md-nav__link">
+    <span class="md-ellipsis">
+      Limits
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#example-grayscale-on-one-app" class="md-nav__link">
+    <span class="md-ellipsis">
+      Example: grayscale on one app
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#example-invert-one-window" class="md-nav__link">
+    <span class="md-ellipsis">
+      Example: invert one window
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#example-window-multi-pass-chain" class="md-nav__link">
+    <span class="md-ellipsis">
+      Example: window multi-pass chain
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#window-shader-presets-window-shaders" class="md-nav__link">
+    <span class="md-ellipsis">
+      Window shader presets (window-shaders)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#shaders-in-screencast-and-screenshots" class="md-nav__link">
+    <span class="md-ellipsis">
+      Shaders in screencast and screenshots
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#scope-and-limitations" class="md-nav__link">
+    <span class="md-ellipsis">
+      Scope and Limitations
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+    <a href="https://github.com/niri-wm/niri/edit/main/docs/wiki/Configuration:-Global-Shader.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
+    </a>
+  
+  
+
+
+  <h1>Global Shader</h1>
+
+<h3 id="overview">Overview<a class="headerlink" href="#overview" title="Permanent link">#</a></h3>
+<p>Biri supports a <strong>global post-process shader</strong> that runs over the entire composited output before it is displayed.
+Use it for effects such as colour grading, CRT scanlines, night-light tints, motion-blur trails, or any full-screen visual transformation.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The global shader runs on the <strong>TTY/DRM backend only</strong>.
+It has no effect on the winit (nested/X11) backend.
+By default, screenshots and screen recordings (screencopy / screencast) render <strong>without</strong> shader effects. See <a href="#shaders-in-screencast-and-screenshots">Shaders in screencast and screenshots</a> to opt in via <code>shaders-in-capture</code>.</p>
+</div>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p><strong>Performance cost — read this before enabling.</strong> While a global shader is active, the compositor cannot take any of its normal power-saving shortcuts for that output:
+- <strong>The entire output is redrawn every frame</strong>, continuously, even when nothing on screen changed. There are no partial-damage savings — expect constant GPU load and <strong>significantly higher battery drain</strong> on a laptop.
+- <strong>Direct scanout and overlay-plane offload are disabled</strong>, so full-screen video / games lose their zero-copy fast path while the shader is on.
+- With <code>reads-cursor</code> set, the <strong>hardware cursor is forced to software</strong>, adding extra per-frame GPU cost (and it's worse on NVIDIA).</p>
+<p>This is inherent to a whole-screen post-process pass, not a tuning problem. Treat a global shader as an always-on GPU effect, and turn it off when you don't need it.</p>
+</div>
+<p>When no <code>global-shader</code> block is present (or <code>enable</code> is not set), there is <strong>zero overhead</strong> — the compositor renders exactly as it does without the feature.</p>
+<hr />
+<h3 id="configuration-block">Configuration Block<a class="headerlink" href="#configuration-block" title="Permanent link">#</a></h3>
+<div class="language-kdl highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nl">global-shader</span><span class="w"> </span><span class="o">{</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">    </span><span class="c1">// Activate the shader.</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="nl">    enable</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">    </span><span class="c1">// Inline GLSL source (mutually exclusive with path).</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="nl">    source</span><span class="w"> </span><span class="s">&quot;vec4 global_color(vec3 coord) { return tex2D_screen(coord.xy); }&quot;</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="w">    </span><span class="c1">// Path to a .frag file on disk (mutually exclusive with source).</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="w">    </span><span class="c1">// path &quot;/home/user/.config/niri/my-shader.frag&quot;</span>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="w">    </span><span class="c1">// Shader API flavour: &quot;niri&quot; (default) or &quot;hyprland&quot;.</span>
+</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="nl">    mode</span><span class="w"> </span><span class="s">&quot;niri&quot;</span>
+</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>
+</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a><span class="w">    </span><span class="c1">// Composite the cursor into niri_screen (forces a software cursor).</span>
+</span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a><span class="w">    </span><span class="c1">// reads-cursor</span>
+</span><span id="__span-0-16"><a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>
+</span><span id="__span-0-17"><a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a><span class="w">    </span><span class="c1">// Redraw scheduling: &quot;auto&quot; (default), &quot;on-damage&quot;, or &quot;continuous&quot;.</span>
+</span><span id="__span-0-18"><a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a><span class="nl">    redraw</span><span class="w"> </span><span class="s">&quot;auto&quot;</span>
+</span><span id="__span-0-19"><a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a>
+</span><span id="__span-0-20"><a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a><span class="w">    </span><span class="c1">// For cursor-local effects: reshade/damage only a box of this radius (logical px)</span>
+</span><span id="__span-0-21"><a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a><span class="w">    </span><span class="c1">// around the cursor, leaving the rest of the output scanout-eligible.</span>
+</span><span id="__span-0-22"><a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a><span class="w">    </span><span class="c1">// cursor-radius 200</span>
+</span><span id="__span-0-23"><a id="__codelineno-0-23" name="__codelineno-0-23" href="#__codelineno-0-23"></a><span class="o">}</span>
+</span></code></pre></div>
+<p>Fields:</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>enable</code></td>
+<td>flag</td>
+<td>off</td>
+<td>Activate the shader. Without this, the block is parsed but has no effect.</td>
+</tr>
+<tr>
+<td><code>source</code></td>
+<td>string</td>
+<td>—</td>
+<td>Inline GLSL fragment source. Mutually exclusive with <code>path</code>.</td>
+</tr>
+<tr>
+<td><code>path</code></td>
+<td>string</td>
+<td>—</td>
+<td>Path to a <code>.frag</code> file, re-read whenever the config is reloaded. Editing the <code>.frag</code> file alone does <strong>not</strong> trigger a reload — you must also reload the config (e.g. re-save <code>config.kdl</code>). Mutually exclusive with <code>source</code>.</td>
+</tr>
+<tr>
+<td><code>mode</code></td>
+<td>string</td>
+<td><code>"niri"</code></td>
+<td>API flavour: <code>"niri"</code> or <code>"hyprland"</code>.</td>
+</tr>
+<tr>
+<td><code>reads-cursor</code></td>
+<td>flag</td>
+<td>off</td>
+<td>Include cursor pixels in <code>niri_screen</code>. See <a href="#reads-cursor">reads-cursor</a> below.</td>
+</tr>
+<tr>
+<td><code>redraw</code></td>
+<td>string</td>
+<td><code>"auto"</code></td>
+<td>Redraw scheduling. <code>"auto"</code>: animate every frame only if the shader uses <code>niri_time</code> or the feedback buffer (<code>niri_prev</code>/<code>tex2D_prev</code>); otherwise redraw only on real damage. <code>"on-damage"</code>: never force idle redraws. <code>"continuous"</code>: always redraw every frame. See <a href="#redraw-scheduling">Redraw scheduling</a> below.</td>
+</tr>
+<tr>
+<td><code>cursor-radius</code></td>
+<td>integer (px)</td>
+<td>—</td>
+<td>For cursor-local shaders: reshade and damage only a box of this radius (logical px) around the cursor, preserving direct scanout elsewhere. Omit for a whole-output effect. See <a href="#cursor-radius-region-mode">cursor-radius</a> below.</td>
+</tr>
+<tr>
+<td><code>pass</code></td>
+<td>block (repeatable)</td>
+<td>—</td>
+<td>One pass in a multi-pass chain. When any <code>pass</code> block is present it replaces the top-level <code>source</code>/<code>path</code>. See <a href="#multi-pass-chains-pass">Multi-pass chains</a> below.</td>
+</tr>
+</tbody>
+</table>
+<p>If both <code>source</code> and <code>path</code> are set, or if neither is set while <code>enable</code> is present, biri logs a warning and disables the effect — the compositor never crashes.</p>
+<p>The shader is hot-reloaded whenever the config is reloaded (e.g. after saving the file while niri watches it). A shader that fails to compile also logs a warning and leaves the screen rendering normally.</p>
+<hr />
+<h3 id="niri-mode-default">niri Mode (default)<a class="headerlink" href="#niri-mode-default" title="Permanent link">#</a></h3>
+<p>In niri mode you supply a single GLSL function:</p>
+<div class="language-glsl highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kt">vec4</span><span class="w"> </span><span class="n">global_color</span><span class="p">(</span><span class="kt">vec3</span><span class="w"> </span><span class="n">coord</span><span class="p">);</span>
+</span></code></pre></div>
+<p>Biri wraps it with a <code>main()</code> that passes <code>coord.xy</code> (normalised 0..1 UV coordinates across the output) and writes your return value to <code>gl_FragColor</code>.</p>
+<h4 id="available-uniforms-and-helpers">Available uniforms and helpers<a class="headerlink" href="#available-uniforms-and-helpers" title="Permanent link">#</a></h4>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>niri_time</code></td>
+<td><code>float</code></td>
+<td>Seconds elapsed since the shader was activated.</td>
+</tr>
+<tr>
+<td><code>niri_size</code></td>
+<td><code>vec2</code></td>
+<td>Element dimensions in physical pixels. <strong>In <a href="#cursor-radius-region-mode">region mode</a> this is the box size, not the full output</strong> — use <code>niri_output_size</code> for absolute-pixel math.</td>
+</tr>
+<tr>
+<td><code>niri_scale</code></td>
+<td><code>float</code></td>
+<td>Output scale factor.</td>
+</tr>
+<tr>
+<td><code>niri_cursor</code></td>
+<td><code>vec2</code></td>
+<td>Cursor position in output-local physical pixels.</td>
+</tr>
+<tr>
+<td><code>niri_screen</code></td>
+<td><code>sampler2D</code></td>
+<td>The composited frame below the effect.</td>
+</tr>
+<tr>
+<td><code>niri_prev</code></td>
+<td><code>sampler2D</code></td>
+<td>The previous frame's shader output (effect + screen), via <code>tex2D_prev(uv)</code>.</td>
+</tr>
+<tr>
+<td><code>niri_screen_prev</code></td>
+<td><code>sampler2D</code></td>
+<td>The <strong>previous</strong> frame's screen (no effect), via <code>tex2D_screen_prev(uv)</code>. Use <code>prev − tex2D_screen_prev</code> to recover a feedback trail without scroll-smear.</td>
+</tr>
+<tr>
+<td><code>niri_buffer</code></td>
+<td><code>sampler2D</code></td>
+<td>The dedicated feedback buffer (last frame), via <code>tex2D_buffer(uv)</code>. Equals <code>niri_prev</code> unless you define <code>global_buffer</code> (see below).</td>
+</tr>
+<tr>
+<td><code>niri_region</code></td>
+<td><code>vec4</code></td>
+<td>The region this element covers in output-normalised coords <code>(origin.xy, size.xy)</code>. <code>(0,0,1,1)</code> for a whole-output shader; a sub-box in <a href="#cursor-radius-region-mode">region mode</a>.</td>
+</tr>
+<tr>
+<td><code>niri_output_size</code></td>
+<td><code>vec2</code></td>
+<td>True full-output size in physical pixels. Equals <code>niri_size</code> for a whole-output shader, but <strong>differs in region mode</strong> (where <code>niri_size</code> is the box).</td>
+</tr>
+</tbody>
+</table>
+<p>Convenience helpers (already defined in the prelude):</p>
+<div class="language-glsl highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kt">vec4</span><span class="w"> </span><span class="n">tex2D_screen</span><span class="p">(</span><span class="kt">vec2</span><span class="w"> </span><span class="n">uv</span><span class="p">);</span><span class="w">      </span><span class="c1">// samples the screen below at output-normalised uv</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="kt">vec4</span><span class="w"> </span><span class="n">tex2D_prev</span><span class="p">(</span><span class="kt">vec2</span><span class="w"> </span><span class="n">uv</span><span class="p">);</span><span class="w">        </span><span class="c1">// samples the previous frame&#39;s output at output-normalised uv</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="kt">vec4</span><span class="w"> </span><span class="n">tex2D_screen_prev</span><span class="p">(</span><span class="kt">vec2</span><span class="w"> </span><span class="n">uv</span><span class="p">);</span><span class="w"> </span><span class="c1">// samples the previous frame&#39;s screen (no effect)</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="kt">vec4</span><span class="w"> </span><span class="n">tex2D_buffer</span><span class="p">(</span><span class="kt">vec2</span><span class="w"> </span><span class="n">uv</span><span class="p">);</span><span class="w">      </span><span class="c1">// samples the dedicated feedback buffer (last frame)</span>
+</span></code></pre></div>
+<p><code>coord.xy</code> (passed to <code>global_color</code>) and the <code>uv</code> arguments to <code>tex2D_screen</code>/<code>tex2D_prev</code> are always <strong>output-normalised</strong> (0..1 across the whole output), regardless of region mode.</p>
+<p><strong>Region-mode contract (<code>cursor-radius</code> set):</strong>
+- Use <code>niri_output_size</code> — not <code>niri_size</code> — for absolute-pixel math (e.g. <code>coord.xy * niri_output_size</code> to get physical px). <code>niri_cursor</code> is already in absolute output px.
+- You may only sample <code>tex2D_screen</code>/<code>tex2D_prev</code> <strong>within</strong> the region (near the cursor); samples outside the box clamp to a transparent border.
+- These uniforms exist in <code>niri</code> mode only.</p>
+<p>The GLSL dialect is <strong>GLES2 (<code>#version 100</code>)</strong>.
+Use <code>texture2D()</code>, not <code>texture()</code>.
+Declare varyings with <code>varying</code>, not <code>in</code>/<code>out</code>.</p>
+<h4 id="example-warm-tint">Example: warm tint<a class="headerlink" href="#example-warm-tint" title="Permanent link">#</a></h4>
+<div class="language-kdl highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nl">global-shader</span><span class="w"> </span><span class="o">{</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="nl">    enable</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="nl">    source</span><span class="w"> </span><span class="s">&quot;vec4 global_color(vec3 coord) {</span>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="s">        vec4 c = tex2D_screen(coord.xy);</span>
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="s">        return vec4(c.r * 1.0, c.g * 0.85, c.b * 0.7, c.a);</span>
+</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="s">    }&quot;</span>
+</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="o">}</span>
+</span></code></pre></div>
+<h4 id="example-feedback-trail">Example: feedback trail<a class="headerlink" href="#example-feedback-trail" title="Permanent link">#</a></h4>
+<p>Each frame mixes 5 % of the current screen with 95 % of the previous frame's output.</p>
+<div class="language-kdl highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nl">global-shader</span><span class="w"> </span><span class="o">{</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="nl">    enable</span>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="nl">    source</span><span class="w"> </span><span class="s">&quot;vec4 global_color(vec3 coord) {</span>
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="s">        vec4 current = tex2D_screen(coord.xy);</span>
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="s">        vec4 prev    = tex2D_prev(coord.xy);</span>
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="s">        return mix(prev, current, 0.05);</span>
+</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="s">    }&quot;</span>
+</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="o">}</span>
+</span></code></pre></div>
+<h4 id="example-animated-vignette">Example: animated vignette<a class="headerlink" href="#example-animated-vignette" title="Permanent link">#</a></h4>
+<p>Uses <code>niri_time</code> to pulse the vignette strength.</p>
+<div class="language-kdl highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nl">global-shader</span><span class="w"> </span><span class="o">{</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="nl">    enable</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="nl">    source</span><span class="w"> </span><span class="s">&quot;vec4 global_color(vec3 coord) {</span>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="s">        vec4 c = tex2D_screen(coord.xy);</span>
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="s">        vec2 uv = coord.xy - 0.5;</span>
+</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="s">        float d = dot(uv, uv);</span>
+</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="s">        float pulse = 0.6 + 0.4 * sin(niri_time * 2.0);</span>
+</span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="s">        return c * (1.0 - d * pulse * 3.0);</span>
+</span><span id="__span-5-9"><a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="s">    }&quot;</span>
+</span><span id="__span-5-10"><a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a><span class="o">}</span>
+</span></code></pre></div>
+<hr />
+<h3 id="dedicated-feedback-buffer-global_buffer">Dedicated feedback buffer (<code>global_buffer</code>)<a class="headerlink" href="#dedicated-feedback-buffer-global_buffer" title="Permanent link">#</a></h3>
+<p><code>niri_prev</code> is the previous <em>output</em> — your effect <strong>and</strong> the screen mixed together — so a trail
+recovered from it picks up scrolling/video motion and smears. To avoid that, define an optional
+second function that writes a <strong>screen-independent</strong> feedback buffer:</p>
+<div class="language-glsl highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="kt">vec4</span><span class="w"> </span><span class="n">global_buffer</span><span class="p">(</span><span class="kt">vec3</span><span class="w"> </span><span class="n">coord</span><span class="p">);</span><span class="w">  </span><span class="c1">// returns what to store in niri_buffer this frame</span>
+</span></code></pre></div>
+<p>When present, biri renders <code>global_buffer</code> into a clean offscreen texture each frame (reading
+last frame's buffer via <code>tex2D_buffer</code>), then your <code>global_color</code> reads <strong>this frame's</strong> buffer
+via <code>tex2D_buffer</code> to composite it over the screen. Because the buffer never contains the screen,
+trails don't smear when content scrolls underneath.</p>
+<div class="language-kdl highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="nl">global-shader</span><span class="w"> </span><span class="o">{</span>
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="nl">    enable</span>
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="nl">    source</span><span class="w"> </span><span class="s">&quot;</span>
+</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="s">    vec4 global_buffer(vec3 c){</span>
+</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="s">        vec3 prev = tex2D_buffer(c.xy).rgb;            // pure trail, no screen</span>
+</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="s">        float d = length(c.xy*niri_output_size - niri_cursor);</span>
+</span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="s">        float fresh = smoothstep(18.0, 0.0, d);</span>
+</span><span id="__span-7-8"><a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a><span class="s">        return vec4(max(prev*0.90, vec3(0.2,0.8,1.0)*fresh), 1.0);</span>
+</span><span id="__span-7-9"><a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a><span class="s">    }</span>
+</span><span id="__span-7-10"><a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a><span class="s">    vec4 global_color(vec3 c){</span>
+</span><span id="__span-7-11"><a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a><span class="s">        vec3 s = tex2D_screen(c.xy).rgb;</span>
+</span><span id="__span-7-12"><a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a><span class="s">        vec4 b = tex2D_buffer(c.xy);                   // this frame&#39;s trail</span>
+</span><span id="__span-7-13"><a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a><span class="s">        return vec4(mix(s, b.rgb, length(b.rgb)*0.6), 1.0);</span>
+</span><span id="__span-7-14"><a id="__codelineno-7-14" name="__codelineno-7-14" href="#__codelineno-7-14"></a><span class="s">    }&quot;</span>
+</span><span id="__span-7-15"><a id="__codelineno-7-15" name="__codelineno-7-15" href="#__codelineno-7-15"></a><span class="o">}</span>
+</span></code></pre></div>
+<p>Notes: a <code>global_buffer</code> shader is always treated as animated (redraws every frame, whole-output —
+no region mode). If you omit <code>global_buffer</code>, <code>niri_buffer</code> simply aliases <code>niri_prev</code>. niri mode
+only.</p>
+<hr />
+<h3 id="multi-pass-chains-pass">Multi-pass chains (<code>pass</code>)<a class="headerlink" href="#multi-pass-chains-pass" title="Permanent link">#</a></h3>
+<p>Instead of a single shader, you can run an ordered <strong>chain</strong> of shaders — e.g. blur → grade →
+vignette — where each pass reads the previous pass's output. List the passes as repeatable
+<code>pass {}</code> blocks inside <code>global-shader {}</code>. When one or more <code>pass</code> blocks are present they
+<em>are</em> the chain, and the top-level <code>source</code>/<code>path</code> are ignored.</p>
+<div class="language-kdl highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="nl">global-shader</span><span class="w"> </span><span class="o">{</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="nl">    enable</span>
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="nl">    pass</span><span class="w"> </span><span class="o">{</span>
+</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="nl">        path</span><span class="w"> </span><span class="s">&quot;/home/user/.config/niri/blur.frag&quot;</span>
+</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="w">    </span><span class="o">}</span>
+</span><span id="__span-8-6"><a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="nl">    pass</span><span class="w"> </span><span class="o">{</span>
+</span><span id="__span-8-7"><a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="nl">        source</span><span class="w"> </span><span class="s">&quot;vec4 global_color(vec3 c){ return tex2D_screen(c.xy); }&quot;</span>
+</span><span id="__span-8-8"><a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a><span class="w">    </span><span class="o">}</span>
+</span><span id="__span-8-9"><a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a><span class="nl">    pass</span><span class="w"> </span><span class="o">{</span>
+</span><span id="__span-8-10"><a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a><span class="nl">        path</span><span class="w"> </span><span class="s">&quot;/home/user/.config/niri/vignette.frag&quot;</span>
+</span><span id="__span-8-11"><a id="__codelineno-8-11" name="__codelineno-8-11" href="#__codelineno-8-11"></a><span class="nl">        mode</span><span class="w"> </span><span class="s">&quot;niri&quot;</span>
+</span><span id="__span-8-12"><a id="__codelineno-8-12" name="__codelineno-8-12" href="#__codelineno-8-12"></a><span class="w">    </span><span class="o">}</span>
+</span><span id="__span-8-13"><a id="__codelineno-8-13" name="__codelineno-8-13" href="#__codelineno-8-13"></a><span class="o">}</span>
+</span></code></pre></div>
+<p>Each pass is an ordinary <code>global_color</code> shader (or a <code>hyprland</code>-mode raw shader). What it sees:</p>
+<table>
+<thead>
+<tr>
+<th>Sampler / helper</th>
+<th>Meaning for pass <em>N</em></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>niri_screen</code> / <code>tex2D_screen</code></td>
+<td>this pass's <strong>input</strong> = pass <em>N−1</em>'s output. Pass 0 = the real composited screen.</td>
+</tr>
+<tr>
+<td><code>niri_source</code> / <code>tex2D_source</code></td>
+<td>the <strong>original</strong> composited screen, unfiltered — the same for every pass.</td>
+</tr>
+<tr>
+<td><code>niri_prev</code> / <code>tex2D_prev</code></td>
+<td>this pass's <strong>own</strong> output from last frame (per-pass feedback).</td>
+</tr>
+<tr>
+<td><code>niri_screen_prev</code> / <code>tex2D_screen_prev</code></td>
+<td>the previous frame's real screen (frame-level, all passes).</td>
+</tr>
+<tr>
+<td><code>niri_buffer</code> / <code>tex2D_buffer</code> + <code>global_buffer</code></td>
+<td>this pass's own dedicated accumulator (see above), per pass.</td>
+</tr>
+</tbody>
+</table>
+<p>Because pass 0 reads the real screen as <code>niri_screen</code> (for pass 0, <code>niri_source</code> and <code>niri_screen</code>
+both point to the real screen; later passes still see the original via <code>niri_source</code>), with
+<code>niri_prev</code> being its own last output, <strong>any existing single shader drops into a chain unchanged</strong>,
+and a chain of one pass behaves exactly like the single-shader form.</p>
+<p>The whole-chain flags still live on the outer <code>global-shader {}</code> block: <code>reads-cursor</code> governs
+whether cursor pixels appear in <code>niri_screen</code> for the entire chain, and <code>redraw</code> controls the
+chain's scheduling.</p>
+<p>Per-pass fields:</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>source</code></td>
+<td>string</td>
+<td>—</td>
+<td>Inline GLSL for this pass. Mutually exclusive with <code>path</code>.</td>
+</tr>
+<tr>
+<td><code>path</code></td>
+<td>string</td>
+<td>—</td>
+<td>Path to a <code>.frag</code> file for this pass. Mutually exclusive with <code>source</code>.</td>
+</tr>
+<tr>
+<td><code>mode</code></td>
+<td>string</td>
+<td>the block's <code>mode</code></td>
+<td>API flavour for this pass: <code>"niri"</code> or <code>"hyprland"</code>. Lets you mix a hyprland pass into a niri chain.</td>
+</tr>
+</tbody>
+</table>
+<p>Notes: a multi-pass chain (two or more passes) is always whole-output — <code>cursor-radius</code> region
+mode applies only to a single-pass effect. The chain is treated as animated if <strong>any</strong> pass uses
+<code>niri_time</code>, feedback (<code>niri_prev</code>/<code>niri_screen_prev</code>), or a <code>global_buffer</code>. If any pass fails to
+resolve or compile, the whole chain is disabled and the screen renders normally. A <code>hyprland</code>-mode
+pass uses its own prelude and does not see the niri samplers (<code>niri_source</code>, <code>niri_buffer</code>, …).</p>
+<hr />
+<h3 id="hyprland-mode">hyprland Mode<a class="headerlink" href="#hyprland-mode" title="Permanent link">#</a></h3>
+<p>In hyprland mode you supply a complete raw fragment shader with its own <code>main()</code> that writes <code>gl_FragColor</code>.
+This is intended to make Hyprland community <code>screen_shader</code>s work with minimal changes.</p>
+<p>The following aliases are pre-defined so that typical Hyprland shaders compile without modification:</p>
+<table>
+<thead>
+<tr>
+<th>Alias</th>
+<th>Resolves to</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>tex</code></td>
+<td><code>niri_screen</code> (screen sampler)</td>
+</tr>
+<tr>
+<td><code>v_texcoord</code></td>
+<td>normalised UV varying</td>
+</tr>
+<tr>
+<td><code>time</code></td>
+<td><code>niri_time</code></td>
+</tr>
+<tr>
+<td><code>wl_output</code></td>
+<td><code>0</code> (integer constant)</td>
+</tr>
+</tbody>
+</table>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><code>niri_cursor</code> is <strong>not</strong> available in hyprland mode.</p>
+</div>
+<h4 id="compatibility-caveat">Compatibility caveat<a class="headerlink" href="#compatibility-caveat" title="Permanent link">#</a></h4>
+<p>Only the <strong>GLES2 (<code>#version 100</code>)</strong> dialect is supported.
+Hyprland shaders written as <code>#version 300 es</code> need the following manual edits before use:</p>
+<ul>
+<li><code>texture(sampler, uv)</code> → <code>texture2D(sampler, uv)</code></li>
+<li><code>out vec4 fragColor;</code> … <code>fragColor = …</code> → <code>gl_FragColor = …</code></li>
+<li><code>in vec2 v_texcoord;</code> → <code>varying vec2 v_texcoord;</code></li>
+</ul>
+<h4 id="example-load-a-hyprland-shader-from-a-file">Example: load a Hyprland shader from a file<a class="headerlink" href="#example-load-a-hyprland-shader-from-a-file" title="Permanent link">#</a></h4>
+<div class="language-kdl highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="nl">global-shader</span><span class="w"> </span><span class="o">{</span>
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="nl">    enable</span>
+</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="nl">    path</span><span class="w"> </span><span class="s">&quot;/home/user/.config/niri/crt.frag&quot;</span>
+</span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="nl">    mode</span><span class="w"> </span><span class="s">&quot;hyprland&quot;</span>
+</span><span id="__span-9-5"><a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="o">}</span>
+</span></code></pre></div>
+<hr />
+<h3 id="reads-cursor">reads-cursor<a class="headerlink" href="#reads-cursor" title="Permanent link">#</a></h3>
+<p>By default, the hardware cursor is composited on a separate plane after the shader runs.
+This means:</p>
+<ul>
+<li>The cursor is <strong>not</strong> included in <code>niri_screen</code>, so shaders cannot transform it.</li>
+<li><code>niri_cursor</code> (position) is still available for cursor-following effects (glow, ripple, etc.).</li>
+<li>The hardware cursor plane is used — minimal GPU cost, no cursor lag.</li>
+</ul>
+<p>When <code>reads-cursor</code> is set:</p>
+<ul>
+<li>Biri composites the cursor into the screen texture <strong>before</strong> running the shader, so <code>niri_screen</code> contains the actual cursor pixels.</li>
+<li>This <strong>forces a software cursor</strong> for that output, which carries a measurable GPU and battery cost (especially on Nvidia).</li>
+</ul>
+<p>Use <code>reads-cursor</code> only when your shader needs to transform the cursor pixels themselves (e.g. colour-inverting the cursor region).</p>
+<div class="language-kdl highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="nl">global-shader</span><span class="w"> </span><span class="o">{</span>
+</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="nl">    enable</span>
+</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="nl">    source</span><span class="w"> </span><span class="s">&quot;vec4 global_color(vec3 coord) {</span>
+</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="s">        return tex2D_screen(coord.xy);</span>
+</span><span id="__span-10-5"><a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a><span class="s">    }&quot;</span>
+</span><span id="__span-10-6"><a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a><span class="nl">    reads-cursor</span>
+</span><span id="__span-10-7"><a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a><span class="o">}</span>
+</span></code></pre></div>
+<hr />
+<h3 id="hot-reload">Hot-Reload<a class="headerlink" href="#hot-reload" title="Permanent link">#</a></h3>
+<p>Any change to the <code>global-shader</code> block takes effect the next time niri reloads its config. When using <code>path</code>, the file is re-read on config reload only — editing the <code>.frag</code> file by itself does not trigger a reload, so re-save your <code>config.kdl</code> (or otherwise reload the config) to pick up shader-file edits.
+If the new shader fails to compile, the old shader (if any) continues running and a warning is logged — the compositor never crashes.</p>
+<hr />
+<h3 id="redraw-scheduling">Redraw scheduling<a class="headerlink" href="#redraw-scheduling" title="Permanent link">#</a></h3>
+<p>By default (<code>redraw "auto"</code>) biri scans your shader source to decide how often to redraw:</p>
+<ul>
+<li>If it references <code>niri_time</code> or the feedback buffer (<code>niri_prev</code> / <code>tex2D_prev</code>), the effect is <strong>animated</strong>, so biri redraws every frame — it keeps animating even when the desktop is completely idle.</li>
+<li>Otherwise the effect is a pure function of the screen below, so biri redraws <strong>only when something actually changes</strong> (no wasted GPU when idle).</li>
+</ul>
+<p>Override this with <code>redraw</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Value</th>
+<th>Behaviour</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>"auto"</code> (default)</td>
+<td>Animate every frame iff the shader uses <code>niri_time</code>/<code>niri_prev</code>/<code>tex2D_prev</code>.</td>
+</tr>
+<tr>
+<td><code>"on-damage"</code></td>
+<td>Never force idle redraws — animate only when other on-screen activity triggers a frame.</td>
+</tr>
+<tr>
+<td><code>"continuous"</code></td>
+<td>Always redraw every frame, even for a static shader.</td>
+</tr>
+</tbody>
+</table>
+<p>The same <code>auto</code> scan drives region and per-window shaders, which have no <code>redraw</code> setting of their own. To limit how fast any of them animate, see <a href="#shader-animation-max-fps"><code>shader-animation-max-fps</code></a>.</p>
+<p>The scan is a literal text match, so it errs on the side of <em>more</em> redraws (e.g. an identifier like <code>lifetime</code> in a <code>hyprland</code>-mode shader counts as using <code>time</code>). Use <code>redraw "on-damage"</code> to opt out if that happens.</p>
+<div class="language-kdl highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="nl">global-shader</span><span class="w"> </span><span class="o">{</span>
+</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="nl">    enable</span>
+</span><span id="__span-11-3"><a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="nl">    source</span><span class="w"> </span><span class="s">&quot;vec4 global_color(vec3 c) { return tex2D_screen(c.xy); }&quot;</span>
+</span><span id="__span-11-4"><a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="nl">    cursor-radius</span><span class="w"> </span><span class="m m-Decimal">200</span>
+</span><span id="__span-11-5"><a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a><span class="nl">    redraw</span><span class="w"> </span><span class="s">&quot;auto&quot;</span>
+</span><span id="__span-11-6"><a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a><span class="o">}</span>
+</span></code></pre></div>
+<hr />
+<h3 id="shader-animation-max-fps">shader-animation-max-fps<a class="headerlink" href="#shader-animation-max-fps" title="Permanent link">#</a></h3>
+<p>A top-level setting that caps how often shader-driven redraws happen, across <strong>all</strong> shader scopes (global, region, and per-window):</p>
+<div class="language-kdl highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="nl">shader-animation-max-fps</span><span class="w"> </span><span class="m m-Decimal">30</span>
+</span></code></pre></div>
+<p>Without it (or with <code>0</code>) an animated shader recomposites at the output's native refresh rate — 144 recomposites/sec on a 144 Hz panel, even when the desktop is otherwise idle. With a cap set, biri renders one shader frame and then schedules the next from a one-shot timer instead of the vblank loop, so an idle animated shader runs at roughly the configured rate.</p>
+<p>The cap applies only when shaders are the <em>sole</em> reason to redraw. Shaders riding along with a real animation — a window drag, a workspace switch, the overview — are never throttled, so nothing else gets choppy.</p>
+<hr />
+<h3 id="cursor-radius-region-mode">cursor-radius (region mode)<a class="headerlink" href="#cursor-radius-region-mode" title="Permanent link">#</a></h3>
+<p>For effects that only touch the area around the cursor (a ring, spotlight, magnifier), set <code>cursor-radius</code> to the effect's radius in logical pixels. Biri then reshades and damages only a box of that size around the cursor instead of the whole output, so the rest of the screen keeps direct scanout / overlay-plane offload and the GPU cost drops sharply.</p>
+<p>Region mode applies only when the shader uses <code>niri_cursor</code> and is <strong>not</strong> animated (no <code>niri_time</code> / feedback) — an animated whole-screen effect still reshades the whole output. Because it keys off <code>niri_cursor</code>, region mode is <strong><code>niri</code> mode only</strong>; <code>hyprland</code>-mode shaders (which have no cursor uniform) always render whole-output and <code>cursor-radius</code> is ignored for them. The coordinate contract for region-mode shaders is documented under <a href="#niri-mode-default">niri Mode</a>.</p>
+<hr />
+<h3 id="performance-summary">Performance Summary<a class="headerlink" href="#performance-summary" title="Permanent link">#</a></h3>
+<table>
+<thead>
+<tr>
+<th>Condition</th>
+<th>Overhead</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>No <code>global-shader</code> block</td>
+<td>Zero</td>
+</tr>
+<tr>
+<td><code>global-shader</code> block present, <code>enable</code> absent</td>
+<td>Zero</td>
+</tr>
+<tr>
+<td><code>enable</code> set, valid shader</td>
+<td>Full-frame redraw every frame; no direct scanout; overlay planes disabled</td>
+</tr>
+<tr>
+<td><code>reads-cursor</code> additionally set</td>
+<td>As above, plus software cursor (extra GPU cost)</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h3 id="region-shaders">Region shaders<a class="headerlink" href="#region-shaders" title="Permanent link">#</a></h3>
+<p>A <code>region-shader {}</code> block runs a post-process shader scoped to a fixed screen rectangle instead of the whole output. It is independent of <code>global-shader</code> — you can have both active simultaneously, and you can repeat <code>region-shader {}</code> as many times as you need (they draw in config order).</p>
+<div class="language-kdl highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="nl">region-shader</span><span class="w"> </span><span class="o">{</span>
+</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="nl">    geometry</span><span class="w"> </span><span class="na">x=</span><span class="m m-Decimal">100</span><span class="w"> </span><span class="na">y=</span><span class="m m-Decimal">100</span><span class="w"> </span><span class="na">width=</span><span class="m m-Decimal">800</span><span class="w"> </span><span class="na">height=</span><span class="m m-Decimal">600</span>
+</span><span id="__span-13-3"><a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="nl">    source</span><span class="w"> </span><span class="s">&quot;vec4 global_color(vec3 c){ vec3 s=tex2D_screen(c.xy).rgb; return vec4(s.bgr,1.0); }&quot;</span>
+</span><span id="__span-13-4"><a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="o">}</span>
+</span></code></pre></div>
+<h4 id="fields">Fields<a class="headerlink" href="#fields" title="Permanent link">#</a></h4>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>geometry</code></td>
+<td>node</td>
+<td>—</td>
+<td>Defines the rectangle. All four properties <code>x</code>, <code>y</code>, <code>width</code>, <code>height</code> are logical pixels (pre-scale).</td>
+</tr>
+<tr>
+<td><code>output</code></td>
+<td>string</td>
+<td>—</td>
+<td>Optional output name (e.g. <code>"DP-1"</code>). When set, the region is only applied on that output. When absent, the same rectangle is applied on every output.</td>
+</tr>
+<tr>
+<td><code>source</code></td>
+<td>string</td>
+<td>—</td>
+<td>Inline GLSL source. Same <code>global_color</code> contract as <code>global-shader</code>. Mutually exclusive with <code>path</code>.</td>
+</tr>
+<tr>
+<td><code>path</code></td>
+<td>string</td>
+<td>—</td>
+<td>Path to a <code>.frag</code> file. Mutually exclusive with <code>source</code>.</td>
+</tr>
+<tr>
+<td><code>mode</code></td>
+<td>string</td>
+<td><code>"niri"</code></td>
+<td>API flavour: <code>"niri"</code> or <code>"hyprland"</code>.</td>
+</tr>
+<tr>
+<td><code>pass</code></td>
+<td>block (repeatable)</td>
+<td>—</td>
+<td>Multi-pass chain — same syntax as <code>global-shader</code>. When any <code>pass</code> blocks are present, the top-level <code>source</code>/<code>path</code> are ignored. See <a href="#multi-pass-chains-pass">Multi-pass chains</a>.</td>
+</tr>
+</tbody>
+</table>
+<h4 id="shader-contract">Shader contract<a class="headerlink" href="#shader-contract" title="Permanent link">#</a></h4>
+<p>A region shader uses the same <code>global_color</code> function and uniforms as <code>global-shader</code> — see <a href="#niri-mode-default">niri Mode</a> for the full uniform table. The key difference is scope:</p>
+<ul>
+<li><code>niri_screen</code> (and <code>tex2D_screen</code>) samples the composited pixels <strong>inside the region rectangle</strong> only. Samples outside the rectangle clamp to a transparent border.</li>
+<li><code>niri_size</code> is the region rectangle's dimensions in physical pixels (not the full output). Use <code>niri_output_size</code> for absolute-pixel math when needed.</li>
+<li><code>niri_region</code> is <code>(origin.xy, size.xy)</code> in output-normalised coords for this region box.</li>
+<li><code>coord.xy</code> passed to <code>global_color</code> and the <code>uv</code> arguments to <code>tex2D_screen</code> are <strong>output-normalised</strong> (0..1 across the whole output), as with <code>global-shader</code>.</li>
+</ul>
+<p>Multi-pass chains work the same way as for <code>global-shader</code> — each pass reads the previous pass's output as <code>niri_screen</code>, and <code>niri_source</code> always holds the original composited pixels for the region.</p>
+<h4 id="v1-limits">v1 limits<a class="headerlink" href="#v1-limits" title="Permanent link">#</a></h4>
+<ul>
+<li><strong>No per-scope feedback.</strong> <code>niri_prev</code>, <code>niri_screen_prev</code>, and <code>niri_buffer</code> all alias <code>niri_screen</code> (the current composited pixels in the rect), and <code>global_buffer</code> is ignored. There is no previous-frame feedback within a region shader in this release.</li>
+<li><strong>No <code>reads-cursor</code> or <code>redraw</code> controls.</strong> Redraw is automatic: a region shader redraws when the composited content under its rectangle changes, and — if it uses <code>niri_time</code> — every frame (the same <code>auto</code> behaviour as <code>global-shader</code>, with the same continuous-GPU-load cost).</li>
+<li><strong>No overlap compositing.</strong> Overlapping regions draw independently in config order; no blending between them is performed.</li>
+</ul>
+<h4 id="example-channel-swap-over-a-rectangle">Example: channel-swap over a rectangle<a class="headerlink" href="#example-channel-swap-over-a-rectangle" title="Permanent link">#</a></h4>
+<div class="language-kdl highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="nl">region-shader</span><span class="w"> </span><span class="o">{</span>
+</span><span id="__span-14-2"><a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a><span class="nl">    geometry</span><span class="w"> </span><span class="na">x=</span><span class="m m-Decimal">0</span><span class="w"> </span><span class="na">y=</span><span class="m m-Decimal">0</span><span class="w"> </span><span class="na">width=</span><span class="m m-Decimal">960</span><span class="w"> </span><span class="na">height=</span><span class="m m-Decimal">540</span>
+</span><span id="__span-14-3"><a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a><span class="nl">    output</span><span class="w"> </span><span class="s">&quot;HDMI-A-1&quot;</span>
+</span><span id="__span-14-4"><a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="nl">    source</span><span class="w"> </span><span class="s">&quot;vec4 global_color(vec3 c){ vec3 s=tex2D_screen(c.xy).rgb; return vec4(s.bgr,1.0); }&quot;</span>
+</span><span id="__span-14-5"><a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a><span class="o">}</span>
+</span></code></pre></div>
+<h4 id="example-two-independent-regions">Example: two independent regions<a class="headerlink" href="#example-two-independent-regions" title="Permanent link">#</a></h4>
+<p>Multiple <code>region-shader</code> blocks are independent. They compile separately if their sources differ (only one compiled shader is kept per unique source).</p>
+<div class="language-kdl highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="nl">region-shader</span><span class="w"> </span><span class="o">{</span>
+</span><span id="__span-15-2"><a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a><span class="nl">    geometry</span><span class="w"> </span><span class="na">x=</span><span class="m m-Decimal">0</span><span class="w"> </span><span class="na">y=</span><span class="m m-Decimal">0</span><span class="w"> </span><span class="na">width=</span><span class="m m-Decimal">1920</span><span class="w"> </span><span class="na">height=</span><span class="m m-Decimal">40</span>
+</span><span id="__span-15-3"><a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a><span class="nl">    source</span><span class="w"> </span><span class="s">&quot;vec4 global_color(vec3 c){ vec4 s=tex2D_screen(c.xy); return vec4(s.r*1.0,s.g*0.5,s.b*0.5,s.a); }&quot;</span>
+</span><span id="__span-15-4"><a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a><span class="o">}</span>
+</span><span id="__span-15-5"><a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a><span class="nl">region-shader</span><span class="w"> </span><span class="o">{</span>
+</span><span id="__span-15-6"><a id="__codelineno-15-6" name="__codelineno-15-6" href="#__codelineno-15-6"></a><span class="nl">    geometry</span><span class="w"> </span><span class="na">x=</span><span class="m m-Decimal">0</span><span class="w"> </span><span class="na">y=</span><span class="m m-Decimal">1040</span><span class="w"> </span><span class="na">width=</span><span class="m m-Decimal">1920</span><span class="w"> </span><span class="na">height=</span><span class="m m-Decimal">40</span>
+</span><span id="__span-15-7"><a id="__codelineno-15-7" name="__codelineno-15-7" href="#__codelineno-15-7"></a><span class="nl">    source</span><span class="w"> </span><span class="s">&quot;vec4 global_color(vec3 c){ vec4 s=tex2D_screen(c.xy); return vec4(s.r*0.5,s.g*1.0,s.b*0.5,s.a); }&quot;</span>
+</span><span id="__span-15-8"><a id="__codelineno-15-8" name="__codelineno-15-8" href="#__codelineno-15-8"></a><span class="o">}</span>
+</span></code></pre></div>
+<h4 id="example-region-multi-pass-chain">Example: region multi-pass chain<a class="headerlink" href="#example-region-multi-pass-chain" title="Permanent link">#</a></h4>
+<div class="language-kdl highlight"><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="nl">region-shader</span><span class="w"> </span><span class="o">{</span>
+</span><span id="__span-16-2"><a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a><span class="nl">    geometry</span><span class="w"> </span><span class="na">x=</span><span class="m m-Decimal">200</span><span class="w"> </span><span class="na">y=</span><span class="m m-Decimal">200</span><span class="w"> </span><span class="na">width=</span><span class="m m-Decimal">400</span><span class="w"> </span><span class="na">height=</span><span class="m m-Decimal">300</span>
+</span><span id="__span-16-3"><a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a><span class="nl">    pass</span><span class="w"> </span><span class="o">{</span>
+</span><span id="__span-16-4"><a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a><span class="nl">        source</span><span class="w"> </span><span class="s">&quot;vec4 global_color(vec3 c){ return tex2D_screen(c.xy); }&quot;</span>
+</span><span id="__span-16-5"><a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a><span class="w">    </span><span class="o">}</span>
+</span><span id="__span-16-6"><a id="__codelineno-16-6" name="__codelineno-16-6" href="#__codelineno-16-6"></a><span class="nl">    pass</span><span class="w"> </span><span class="o">{</span>
+</span><span id="__span-16-7"><a id="__codelineno-16-7" name="__codelineno-16-7" href="#__codelineno-16-7"></a><span class="nl">        source</span><span class="w"> </span><span class="s">&quot;vec4 global_color(vec3 c){ vec4 s=tex2D_screen(c.xy); return vec4(1.0-s.r,1.0-s.g,1.0-s.b,s.a); }&quot;</span>
+</span><span id="__span-16-8"><a id="__codelineno-16-8" name="__codelineno-16-8" href="#__codelineno-16-8"></a><span class="w">    </span><span class="o">}</span>
+</span><span id="__span-16-9"><a id="__codelineno-16-9" name="__codelineno-16-9" href="#__codelineno-16-9"></a><span class="o">}</span>
+</span></code></pre></div>
+<hr />
+<h3 id="per-window-shaders">Per-window shaders<a class="headerlink" href="#per-window-shaders" title="Permanent link">#</a></h3>
+<p>A <code>shader {}</code> block inside a <code>window-rule {}</code> applies a post-process shader to a single window's content.
+The effect is independent of <code>global-shader</code> and <code>region-shader</code> — all three can be active at the same time.</p>
+<div class="language-kdl highlight"><pre><span></span><code><span id="__span-17-1"><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="nl">window-rule</span><span class="w"> </span><span class="o">{</span>
+</span><span id="__span-17-2"><a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a><span class="nl">    match</span><span class="w"> </span><span class="na">app-id=</span><span class="s">&quot;Alacritty&quot;</span>
+</span><span id="__span-17-3"><a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a><span class="nl">    shader</span><span class="w"> </span><span class="o">{</span>
+</span><span id="__span-17-4"><a id="__codelineno-17-4" name="__codelineno-17-4" href="#__codelineno-17-4"></a><span class="nl">        source</span><span class="w"> </span><span class="s">&quot;vec4 global_color(vec3 c){ vec3 s=tex2D_screen(c.xy).rgb; float g=dot(s,vec3(0.299,0.587,0.114)); return vec4(vec3(g),1.0); }&quot;</span>
+</span><span id="__span-17-5"><a id="__codelineno-17-5" name="__codelineno-17-5" href="#__codelineno-17-5"></a><span class="w">    </span><span class="o">}</span>
+</span><span id="__span-17-6"><a id="__codelineno-17-6" name="__codelineno-17-6" href="#__codelineno-17-6"></a><span class="o">}</span>
+</span></code></pre></div>
+<h4 id="fields_1">Fields<a class="headerlink" href="#fields_1" title="Permanent link">#</a></h4>
+<p>The <code>shader {}</code> child accepts the same source fields as <code>region-shader</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>source</code></td>
+<td>string</td>
+<td>—</td>
+<td>Inline GLSL source. Same <code>global_color</code> contract as <code>global-shader</code>. Mutually exclusive with <code>path</code>.</td>
+</tr>
+<tr>
+<td><code>path</code></td>
+<td>string</td>
+<td>—</td>
+<td>Path to a <code>.frag</code> file. Mutually exclusive with <code>source</code>.</td>
+</tr>
+<tr>
+<td><code>mode</code></td>
+<td>string</td>
+<td><code>"niri"</code></td>
+<td>API flavour: <code>"niri"</code> or <code>"hyprland"</code>.</td>
+</tr>
+<tr>
+<td><code>pass</code></td>
+<td>block (repeatable)</td>
+<td>—</td>
+<td>Multi-pass chain — same syntax as <code>global-shader</code>. When any <code>pass</code> blocks are present, the top-level <code>source</code>/<code>path</code> are ignored. See <a href="#multi-pass-chains-pass">Multi-pass chains</a>.</td>
+</tr>
+</tbody>
+</table>
+<h4 id="shader-contract_1">Shader contract<a class="headerlink" href="#shader-contract_1" title="Permanent link">#</a></h4>
+<p>A window shader uses the same <code>global_color</code> function and uniforms as <code>global-shader</code> and <code>region-shader</code> — see <a href="#niri-mode-default">niri Mode</a> for the full uniform table. The key scoping differences:</p>
+<ul>
+<li><code>niri_screen</code> (and <code>tex2D_screen</code>) samples the <strong>window's own content</strong> only.</li>
+<li><code>niri_size</code> is the window's physical size in pixels.</li>
+<li><code>coord.xy</code> passed to <code>global_color</code> is 0..1 across the window.</li>
+<li><code>niri_region</code> is always <code>(0,0,1,1)</code> for a window shader (the shader covers the whole window).</li>
+<li>Border, shadow, and focus-ring decorations are rendered <strong>outside</strong> the shader, unaffected.</li>
+</ul>
+<p>Multiple windows with a <code>shader {}</code> rule are independent: each is shaded separately, and windows that share an identical shader source share a compiled program (deduplication is automatic).</p>
+<p>Multi-pass chains work the same way as for <code>global-shader</code> — each pass reads the previous pass's output as <code>niri_screen</code>, and <code>niri_source</code> holds the original window content.</p>
+<h4 id="animation">Animation<a class="headerlink" href="#animation" title="Permanent link">#</a></h4>
+<p>Window shaders animate: <code>niri_time</code> is the compositor's shared shader clock (seconds since startup), the same origin used by <code>global-shader</code> and <code>region-shader</code>, so several shaded windows stay in phase with each other and with a global shader.</p>
+<p>Redraw scheduling is automatic — there is no per-window <code>redraw</code> setting:</p>
+<ul>
+<li>A window shader whose source references <code>niri_time</code> keeps the output redrawing every frame while that window is on screen, exactly like an animated <code>global-shader</code> (with the same continuous-GPU-load cost).</li>
+<li>A shader that doesn't reference <code>niri_time</code> imposes no continuous-redraw cost; it re-runs when the window's own content is damaged.</li>
+<li>Only <strong>visible</strong> animating windows force redraws. A shaded window on an inactive workspace, or scrolled off the viewport, does not keep the GPU busy. While the overview is open, all windows on the output are treated as visible, since the overview shows several workspaces at once.</li>
+</ul>
+<p>Use <a href="#shader-animation-max-fps"><code>shader-animation-max-fps</code></a> to cap the rate of shader-driven redraws.</p>
+<h4 id="limits">Limits<a class="headerlink" href="#limits" title="Permanent link">#</a></h4>
+<ul>
+<li><strong>No cursor reactivity.</strong> <code>niri_cursor</code> is always <code>(0.0, 0.0)</code> for window shaders. Do not write window shaders that depend on it; use <code>global-shader</code> or <code>region-shader</code> for cursor-driven effects.</li>
+<li><strong><code>niri_time</code> is live on the display, but <code>0.0</code> in a few paths.</strong> Window shaders animate normally on screen (see <a href="#animation">Animation</a> above), but <code>niri_time</code> is fixed at <code>0.0</code> in single-window screencasts (the <code>render_windows_for_screen_cast</code> path has no access to the compositor time origin) and in unmap/close snapshots. Full-output captures use the live clock.</li>
+<li><strong>No per-scope feedback.</strong> <code>niri_prev</code>, <code>niri_screen_prev</code>, and <code>niri_buffer</code> all alias <code>niri_screen</code> (the current window content), and <code>global_buffer</code> is ignored. There is no previous-frame feedback within a window shader in this release.</li>
+<li><strong>Corner-rounding is not applied inside the shader.</strong> The shaded result is drawn over the window's full rectangle, so a window with <code>corner-radius</code> configured will appear with <strong>square corners</strong> while a window shader is active — the rounded clipping that normally happens at composite time does not apply to the shaded result.</li>
+<li><strong>Content only.</strong> The shader cannot see or affect border, shadow, focus-ring, or any other decoration — those are composited around the result after the shader runs.</li>
+<li><strong>No <code>reads-cursor</code> or <code>redraw</code> controls.</strong> Redraw is automatic, as described under <a href="#animation">Animation</a> above.</li>
+</ul>
+<h4 id="example-grayscale-on-one-app">Example: grayscale on one app<a class="headerlink" href="#example-grayscale-on-one-app" title="Permanent link">#</a></h4>
+<div class="language-kdl highlight"><pre><span></span><code><span id="__span-18-1"><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a><span class="nl">window-rule</span><span class="w"> </span><span class="o">{</span>
+</span><span id="__span-18-2"><a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a><span class="nl">    match</span><span class="w"> </span><span class="na">app-id=</span><span class="s">&quot;Alacritty&quot;</span>
+</span><span id="__span-18-3"><a id="__codelineno-18-3" name="__codelineno-18-3" href="#__codelineno-18-3"></a><span class="nl">    shader</span><span class="w"> </span><span class="o">{</span>
+</span><span id="__span-18-4"><a id="__codelineno-18-4" name="__codelineno-18-4" href="#__codelineno-18-4"></a><span class="nl">        source</span><span class="w"> </span><span class="s">&quot;vec4 global_color(vec3 c){ vec3 s=tex2D_screen(c.xy).rgb; float g=dot(s,vec3(0.299,0.587,0.114)); return vec4(vec3(g),1.0); }&quot;</span>
+</span><span id="__span-18-5"><a id="__codelineno-18-5" name="__codelineno-18-5" href="#__codelineno-18-5"></a><span class="w">    </span><span class="o">}</span>
+</span><span id="__span-18-6"><a id="__codelineno-18-6" name="__codelineno-18-6" href="#__codelineno-18-6"></a><span class="o">}</span>
+</span></code></pre></div>
+<h4 id="example-invert-one-window">Example: invert one window<a class="headerlink" href="#example-invert-one-window" title="Permanent link">#</a></h4>
+<div class="language-kdl highlight"><pre><span></span><code><span id="__span-19-1"><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a><span class="nl">window-rule</span><span class="w"> </span><span class="o">{</span>
+</span><span id="__span-19-2"><a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a><span class="nl">    match</span><span class="w"> </span><span class="na">app-id=</span><span class="s">&quot;firefox&quot;</span>
+</span><span id="__span-19-3"><a id="__codelineno-19-3" name="__codelineno-19-3" href="#__codelineno-19-3"></a><span class="nl">    shader</span><span class="w"> </span><span class="o">{</span>
+</span><span id="__span-19-4"><a id="__codelineno-19-4" name="__codelineno-19-4" href="#__codelineno-19-4"></a><span class="nl">        source</span><span class="w"> </span><span class="s">&quot;vec4 global_color(vec3 c){ vec4 s=tex2D_screen(c.xy); return vec4(1.0-s.r,1.0-s.g,1.0-s.b,s.a); }&quot;</span>
+</span><span id="__span-19-5"><a id="__codelineno-19-5" name="__codelineno-19-5" href="#__codelineno-19-5"></a><span class="w">    </span><span class="o">}</span>
+</span><span id="__span-19-6"><a id="__codelineno-19-6" name="__codelineno-19-6" href="#__codelineno-19-6"></a><span class="o">}</span>
+</span></code></pre></div>
+<h4 id="example-window-multi-pass-chain">Example: window multi-pass chain<a class="headerlink" href="#example-window-multi-pass-chain" title="Permanent link">#</a></h4>
+<div class="language-kdl highlight"><pre><span></span><code><span id="__span-20-1"><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a><span class="nl">window-rule</span><span class="w"> </span><span class="o">{</span>
+</span><span id="__span-20-2"><a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a><span class="nl">    match</span><span class="w"> </span><span class="na">app-id=</span><span class="s">&quot;code&quot;</span>
+</span><span id="__span-20-3"><a id="__codelineno-20-3" name="__codelineno-20-3" href="#__codelineno-20-3"></a><span class="nl">    shader</span><span class="w"> </span><span class="o">{</span>
+</span><span id="__span-20-4"><a id="__codelineno-20-4" name="__codelineno-20-4" href="#__codelineno-20-4"></a><span class="nl">        pass</span><span class="w"> </span><span class="o">{</span>
+</span><span id="__span-20-5"><a id="__codelineno-20-5" name="__codelineno-20-5" href="#__codelineno-20-5"></a><span class="nl">            source</span><span class="w"> </span><span class="s">&quot;vec4 global_color(vec3 c){ return tex2D_screen(c.xy); }&quot;</span>
+</span><span id="__span-20-6"><a id="__codelineno-20-6" name="__codelineno-20-6" href="#__codelineno-20-6"></a><span class="w">        </span><span class="o">}</span>
+</span><span id="__span-20-7"><a id="__codelineno-20-7" name="__codelineno-20-7" href="#__codelineno-20-7"></a><span class="nl">        pass</span><span class="w"> </span><span class="o">{</span>
+</span><span id="__span-20-8"><a id="__codelineno-20-8" name="__codelineno-20-8" href="#__codelineno-20-8"></a><span class="nl">            source</span><span class="w"> </span><span class="s">&quot;vec4 global_color(vec3 c){ vec4 s=tex2D_screen(c.xy); float g=dot(s.rgb,vec3(0.299,0.587,0.114)); return vec4(vec3(g)*1.2,s.a); }&quot;</span>
+</span><span id="__span-20-9"><a id="__codelineno-20-9" name="__codelineno-20-9" href="#__codelineno-20-9"></a><span class="w">        </span><span class="o">}</span>
+</span><span id="__span-20-10"><a id="__codelineno-20-10" name="__codelineno-20-10" href="#__codelineno-20-10"></a><span class="w">    </span><span class="o">}</span>
+</span><span id="__span-20-11"><a id="__codelineno-20-11" name="__codelineno-20-11" href="#__codelineno-20-11"></a><span class="o">}</span>
+</span></code></pre></div>
+<h4 id="window-shader-presets-window-shaders">Window shader presets (<code>window-shaders</code>)<a class="headerlink" href="#window-shader-presets-window-shaders" title="Permanent link">#</a></h4>
+<p>A top-level <code>window-shaders {}</code> block defines <strong>named shader presets</strong> that can be applied to any window at runtime, without editing window rules:</p>
+<div class="language-kdl highlight"><pre><span></span><code><span id="__span-21-1"><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a><span class="nl">window-shaders</span><span class="w"> </span><span class="o">{</span>
+</span><span id="__span-21-2"><a id="__codelineno-21-2" name="__codelineno-21-2" href="#__codelineno-21-2"></a><span class="nl">    preset</span><span class="w"> </span><span class="s">&quot;grayscale&quot;</span><span class="w"> </span><span class="o">{</span>
+</span><span id="__span-21-3"><a id="__codelineno-21-3" name="__codelineno-21-3" href="#__codelineno-21-3"></a><span class="nl">        source</span><span class="w"> </span><span class="s">&quot;vec4 global_color(vec3 c){ vec3 s=tex2D_screen(c.xy).rgb; float g=dot(s,vec3(0.299,0.587,0.114)); return vec4(vec3(g),1.0); }&quot;</span>
+</span><span id="__span-21-4"><a id="__codelineno-21-4" name="__codelineno-21-4" href="#__codelineno-21-4"></a><span class="w">    </span><span class="o">}</span>
+</span><span id="__span-21-5"><a id="__codelineno-21-5" name="__codelineno-21-5" href="#__codelineno-21-5"></a><span class="nl">    preset</span><span class="w"> </span><span class="s">&quot;fire&quot;</span><span class="w"> </span><span class="o">{</span>
+</span><span id="__span-21-6"><a id="__codelineno-21-6" name="__codelineno-21-6" href="#__codelineno-21-6"></a><span class="nl">        path</span><span class="w"> </span><span class="s">&quot;~/.config/niri/shaders/fire.frag&quot;</span>
+</span><span id="__span-21-7"><a id="__codelineno-21-7" name="__codelineno-21-7" href="#__codelineno-21-7"></a><span class="w">    </span><span class="o">}</span>
+</span><span id="__span-21-8"><a id="__codelineno-21-8" name="__codelineno-21-8" href="#__codelineno-21-8"></a><span class="o">}</span>
+</span></code></pre></div>
+<p>Each <code>preset</code> takes a name argument followed by the same source fields as a window-rule <code>shader {}</code> block (<code>source</code>, <code>path</code>, <code>mode</code>, <code>pass</code>). Presets are compiled at config load, and repeated <code>window-shaders {}</code> blocks accumulate in order.</p>
+<p>Two bindable actions drive them (both also available as <code>niri msg action ... [--id &lt;window-id&gt;]</code>):</p>
+<ul>
+<li><code>toggle-window-shader</code> — turns the focused window's shader off and back on. Works on the window-rule shader as well as a selected preset.</li>
+<li><code>cycle-window-shader</code> — rotates the focused window through: default (the window-rule shader, or none) → first preset → … → last preset → back to default. Cycling always re-enables a shader that was toggled off.</li>
+</ul>
+<p>The selection is per-window runtime state: it survives config reloads (presets are re-resolved by name) but is not persisted across compositor restarts. A preset whose name has disappeared from the config falls back to rendering no shader, and the next <code>cycle-window-shader</code> restarts at the first preset.</p>
+<hr />
+<h3 id="shaders-in-screencast-and-screenshots">Shaders in screencast and screenshots<a class="headerlink" href="#shaders-in-screencast-and-screenshots" title="Permanent link">#</a></h3>
+<p>By default, shader effects — global, region, and per-window — do <strong>not</strong> appear in portal screencasts (Google Meet, OBS, browser screen-share, Zoom), <code>grim</code> screenshots, or <code>wl-screenrec</code> recordings. This keeps shaders as a local display effect and prevents them from leaking into shared or recorded content.</p>
+<p>To opt in, add the bare <code>shaders-in-capture</code> flag at the top level of your config:</p>
+<div class="language-kdl highlight"><pre><span></span><code><span id="__span-22-1"><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a><span class="nl">shaders-in-capture</span>
+</span></code></pre></div>
+<p>When the flag is present, the global shader, all region shaders, and all per-window shaders appear in portal screencast and screencopy captures (<code>grim</code>, <code>wl-screenrec</code>). The live display is unaffected either way.</p>
+<p><strong>KMS capture is always independent of this flag.</strong> Direct KMS capture tools such as <code>gpu-screen-recorder -w &lt;connector&gt;</code> read the raw scanout buffer after all post-processing has been applied, so they always show shader output regardless of whether <code>shaders-in-capture</code> is set.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><strong>Behavior change.</strong> Before <code>shaders-in-capture</code> was introduced, per-window shaders always appeared in screencopy captures. With the flag absent (the default), per-window shaders are <strong>not</strong> included in captures. Add <code>shaders-in-capture</code> to restore that behavior — and to also include global and region shaders.</p>
+</div>
+<hr />
+<h3 id="scope-and-limitations">Scope and Limitations<a class="headerlink" href="#scope-and-limitations" title="Permanent link">#</a></h3>
+<ul>
+<li><strong>TTY/DRM only.</strong> The effect applies on the real (DRM/KMS) output. It is intentionally <strong>not</strong> applied on the nested winit backend (running niri in a window). By default it is also not applied to screenshots or screen recordings — use <a href="#shaders-in-screencast-and-screenshots"><code>shaders-in-capture</code></a> to opt in.</li>
+<li><strong>Output transform.</strong> The effect is verified on outputs with the default (<code>normal</code>) transform. On outputs configured with a non-default <code>transform</code> (e.g. <code>90</code>, <code>270</code>, <code>flipped</code>), the shader's view of <code>niri_screen</code>/<code>niri_prev</code> may be mis-oriented. If you use a rotated or flipped output, verify your shader there before relying on it.</li>
+<li><strong>Whole-output <code>global-shader</code>.</strong> The <code>global-shader</code> block applies to all outputs; per-output and per-layer global shaders are not supported. For sub-output scoping, use a <a href="#region-shaders">region shader</a> (a screen rectangle) or a <a href="#per-window-shaders">per-window shader</a> (<code>window-rule { shader {} }</code>). Multi-pass chains are supported (see <a href="#multi-pass-chains-pass">Multi-pass chains</a>) but a chain of two or more passes is always whole-output (no <code>cursor-radius</code> region mode).</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      <script id="__config" type="application/json">{"base": ".", "features": ["navigation.instant", "search.suggest", "content.code.copy", "content.action.edit"], "search": "assets/javascripts/workers/search.d50fe291.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="assets/javascripts/bundle.56ea9cef.min.js"></script>
+      
+    
+  </body>
+</html>
