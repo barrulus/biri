@@ -31,6 +31,9 @@ smithay render elements, GLSL ES 1.00.
   animating and force continuous redraws. Do not write comments into generated sources.
 - A chain that cannot be fully resolved resolves to the empty vec (shader disabled), never a
   partial chain. This matches `resolve_scoped_pass_sources`.
+- KDL node terminators are newline, `;` or EOF — a closing `}` is NOT one. So
+  `shader { preset "grayscale" }` on a single line does NOT parse; write the body multi-line (the
+  form used throughout this plan and in all docs), or terminate the inner node with `;`.
 - `cargo insta` can hang in this repo. When an inline snapshot in `niri-config/src/lib.rs` fails,
   edit the expected text by hand from the failure diff rather than running `cargo insta accept`.
 
@@ -419,8 +422,12 @@ mod tests {
                     source "vec4 global_color(vec3 c){ return tex2D_screen(c.xy).bgra; }"
                 }
                 preset "warm-mono" {
-                    pass { preset "grayscale" }
-                    pass { preset "temperature" kelvin=3500 }
+                    pass {
+                        preset "grayscale"
+                    }
+                    pass {
+                        preset "temperature" kelvin=3500
+                    }
                 }
             }
             "##,
@@ -458,8 +465,12 @@ mod tests {
             r##"
             output-shaders {
                 preset "fromfile" {
-                    pass { preset "grayscale" }
-                    pass { path "missing.frag" }
+                    pass {
+                        preset "grayscale"
+                    }
+                    pass {
+                        path "missing.frag"
+                    }
                 }
             }
             "##,
@@ -776,10 +787,14 @@ mod tests {
             r##"
             output "eDP-1" {
                 scale 1.5
-                shader { preset "grayscale" }
+                shader {
+                    preset "grayscale"
+                }
             }
             output "DP-2" {
-                shader { preset "temperature" kelvin=4000 }
+                shader {
+                    preset "temperature" kelvin=4000
+                }
             }
             output "HDMI-A-1" {
                 shader {
@@ -825,11 +840,23 @@ mod tests {
         let config = Config::parse_mem(
             r##"
             output-shaders {
-                preset "night" { preset "temperature" kelvin=3200 }
-                preset "grayscale" { source "vec4 global_color(vec3 c){ return vec4(0.0); }" }
+                preset "night" {
+                    preset "temperature" kelvin=3200
+                }
+                preset "grayscale" {
+                    source "vec4 global_color(vec3 c){ return vec4(0.0); }"
+                }
             }
-            output "DP-1" { shader { preset "night" } }
-            output "DP-2" { shader { preset "grayscale" } }
+            output "DP-1" {
+                shader {
+                    preset "night"
+                }
+            }
+            output "DP-2" {
+                shader {
+                    preset "grayscale"
+                }
+            }
             "##,
         )
         .unwrap();
@@ -862,11 +889,15 @@ mod tests {
         let config = Config::parse_mem(
             r##"
             output-shaders {
-                preset "night" { preset "temperature" kelvin=3200 }
+                preset "night" {
+                    preset "temperature" kelvin=3200
+                }
             }
             output "DP-1" {
                 shader {
-                    pass { preset "night" }
+                    pass {
+                        preset "night"
+                    }
                 }
             }
             "##,
@@ -1079,12 +1110,22 @@ Add to `niri-config/src/output_shader.rs`'s test module:
         let config = Config::parse_mem(
             r##"
             output-shaders {
-                preset "night" { preset "temperature" kelvin=3200 }
-                preset "mono"  { preset "grayscale" }
+                preset "night" {
+                    preset "temperature" kelvin=3200
+                }
+                preset "mono"  {
+                    preset "grayscale"
+                }
                 preset "combo" {
-                    pass { preset "grayscale" }
-                    pass { preset "saturation" amount=1.4 }
-                    pass { preset "invert" }
+                    pass {
+                        preset "grayscale"
+                    }
+                    pass {
+                        preset "saturation" amount=1.4
+                    }
+                    pass {
+                        preset "invert"
+                    }
                 }
             }
             "##,
@@ -1634,24 +1675,38 @@ Worked examples to include:
 
 ```kdl
 output "eDP-1" {
-    shader { preset "saturation" amount=1.4 }
+    shader {
+        preset "saturation" amount=1.4
+    }
 }
 
 output "DP-2" {
-    shader { preset "temperature" kelvin=4000 }
+    shader {
+        preset "temperature" kelvin=4000
+    }
 }
 
 output-shaders {
-    preset "night" { preset "temperature" kelvin=3200 }
-    preset "mono"  { preset "grayscale" }
+    preset "night" {
+        preset "temperature" kelvin=3200
+    }
+    preset "mono"  {
+        preset "grayscale"
+    }
     preset "warm-mono" {
-        pass { preset "grayscale" }
-        pass { preset "temperature" kelvin=3500 }
+        pass {
+            preset "grayscale"
+        }
+        pass {
+            preset "temperature" kelvin=3500
+        }
     }
 }
 
 output "HDMI-A-1" {
-    shader { preset "warm-mono" }
+    shader {
+        preset "warm-mono"
+    }
 }
 ```
 
@@ -1666,9 +1721,15 @@ the optional output-name argument:
 
 ```kdl
 binds {
-    Mod+Shift+G { toggle-output-shader; }
-    Mod+Shift+H { toggle-output-shader "eDP-1"; }
-    Mod+Shift+C { cycle-output-shader; }
+    Mod+Shift+G {
+        toggle-output-shader;
+    }
+    Mod+Shift+H {
+        toggle-output-shader "eDP-1";
+    }
+    Mod+Shift+C {
+        cycle-output-shader;
+    }
 }
 ```
 
@@ -1685,14 +1746,20 @@ commented example:
 // temperature (kelvin=, 6500 is neutral). No GLSL required.
 //
 // output "eDP-1" {
-//     shader { preset "saturation" amount=1.4 }
+//     shader {
+    preset "saturation" amount=1.4
+}
 // }
 //
 // Named presets for cycle-output-shader:
 //
 // output-shaders {
-//     preset "night" { preset "temperature" kelvin=3200 }
-//     preset "mono"  { preset "grayscale" }
+//     preset "night" {
+    preset "temperature" kelvin=3200
+}
+//     preset "mono"  {
+    preset "grayscale"
+}
 // }
 ```
 
@@ -1701,7 +1768,7 @@ commented example:
 Add a bullet next to line 43:
 
 ```markdown
-- **Per-output colour filters**: `output "eDP-1" { shader { preset "grayscale" } }` — built-in grayscale, invert, saturation and temperature filters with no GLSL to write, plus `toggle-output-shader` and `cycle-output-shader` binds. Answers upstream niri #4355, #4303 and #4405.
+- **Per-output colour filters**: `output "eDP-1" { shader { preset "grayscale"; }; }` — built-in grayscale, invert, saturation and temperature filters with no GLSL to write, plus `toggle-output-shader` and `cycle-output-shader` binds. Answers upstream niri #4355, #4303 and #4405.
 ```
 
 - [ ] **Step 5: Verify the whole tree**
@@ -1722,7 +1789,7 @@ git commit -m "docs: document per-output shaders and the built-in colour filters
 The render path has no automated coverage, matching region shaders. Before the PR is considered
 done, verify on real hardware and record the result in the issue:
 
-1. Add `output "<your connector>" { shader { preset "grayscale" } }`, reload, confirm that output
+1. Add `output "<your connector>" { shader { preset "grayscale"; }; }`, reload, confirm that output
    goes gray and other outputs do not.
 2. Confirm `nvtop` / `intel_gpu_top` show **no** continuous GPU load on an idle desktop with the
    filter active — this is the issue's open question about the redraw scheduler.
