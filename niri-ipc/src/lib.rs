@@ -89,6 +89,12 @@ pub enum Request {
     PickColor,
     /// Perform an action.
     Action(Action),
+    /// Perform several actions as one atomic sequence.
+    ///
+    /// All actions are validated before any of them runs; if any is invalid, none run. The
+    /// actions then run in order with nothing else running in between, which is what
+    /// distinguishes this from several [`Request::Action`] calls.
+    Actions(Vec<Action>),
     /// Change output configuration temporarily.
     ///
     /// The configuration is changed temporarily and not saved into the config file. If the output
@@ -2187,6 +2193,24 @@ impl OutputAction {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn actions_request_round_trips() {
+        let request = Request::Actions(vec![
+            Action::FocusColumnRight {},
+            Action::CloseWindow { id: None },
+        ]);
+
+        let json = serde_json::to_string(&request).unwrap();
+        let back: Request = serde_json::from_str(&json).unwrap();
+
+        let Request::Actions(actions) = back else {
+            panic!("expected Actions, got {back:?}");
+        };
+        assert_eq!(actions.len(), 2);
+        assert!(matches!(actions[0], Action::FocusColumnRight {}));
+        assert!(matches!(actions[1], Action::CloseWindow { id: None }));
+    }
 
     #[test]
     fn parse_size_change() {

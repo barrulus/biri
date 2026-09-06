@@ -410,6 +410,33 @@ async fn process(ctx: &ClientCtx, request: Request) -> Reply {
             let _ = rx.recv().await;
             Response::Handled
         }
+        Request::Actions(actions) => {
+            // Validate everything up front: an invalid action anywhere rejects the whole
+            // batch, so a partial sequence never runs.
+            for (idx, action) in actions.iter().enumerate() {
+                validate_action(action).map_err(|err| format!("action {}: {err}", idx + 1))?;
+            }
+
+            let (tx, rx) = async_channel::bounded(1);
+
+            let actions: Vec<niri_config::Action> =
+                actions.into_iter().map(niri_config::Action::from).collect();
+            // One idle callback for the whole batch. This is the point of the request:
+            // nothing can interleave between the actions. Queuing one callback per action
+            // would not give that guarantee.
+            ctx.event_loop.insert_idle(move |state| {
+                // Make sure some logic like workspace clean-up has a chance to run before
+                // doing actions.
+                state.niri.advance_animations();
+                state.do_actions(actions, false);
+                let _ = tx.send_blocking(());
+            });
+
+            // Wait until the actions have been processed before returning, for the same
+            // reason as the single-action request.
+            let _ = rx.recv().await;
+            Response::Handled
+        }
         Request::Output { output, action } => {
             action.validate()?;
 
