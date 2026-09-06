@@ -320,8 +320,13 @@ fn collect_actions(config: &Config) -> Vec<&Action> {
     }
 
     if config.hotkey_overlay.hide_not_bound {
-        // Only keep actions that have been bound
-        actions.retain(|&action| binds.iter().any(|bind| bind.actions.contains(action)))
+        // Only keep actions that have been bound. Multi-action binds are not shown in the
+        // hotkey overlay, so an action must be the sole action of some bind to count.
+        actions.retain(|&action| {
+            binds
+                .iter()
+                .any(|bind| bind.actions.as_slice() == std::slice::from_ref(action))
+        })
     }
 
     actions

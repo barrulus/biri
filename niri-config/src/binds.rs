@@ -922,9 +922,7 @@ where
             }
         }
 
-        let mut children = node.children();
-
-        // If the action is invalid but the key is fine, we still want to return something.
+        // If the actions are invalid but the key is fine, we still want to return something.
         // That way, the parent can handle the existence of duplicate keybinds,
         // even if their contents are not valid.
         let dummy = Self {
@@ -937,54 +935,64 @@ where
             hotkey_overlay_title: None,
         };
 
-        if let Some(child) = children.next() {
-            for unwanted_child in children {
-                ctx.emit_error(DecodeError::unexpected(
-                    unwanted_child,
-                    "node",
-                    "only one action is allowed per keybind",
-                ));
-            }
+        let mut actions = Vec::new();
+        let mut had_error = false;
+        for child in node.children() {
             match Action::decode_node(child, ctx) {
-                Ok(action) => {
-                    if !matches!(action, Action::Spawn(_) | Action::SpawnSh(_)) {
-                        if let Some(node) = allow_when_locked_node {
-                            ctx.emit_error(DecodeError::unexpected(
-                                node,
-                                "property",
-                                "allow-when-locked can only be set on spawn binds",
-                            ));
-                        }
-                    }
-
-                    // The toggle-inhibit action must always be uninhibitable.
-                    // Otherwise, it would be impossible to trigger it.
-                    if matches!(action, Action::ToggleKeyboardShortcutsInhibit) {
-                        allow_inhibiting = false;
-                    }
-
-                    Ok(Self {
-                        key,
-                        actions: vec![action],
-                        repeat,
-                        cooldown,
-                        allow_when_locked,
-                        allow_inhibiting,
-                        hotkey_overlay_title,
-                    })
-                }
+                // Emit the error and keep going, so that a typo in one action still surfaces
+                // the errors in the actions after it.
                 Err(e) => {
                     ctx.emit_error(e);
-                    Ok(dummy)
+                    had_error = true;
                 }
+                Ok(action) => actions.push(action),
             }
-        } else {
-            ctx.emit_error(DecodeError::missing(
-                node,
-                "expected an action for this keybind",
-            ));
-            Ok(dummy)
         }
+
+        if actions.is_empty() {
+            if !had_error {
+                ctx.emit_error(DecodeError::missing(
+                    node,
+                    "expected an action for this keybind",
+                ));
+            }
+            return Ok(dummy);
+        }
+
+        // allow-when-locked must hold for *every* action: handle_bind passes one flag into
+        // every do_action call, so a mixed bind would let a non-spawn action run from the
+        // lock screen.
+        if !actions
+            .iter()
+            .all(|a| matches!(a, Action::Spawn(_) | Action::SpawnSh(_)))
+        {
+            if let Some(node) = allow_when_locked_node {
+                ctx.emit_error(DecodeError::unexpected(
+                    node,
+                    "property",
+                    "allow-when-locked can only be set on binds where every action is spawn",
+                ));
+            }
+        }
+
+        // The toggle-inhibit action must always be uninhibitable. Otherwise, it would be
+        // impossible to trigger it.
+        if actions
+            .iter()
+            .any(|a| matches!(a, Action::ToggleKeyboardShortcutsInhibit))
+        {
+            allow_inhibiting = false;
+        }
+
+        Ok(Self {
+            key,
+            actions,
+            repeat,
+            cooldown,
+            allow_when_locked,
+            allow_inhibiting,
+            hotkey_overlay_title,
+        })
     }
 }
 
@@ -1096,6 +1104,114 @@ impl FromStr for Key {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parse_multiple_actions_in_order() {
+        let config = crate::Config::parse_mem(
+            r#"
+            binds {
+                Mod+G { focus-column-right; consume-or-expel-window-left; }
+            }
+            "#,
+        )
+        .unwrap();
+
+        assert_eq!(config.binds.0.len(), 1);
+        assert_eq!(
+            config.binds.0[0].actions,
+            [Action::FocusColumnRight, Action::ConsumeOrExpelWindowLeft],
+        );
+    }
+
+    #[test]
+    fn parse_bind_with_no_actions_still_errors() {
+        assert!(crate::Config::parse_mem(
+            r#"
+            binds {
+                Mod+G { }
+            }
+            "#,
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn parse_bad_action_among_several_keeps_the_others() {
+        // Two bad actions in the middle must not swallow each other's, or the good
+        // action's, decoding: both bad names must be reported as separate errors,
+        // which is what actually exercises the continue-on-error loop. knuffel's
+        // generic "expected one of N others" message text doesn't embed the bad
+        // node's name, so we recover it from each diagnostic's label span instead.
+        use miette::Diagnostic;
+
+        let config_text = r#"
+            binds {
+                Mod+G { focus-column-right; not-a-real-action; also-not-real; close-window; }
+            }
+            "#;
+
+        let err = crate::Config::parse_mem(config_text).unwrap_err();
+
+        let bad_snippets: Vec<&str> = err
+            .related()
+            .into_iter()
+            .flatten()
+            .flat_map(|e| e.labels().into_iter().flatten())
+            .map(|label| &config_text[label.offset()..label.offset() + label.len()])
+            .collect();
+
+        assert!(
+            bad_snippets.contains(&"not-a-real-action"),
+            "expected a label pointing at `not-a-real-action`, got: {bad_snippets:?}"
+        );
+        assert!(
+            bad_snippets.contains(&"also-not-real"),
+            "expected a label pointing at `also-not-real`, got: {bad_snippets:?}"
+        );
+    }
+
+    #[test]
+    fn allow_when_locked_rejected_on_mixed_bind() {
+        // Every action must be spawn/spawn-sh, otherwise allow-when-locked would let a
+        // non-spawn action run from the lock screen.
+        assert!(crate::Config::parse_mem(
+            r#"
+            binds {
+                Mod+X allow-when-locked=true { spawn "foo"; quit; }
+            }
+            "#,
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn allow_when_locked_accepted_on_all_spawn_bind() {
+        let config = crate::Config::parse_mem(
+            r#"
+            binds {
+                Mod+X allow-when-locked=true { spawn "foo"; spawn-sh "bar"; }
+            }
+            "#,
+        )
+        .unwrap();
+
+        assert!(config.binds.0[0].allow_when_locked);
+        assert_eq!(config.binds.0[0].actions.len(), 2);
+    }
+
+    #[test]
+    fn toggle_inhibit_anywhere_in_list_forces_allow_inhibiting_false() {
+        let config = crate::Config::parse_mem(
+            r#"
+            binds {
+                Mod+Escape { close-window; toggle-keyboard-shortcuts-inhibit; }
+            }
+            "#,
+        )
+        .unwrap();
+
+        assert!(!config.binds.0[0].allow_inhibiting);
+    }
 
     #[test]
     fn parse_window_shader_actions() {

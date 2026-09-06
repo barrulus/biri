@@ -169,6 +169,28 @@ binds {
 
 ![Custom markup example.](https://github.com/user-attachments/assets/2a2ba914-bfa7-4dfa-bb5e-49839034765d)
 
+### Multiple Actions
+
+A bind can list several actions. They run in order, with nothing else running in
+between them.
+
+```kdl
+binds {
+    Mod+G { focus-column-right; consume-or-expel-window-left; }
+}
+```
+
+Two limitations apply to multi-action binds:
+
+- They never appear in the hotkey overlay, and `hotkey-overlay-title` has no effect on
+  them.
+- `allow-when-locked=true` is accepted only when *every* action in the bind is `spawn`
+  or `spawn-sh`. Otherwise the flag would let a non-spawn action run from the lock
+  screen.
+
+If an action cannot run — for example a non-spawn action on a locked screen — it is
+skipped and the remaining actions still run.
+
 ### Actions
 
 Every action that you can bind is also available for programmatic invocation via `niri msg action`.
