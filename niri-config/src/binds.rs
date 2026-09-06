@@ -22,7 +22,7 @@ pub struct Binds(pub Vec<Bind>);
 #[derive(Debug, Clone, PartialEq)]
 pub struct Bind {
     pub key: Key,
-    pub action: Action,
+    pub actions: Vec<Action>,
     pub repeat: bool,
     pub cooldown: Option<Duration>,
     pub allow_when_locked: bool,
@@ -929,7 +929,7 @@ where
         // even if their contents are not valid.
         let dummy = Self {
             key,
-            action: Action::Spawn(vec![]),
+            actions: Vec::new(),
             repeat: true,
             cooldown: None,
             allow_when_locked: false,
@@ -965,7 +965,7 @@ where
 
                     Ok(Self {
                         key,
-                        action,
+                        actions: vec![action],
                         repeat,
                         cooldown,
                         allow_when_locked,
@@ -1108,7 +1108,12 @@ mod tests {
             "#,
         )
         .unwrap();
-        let actions: Vec<_> = config.binds.0.iter().map(|b| b.action.clone()).collect();
+        let actions: Vec<_> = config
+            .binds
+            .0
+            .iter()
+            .map(|b| b.actions[0].clone())
+            .collect();
         assert_eq!(
             actions,
             [Action::ToggleWindowShader, Action::CycleWindowShader]
