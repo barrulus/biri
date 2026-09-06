@@ -191,6 +191,20 @@ Two limitations apply to multi-action binds:
 If an action cannot run — for example a non-spawn action on a locked screen — it is
 skipped and the remaining actions still run.
 
+The same sequencing is available over IPC. `niri msg action` runs one action per
+invocation, so chaining two with `&&` leaves a window in which other events run;
+`niri msg actions` sends the whole list as one batch that runs with nothing in between.
+
+```sh
+# one action per argument
+niri msg actions "toggle-workspace-visibility stash" "focus-workspace stash"
+
+# or one per line on stdin
+printf 'focus-column-right\nconsume-or-expel-window-left\n' | niri msg actions
+```
+
+If any action in the batch is invalid, none of them run.
+
 ### Actions
 
 Every action that you can bind is also available for programmatic invocation via `niri msg action`.

@@ -29,6 +29,34 @@ pub fn handle_msg(mut msg: Msg, json: bool) -> anyhow::Result<()> {
         }
     }
 
+    // Resolve `niri msg actions` before the request match, since it may read stdin.
+    let batched_actions = if let Msg::Actions { actions } = &msg {
+        use std::io::Read as _;
+
+        let mut stdin = String::new();
+        if actions.is_empty() {
+            std::io::stdin()
+                .read_to_string(&mut stdin)
+                .context("error reading actions from stdin")?;
+        }
+
+        let mut parsed = crate::cli::parse_actions(actions, &stdin)?;
+        // For actions taking paths, prepend the niri CLI's working directory.
+        for action in &mut parsed {
+            if let Action::Screenshot { path, .. }
+            | Action::ScreenshotScreen { path, .. }
+            | Action::ScreenshotWindow { path, .. } = action
+            {
+                if let Some(path) = path {
+                    ensure_absolute_path(path).context("error making the path absolute")?;
+                }
+            }
+        }
+        Some(parsed)
+    } else {
+        None
+    };
+
     let request = match &msg {
         Msg::Version => Request::Version,
         Msg::Outputs => Request::Outputs,
@@ -37,6 +65,7 @@ pub fn handle_msg(mut msg: Msg, json: bool) -> anyhow::Result<()> {
         Msg::PickWindow => Request::PickWindow,
         Msg::PickColor => Request::PickColor,
         Msg::Action { action } => Request::Action(action.clone()),
+        Msg::Actions { .. } => Request::Actions(batched_actions.clone().unwrap()),
         Msg::Output { output, action } => Request::Output {
             output: output.clone(),
             action: action.clone(),
@@ -319,6 +348,11 @@ pub fn handle_msg(mut msg: Msg, json: bool) -> anyhow::Result<()> {
             }
         }
         Msg::Action { .. } => {
+            let Response::Handled = response else {
+                bail!("unexpected response: expected Handled, got {response:?}");
+            };
+        }
+        Msg::Actions { .. } => {
             let Response::Handled = response else {
                 bail!("unexpected response: expected Handled, got {response:?}");
             };
