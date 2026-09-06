@@ -5962,6 +5962,13 @@ impl Niri {
                 })
             };
 
+            // A hand-written animated output shader must keep redrawing, exactly like a region
+            // shader. Every built-in filter is static, so it costs no extra frames.
+            let output_shader_animate = {
+                let chain = self.output_shader_chain(output);
+                niri_config::GlobalShaderCaps::scan_chain(&chain).is_animating()
+            };
+
             // Decide whether a window on this output runs a time-driven per-window shader that
             // must keep redrawing. Scans resolved shader sources like the region shaders above;
             // static shaders (no niri_time usage) impose no continuous-redraw cost.
@@ -6015,7 +6022,7 @@ impl Niri {
             // riding along with a non-shader animation (drag, transition, overview) are never
             // throttled — those must stay smooth.
             let shader_animate =
-                global_shader_animate || region_shader_animate || window_shader_animate;
+                global_shader_animate || region_shader_animate || output_shader_animate || window_shader_animate;
             let cap_fps = self.config.borrow().shader_animation_max_fps;
             let now = std::time::Instant::now();
 

@@ -310,4 +310,45 @@ mod tests {
         assert_eq!(chain.len(), 1);
         assert!(chain[0].1, "mode \"hyprland\" was dropped");
     }
+
+    #[test]
+    fn builtin_output_shaders_never_force_continuous_redraws() {
+        // The whole point of a static colour filter: it must not peg the GPU. Anything that
+        // scans as animating here would make the output redraw every frame forever.
+        let config = Config::parse_mem(
+            r##"
+            output-shaders {
+                preset "night" {
+                    preset "temperature" kelvin=3200
+                }
+                preset "mono"  {
+                    preset "grayscale"
+                }
+                preset "combo" {
+                    pass {
+                        preset "grayscale"
+                    }
+                    pass {
+                        preset "saturation" amount=1.4
+                    }
+                    pass {
+                        preset "invert"
+                    }
+                }
+            }
+            "##,
+        )
+        .unwrap();
+
+        for preset in &config.output_shaders {
+            let chain = preset.pass_sources(&no_files);
+            assert!(!chain.is_empty(), "{} did not resolve", preset.name);
+            let caps = crate::GlobalShaderCaps::scan_chain(&chain);
+            assert!(
+                !caps.is_animating(),
+                "preset {} scans as animating: {caps:?}",
+                preset.name
+            );
+        }
+    }
 }
