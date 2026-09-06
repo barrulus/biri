@@ -251,7 +251,10 @@ mod tests {
             String::from("not-a-real-action"),
         ];
         let err = parse_actions(&args, "").unwrap_err().to_string();
-        assert!(err.contains('2'), "error should name argument 2: {err}");
+        assert!(
+            err.contains("argument 2"),
+            "error should name argument 2: {err}"
+        );
     }
 
     #[test]

@@ -1038,3 +1038,54 @@ impl State {
         server.send_event(event);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn valid_action_passes_validation() {
+        assert!(validate_action(&Action::FocusColumnRight {}).is_ok());
+    }
+
+    #[test]
+    fn relative_screenshot_path_is_rejected() {
+        let action = Action::Screenshot {
+            show_pointer: true,
+            path: Some("relative/path.png".to_owned()),
+        };
+        let err = validate_action(&action).unwrap_err();
+        assert!(
+            err.contains("must be absolute"),
+            "error should mention the path must be absolute: {err}"
+        );
+    }
+
+    #[test]
+    fn batch_error_names_the_one_based_index_of_the_bad_action() {
+        // Mirrors the labelling done in the `Request::Actions` handler: the first
+        // invalid action in the batch, at position two, must be reported as
+        // "action 2", not "action 1" (0-based) or the unlabelled underlying error.
+        let actions = [
+            Action::FocusColumnRight {},
+            Action::Screenshot {
+                show_pointer: true,
+                path: Some("relative/path.png".to_owned()),
+            },
+        ];
+
+        let mut result = Ok(());
+        for (idx, action) in actions.iter().enumerate() {
+            if let Err(err) = validate_action(action) {
+                result = Err(format!("action {}: {err}", idx + 1));
+                break;
+            }
+        }
+
+        let err = result.unwrap_err();
+        assert!(
+            err.contains("action 2"),
+            "error should name action 2 (1-based): {err}"
+        );
+    }
+}

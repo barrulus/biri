@@ -203,6 +203,14 @@ niri msg actions "toggle-workspace-visibility stash" "focus-workspace stash"
 printf 'focus-column-right\nconsume-or-expel-window-left\n' | niri msg actions
 ```
 
+`spawn`'s command is a trailing argument list, so on the command line it needs a `--`
+before the program and its arguments, or the shell parser will try to consume them as
+`spawn`'s own flags:
+
+```sh
+niri msg actions "spawn -- notify-send hi"
+```
+
 If any action in the batch is invalid, none of them run.
 
 ### Actions
