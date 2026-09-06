@@ -1291,7 +1291,7 @@ impl<W: LayoutElement> Monitor<W> {
 
     pub fn move_to_workspace_up(&mut self, activate: ActivateWindow) {
         let new_idx = self.active_workspace_idx.saturating_sub(1);
-        self.move_to_workspace(None, new_idx, activate);
+        self.move_to_workspace(None, new_idx, activate, false);
     }
 
     pub fn move_to_workspace_down(&mut self, activate: ActivateWindow) {
@@ -1302,14 +1302,36 @@ impl<W: LayoutElement> Monitor<W> {
             .position(|ws| ws.hidden)
             .unwrap_or(self.workspaces.len());
         let new_idx = min(self.active_workspace_idx + 1, visible_end - 1);
-        self.move_to_workspace(None, new_idx, activate);
+        self.move_to_workspace(None, new_idx, activate, false);
     }
 
+    /// Clamps a move target index to the range it is allowed to address.
+    ///
+    /// Hidden workspaces are contiguous at the end of the workspace vec, so clamping a
+    /// too-large index against the whole vec would land it on the first hidden workspace
+    /// instead of the last visible one. Only name- and id-based references may address
+    /// the hidden block.
+    fn clamp_target_workspace_idx(&self, idx: usize, allow_hidden: bool) -> usize {
+        let len = if allow_hidden {
+            self.workspaces.len()
+        } else {
+            self.visible_workspace_count()
+        };
+        min(idx, len - 1)
+    }
+
+    /// Moves a window to the workspace at `idx`.
+    ///
+    /// `allow_hidden` says whether `idx` is allowed to address the hidden block. Only a
+    /// reference that picks out a specific workspace (by name or by id) may; a plain
+    /// workspace index addresses the visible region, so it clamps to the last visible
+    /// workspace instead.
     pub fn move_to_workspace(
         &mut self,
         window: Option<&W::Id>,
         idx: usize,
         activate: ActivateWindow,
+        allow_hidden: bool,
     ) {
         let source_workspace_idx = if let Some(window) = window {
             self.workspaces
@@ -1321,7 +1343,7 @@ impl<W: LayoutElement> Monitor<W> {
         };
         let source_id = self.workspaces[source_workspace_idx].id();
 
-        let new_idx = min(idx, self.workspaces.len() - 1);
+        let new_idx = self.clamp_target_workspace_idx(idx, allow_hidden);
         if new_idx == source_workspace_idx {
             return;
         }
@@ -1400,7 +1422,7 @@ impl<W: LayoutElement> Monitor<W> {
 
     pub fn move_column_to_workspace_up(&mut self, activate: bool) {
         let new_idx = self.active_workspace_idx.saturating_sub(1);
-        self.move_column_to_workspace(new_idx, activate);
+        self.move_column_to_workspace(new_idx, activate, false);
     }
 
     pub fn move_column_to_workspace_down(&mut self, activate: bool) {
@@ -1411,13 +1433,16 @@ impl<W: LayoutElement> Monitor<W> {
             .position(|ws| ws.hidden)
             .unwrap_or(self.workspaces.len());
         let new_idx = min(self.active_workspace_idx + 1, visible_end - 1);
-        self.move_column_to_workspace(new_idx, activate);
+        self.move_column_to_workspace(new_idx, activate, false);
     }
 
-    pub fn move_column_to_workspace(&mut self, idx: usize, activate: bool) {
+    /// Moves the active column to the workspace at `idx`.
+    ///
+    /// See [`Monitor::move_to_workspace`] for `allow_hidden`.
+    pub fn move_column_to_workspace(&mut self, idx: usize, activate: bool, allow_hidden: bool) {
         let source_workspace_idx = self.active_workspace_idx;
 
-        let new_idx = min(idx, self.workspaces.len() - 1);
+        let new_idx = self.clamp_target_workspace_idx(idx, allow_hidden);
         if new_idx == source_workspace_idx {
             return;
         }
@@ -1429,7 +1454,7 @@ impl<W: LayoutElement> Monitor<W> {
             } else {
                 ActivateWindow::No
             };
-            self.move_to_workspace(None, idx, activate);
+            self.move_to_workspace(None, new_idx, activate, allow_hidden);
             return;
         }
 

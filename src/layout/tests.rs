@@ -531,10 +531,11 @@ enum Op {
         window_id: Option<usize>,
         #[proptest(strategy = "0..=4usize")]
         workspace_idx: usize,
+        allow_hidden: bool,
     },
     MoveColumnToWorkspaceDown(bool),
     MoveColumnToWorkspaceUp(bool),
-    MoveColumnToWorkspace(#[proptest(strategy = "0..=4usize")] usize, bool),
+    MoveColumnToWorkspace(#[proptest(strategy = "0..=4usize")] usize, bool, bool),
     MoveWorkspaceDown,
     MoveWorkspaceUp,
     MoveWorkspaceToIndex {
@@ -1212,13 +1213,21 @@ impl Op {
             Op::MoveWindowToWorkspace {
                 window_id,
                 workspace_idx,
+                allow_hidden,
             } => {
                 let window_id = window_id.filter(|id| layout.has_window(id));
-                layout.move_to_workspace(window_id.as_ref(), workspace_idx, ActivateWindow::Smart);
+                layout.move_to_workspace(
+                    window_id.as_ref(),
+                    workspace_idx,
+                    ActivateWindow::Smart,
+                    allow_hidden,
+                );
             }
             Op::MoveColumnToWorkspaceDown(focus) => layout.move_column_to_workspace_down(focus),
             Op::MoveColumnToWorkspaceUp(focus) => layout.move_column_to_workspace_up(focus),
-            Op::MoveColumnToWorkspace(idx, focus) => layout.move_column_to_workspace(idx, focus),
+            Op::MoveColumnToWorkspace(idx, focus, allow_hidden) => {
+                layout.move_column_to_workspace(idx, focus, allow_hidden)
+            }
             Op::MoveWindowToOutput {
                 window_id,
                 output_id: id,
@@ -1813,6 +1822,7 @@ fn move_window_to_hidden_workspace_with_empty_above_first() {
         Op::MoveWindowToWorkspace {
             window_id: None,
             workspace_idx: 3,
+            allow_hidden: true,
         },
         Op::FocusWorkspaceDown,
     ]);
@@ -1856,7 +1866,7 @@ fn focus_after_column_move_unhides_workspace() {
         Op::AddWindow {
             params: TestWindowParams::new(1),
         },
-        Op::MoveColumnToWorkspace(2, true),
+        Op::MoveColumnToWorkspace(2, true, true),
         Op::FocusWorkspace(2),
     ]);
 }
@@ -2006,8 +2016,72 @@ fn move_column_into_hidden_workspace() {
         },
         Op::AddOutput(1),
         Op::ToggleWorkspaceVisibility(4),
-        Op::MoveColumnToWorkspace(2, true),
+        Op::MoveColumnToWorkspace(2, true, true),
     ]);
+}
+
+#[test]
+fn move_column_to_workspace_index_past_visible_end_stays_visible() {
+    // https://github.com/barrulus/biri/issues/31: a workspace index past the end of the
+    // visible region must clamp to the last visible workspace. Clamping against the whole
+    // workspace vec would land the column on the first hidden workspace instead (and
+    // force-unhide it, since focus follows).
+    let layout = check_ops([
+        Op::AddNamedWorkspace {
+            ws_name: 1,
+            output_name: None,
+            layout_config: None,
+        },
+        Op::AddOutput(1),
+        Op::ToggleWorkspaceVisibility(1),
+        Op::AddWindow {
+            params: TestWindowParams::new(1),
+        },
+        Op::MoveColumnToWorkspace(4, true, false),
+    ]);
+
+    assert_window_stayed_visible(&layout);
+}
+
+#[test]
+fn move_window_to_workspace_index_past_visible_end_stays_visible() {
+    // Same as above for move-window-to-workspace.
+    let layout = check_ops([
+        Op::AddNamedWorkspace {
+            ws_name: 1,
+            output_name: None,
+            layout_config: None,
+        },
+        Op::AddOutput(1),
+        Op::ToggleWorkspaceVisibility(1),
+        Op::AddWindow {
+            params: TestWindowParams::new(1),
+        },
+        Op::MoveWindowToWorkspace {
+            window_id: Some(1),
+            workspace_idx: 4,
+            allow_hidden: false,
+        },
+    ]);
+
+    assert_window_stayed_visible(&layout);
+}
+
+fn assert_window_stayed_visible(layout: &Layout<TestWindow>) {
+    let (_, _, ws) = layout
+        .workspaces()
+        .find(|(_, _, ws)| ws.has_window(&1))
+        .expect("window 1 must still exist");
+    assert!(
+        !ws.hidden,
+        "window must not land in the hidden block: index-based moves address \
+         the visible region"
+    );
+
+    let hidden = layout
+        .workspaces()
+        .find_map(|(_, _, ws)| (ws.name() == Some(&"ws1".to_string())).then_some(ws.hidden));
+    assert_eq!(hidden, Some(true), "ws1 must remain hidden");
 }
 
 #[test]
@@ -2112,6 +2186,7 @@ fn move_window_into_hidden_workspace_then_move_workspace_down() {
         Op::MoveWindowToWorkspace {
             window_id: None,
             workspace_idx: 2,
+            allow_hidden: true,
         },
         Op::MoveWorkspaceDown,
     ]);
@@ -2624,15 +2699,17 @@ fn operations_dont_panic() {
         Op::MoveWindowToWorkspace {
             window_id: None,
             workspace_idx: 1,
+            allow_hidden: true,
         },
         Op::MoveWindowToWorkspace {
             window_id: None,
             workspace_idx: 2,
+            allow_hidden: true,
         },
         Op::MoveColumnToWorkspaceDown(true),
         Op::MoveColumnToWorkspaceUp(true),
-        Op::MoveColumnToWorkspace(1, true),
-        Op::MoveColumnToWorkspace(2, true),
+        Op::MoveColumnToWorkspace(1, true, true),
+        Op::MoveColumnToWorkspace(2, true, true),
         Op::MoveWindowDown,
         Op::MoveWindowDownOrToWorkspaceDown,
         Op::MoveWindowUp,
@@ -2801,20 +2878,23 @@ fn operations_from_starting_state_dont_panic() {
         Op::MoveWindowToWorkspace {
             window_id: None,
             workspace_idx: 1,
+            allow_hidden: true,
         },
         Op::MoveWindowToWorkspace {
             window_id: None,
             workspace_idx: 2,
+            allow_hidden: true,
         },
         Op::MoveWindowToWorkspace {
             window_id: None,
             workspace_idx: 3,
+            allow_hidden: true,
         },
         Op::MoveColumnToWorkspaceDown(true),
         Op::MoveColumnToWorkspaceUp(true),
-        Op::MoveColumnToWorkspace(1, true),
-        Op::MoveColumnToWorkspace(2, true),
-        Op::MoveColumnToWorkspace(3, true),
+        Op::MoveColumnToWorkspace(1, true, true),
+        Op::MoveColumnToWorkspace(2, true, true),
+        Op::MoveColumnToWorkspace(3, true, true),
         Op::MoveWindowDown,
         Op::MoveWindowDownOrToWorkspaceDown,
         Op::MoveWindowUp,
@@ -2919,6 +2999,7 @@ fn move_to_workspace_by_idx_does_not_leave_empty_workspaces() {
         Op::MoveWindowToWorkspace {
             window_id: Some(0),
             workspace_idx: 2,
+            allow_hidden: true,
         },
     ];
 
@@ -4119,6 +4200,7 @@ fn move_window_to_workspace_with_different_active_output() {
         Op::MoveWindowToWorkspace {
             window_id: Some(0),
             workspace_idx: 2,
+            allow_hidden: true,
         },
     ];
 
@@ -4403,7 +4485,7 @@ fn move_column_to_workspace_focus_false_on_floating_window() {
             params: TestWindowParams::new(2),
         },
         Op::ToggleWindowFloating { id: None },
-        Op::MoveColumnToWorkspace(1, false),
+        Op::MoveColumnToWorkspace(1, false, true),
     ];
 
     let layout = check_ops(ops);

@@ -135,4 +135,8 @@ niri msg action unhide-workspace scratch --focus true
 Focusing a hidden workspace by name with `focus-workspace "name"` shows it temporarily: it hides itself again as soon as you switch away.
 Use `unhide-workspace` (or `toggle-workspace-visibility`) when you want it to stay visible.
 
+A hidden workspace is only reachable by name (or by id over IPC).
+Numeric workspace indices address the visible workspaces only, so `focus-workspace 3`, `move-window-to-workspace 3` and `move-column-to-workspace 3` never land on a hidden workspace.
+An index past the last visible workspace clamps to it, exactly as it does when no workspace is hidden.
+
 `niri msg workspaces` reports the hidden state of each workspace in the `is_hidden` field, so scripts can decide between `hide-workspace` and `unhide-workspace` instead of toggling.
