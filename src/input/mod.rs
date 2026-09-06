@@ -1387,6 +1387,9 @@ impl State {
                 self.niri.queue_redraw_all();
             }
             Action::MoveWindowToWorkspace(reference, focus) => {
+                // A plain workspace index addresses the visible region; only a name or id
+                // may pick out a hidden workspace.
+                let allow_hidden = !matches!(reference, WorkspaceReference::Index(_));
                 if let Some((mut output, index)) =
                     self.niri.find_output_and_workspace_index(reference)
                 {
@@ -1417,7 +1420,9 @@ impl State {
                             self.maybe_warp_cursor_to_focus();
                         }
                     } else {
-                        self.niri.layout.move_to_workspace(None, index, activate);
+                        self.niri
+                            .layout
+                            .move_to_workspace(None, index, activate, allow_hidden);
                         self.maybe_warp_cursor_to_focus();
                     }
 
@@ -1433,6 +1438,9 @@ impl State {
                 let window = self.niri.layout.windows().find(|(_, m)| m.id().get() == id);
                 let window = window.map(|(_, m)| m.window.clone());
                 if let Some(window) = window {
+                    // A plain workspace index addresses the visible region; only a name or
+                    // id may pick out a hidden workspace.
+                    let allow_hidden = !matches!(reference, WorkspaceReference::Index(_));
                     if let Some((output, index)) =
                         self.niri.find_output_and_workspace_index(reference)
                     {
@@ -1466,9 +1474,12 @@ impl State {
                                 }
                             }
                         } else {
-                            self.niri
-                                .layout
-                                .move_to_workspace(Some(&window), index, activate);
+                            self.niri.layout.move_to_workspace(
+                                Some(&window),
+                                index,
+                                activate,
+                                allow_hidden,
+                            );
 
                             // If we focused the target window.
                             let new_focus = self.niri.layout.focus();
@@ -1495,6 +1506,9 @@ impl State {
                 self.niri.queue_redraw_all();
             }
             Action::MoveColumnToWorkspace(reference, focus) => {
+                // A plain workspace index addresses the visible region; only a name or id
+                // may pick out a hidden workspace.
+                let allow_hidden = !matches!(reference, WorkspaceReference::Index(_));
                 if let Some((mut output, index)) =
                     self.niri.find_output_and_workspace_index(reference)
                 {
@@ -1512,7 +1526,9 @@ impl State {
                             self.move_cursor_to_output(&output);
                         }
                     } else {
-                        self.niri.layout.move_column_to_workspace(index, focus);
+                        self.niri
+                            .layout
+                            .move_column_to_workspace(index, focus, allow_hidden);
                         if focus {
                             self.maybe_warp_cursor_to_focus();
                         }

@@ -1561,8 +1561,11 @@ impl<W: LayoutElement> Layout<W> {
     ) -> Option<&mut Workspace<W>> {
         if let WorkspaceReference::Index(index) = reference {
             self.active_monitor().and_then(|m| {
+                // A plain workspace index addresses the visible region; hidden workspaces
+                // sit past its end and are only reachable by name or id.
+                let visible_count = m.visible_workspace_count();
                 let index = index.saturating_sub(1) as usize;
-                m.workspaces.get_mut(index)
+                (index < visible_count).then(|| &mut m.workspaces[index])
             })
         } else {
             self.workspaces_mut().find(|ws| match &reference {
@@ -2914,11 +2917,15 @@ impl<W: LayoutElement> Layout<W> {
         monitor.move_to_workspace_down(activate);
     }
 
+    /// Moves a window to the workspace at `idx` on its own monitor.
+    ///
+    /// See [`Monitor::move_to_workspace`] for `allow_hidden`.
     pub fn move_to_workspace(
         &mut self,
         window: Option<&W::Id>,
         idx: usize,
         activate: ActivateWindow,
+        allow_hidden: bool,
     ) {
         if let Some(InteractiveMoveState::Moving(move_)) = &mut self.interactive_move {
             if window.is_none() || window == Some(move_.tile.window().id()) {
@@ -2953,7 +2960,7 @@ impl<W: LayoutElement> Layout<W> {
             };
             monitor
         };
-        monitor.move_to_workspace(window, idx, activate);
+        monitor.move_to_workspace(window, idx, activate, allow_hidden);
     }
 
     pub fn move_column_to_workspace_up(&mut self, activate: bool) {
@@ -2970,11 +2977,14 @@ impl<W: LayoutElement> Layout<W> {
         monitor.move_column_to_workspace_down(activate);
     }
 
-    pub fn move_column_to_workspace(&mut self, idx: usize, activate: bool) {
+    /// Moves the active column to the workspace at `idx` on the active monitor.
+    ///
+    /// See [`Monitor::move_to_workspace`] for `allow_hidden`.
+    pub fn move_column_to_workspace(&mut self, idx: usize, activate: bool, allow_hidden: bool) {
         let Some(monitor) = self.active_monitor() else {
             return;
         };
-        monitor.move_column_to_workspace(idx, activate);
+        monitor.move_column_to_workspace(idx, activate, allow_hidden);
     }
 
     pub fn switch_workspace_up(&mut self) {
