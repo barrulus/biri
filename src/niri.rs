@@ -4631,6 +4631,27 @@ impl Niri {
         }
     }
 
+    /// Resolve the configured shader chain for `output`, or an empty vec if it has none.
+    ///
+    /// This is the single place output shader chains are resolved, so the `scoped_key` computed
+    /// at compile time always matches the one looked up at render time.
+    pub(crate) fn output_shader_chain(
+        &self,
+        output: &smithay::output::Output,
+    ) -> Vec<(String, bool)> {
+        // This is the established idiom for output-config lookup in this file; see the call
+        // sites at src/niri.rs:3216 and :3104. `find` matches on make/model/serial or connector.
+        let name = output.user_data().get::<OutputName>().unwrap();
+        let config = self.config.borrow();
+        let Some(out_config) = config.outputs.find(name) else {
+            return Vec::new();
+        };
+        let Some(shader) = &out_config.shader else {
+            return Vec::new();
+        };
+        shader.pass_sources(&config.output_shaders, &read_scoped_shader_path)
+    }
+
     pub fn update_shaders(&mut self) {
         self.layout.update_shaders();
 
@@ -5023,6 +5044,39 @@ impl Niri {
                 });
                 start.elapsed().as_secs_f32()
             };
+
+            // The output shader is a full-output region: same element, no geometry to configure.
+            let output_chain = self.output_shader_chain(output);
+            if !output_chain.is_empty() {
+                let key = shaders::scoped_key(&output_chain);
+                if Shaders::get(ctx.renderer)
+                    .program(ProgramType::Scoped(key, 0))
+                    .is_some()
+                {
+                    let n_passes = output_chain.len();
+                    let offscreens = (0..n_passes.saturating_sub(1))
+                        .map(|_| {
+                            std::rc::Rc::new(
+                                crate::render_helpers::offscreen::OffscreenBuffer::default(),
+                            )
+                        })
+                        .collect::<Vec<_>>();
+                    let elem = ScopedShaderElement::new(
+                        Id::new(),
+                        full,
+                        scale,
+                        time,
+                        cursor,
+                        [0., 0., 1., 1.],
+                        out_phys,
+                        key,
+                        n_passes,
+                        ScopedSource::Capture,
+                        offscreens,
+                    );
+                    push(elem.into());
+                }
+            }
 
             // Clone region data out before any mutable borrows.
             let regions: Vec<_> = {
@@ -7978,6 +8032,21 @@ pub(crate) fn scoped_shader_chains(config: &niri_config::Config) -> Vec<Vec<(Str
     }
     for preset in &config.window_shaders {
         let chain = preset.pass_sources(read_scoped_shader_path);
+        if !chain.is_empty() {
+            chains.push(chain);
+        }
+    }
+    for out in &config.outputs.0 {
+        if let Some(shader) = &out.shader {
+            let chain = shader.pass_sources(&config.output_shaders, &read_scoped_shader_path);
+            if !chain.is_empty() {
+                chains.push(chain);
+            }
+        }
+    }
+    // Compile every preset eagerly so cycle-output-shader never stalls on a recompile.
+    for preset in &config.output_shaders {
+        let chain = preset.pass_sources(&read_scoped_shader_path);
         if !chain.is_empty() {
             chains.push(chain);
         }
