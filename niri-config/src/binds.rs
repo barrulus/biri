@@ -353,6 +353,8 @@ pub enum Action {
     CycleWindowShader,
     #[knuffel(skip)]
     CycleWindowShaderById(u64),
+    ToggleOutputShader(#[knuffel(argument)] Option<String>),
+    CycleOutputShader(#[knuffel(argument)] Option<String>),
     ToggleWindowSticky,
     #[knuffel(skip)]
     ToggleWindowStickyById(u64),
@@ -705,6 +707,8 @@ impl From<niri_ipc::Action> for Action {
             }
             niri_ipc::Action::CycleWindowShader { id: None } => Self::CycleWindowShader,
             niri_ipc::Action::CycleWindowShader { id: Some(id) } => Self::CycleWindowShaderById(id),
+            niri_ipc::Action::ToggleOutputShader { output } => Self::ToggleOutputShader(output),
+            niri_ipc::Action::CycleOutputShader { output } => Self::CycleOutputShader(output),
             niri_ipc::Action::ToggleWindowSticky { id: None } => Self::ToggleWindowSticky,
             niri_ipc::Action::ToggleWindowSticky { id: Some(id) } => {
                 Self::ToggleWindowStickyById(id)
@@ -1121,6 +1125,54 @@ mod tests {
         assert_eq!(
             Action::from(niri_ipc::Action::CycleWindowShader { id: None }),
             Action::CycleWindowShader,
+        );
+    }
+
+    #[test]
+    fn output_shader_binds_parse() {
+        let binds = crate::Config::parse_mem(
+            r##"
+            binds {
+                Mod+Shift+G { toggle-output-shader; }
+                Mod+Shift+H { toggle-output-shader "eDP-1"; }
+                Mod+Shift+C { cycle-output-shader; }
+                Mod+Shift+V { cycle-output-shader "DP-2"; }
+            }
+            "##,
+        )
+        .unwrap()
+        .binds;
+
+        let actions: Vec<_> = binds.0.iter().map(|b| b.action.clone()).collect();
+        assert_eq!(
+            actions,
+            [
+                Action::ToggleOutputShader(None),
+                Action::ToggleOutputShader(Some(String::from("eDP-1"))),
+                Action::CycleOutputShader(None),
+                Action::CycleOutputShader(Some(String::from("DP-2"))),
+            ]
+        );
+
+        assert_eq!(
+            Action::from(niri_ipc::Action::ToggleOutputShader { output: None }),
+            Action::ToggleOutputShader(None)
+        );
+        assert_eq!(
+            Action::from(niri_ipc::Action::ToggleOutputShader {
+                output: Some(String::from("DP-2"))
+            }),
+            Action::ToggleOutputShader(Some(String::from("DP-2")))
+        );
+        assert_eq!(
+            Action::from(niri_ipc::Action::CycleOutputShader { output: None }),
+            Action::CycleOutputShader(None)
+        );
+        assert_eq!(
+            Action::from(niri_ipc::Action::CycleOutputShader {
+                output: Some(String::from("eDP-1"))
+            }),
+            Action::CycleOutputShader(Some(String::from("eDP-1")))
         );
     }
 
