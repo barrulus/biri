@@ -720,6 +720,8 @@ pub struct OutputState {
     /// Pending one-shot timer that re-queues a throttled shader redraw at the next capped
     /// deadline. Stored so it can be cancelled/replaced; `None` when no throttle wake is armed.
     pub shader_throttle_timer: Option<RegistrationToken>,
+    /// Runtime shader override for this output: preset selection and on/off.
+    pub shader_state: crate::output_shader::OutputShaderState,
     /// Last sequence received in a vblank event.
     pub last_drm_sequence: Option<u32>,
     pub vblank_throttle: VBlankThrottle,
@@ -1923,9 +1925,22 @@ impl State {
             shaders_changed = true;
         }
 
+        let output_shaders_changed = {
+            let shaders_of = |c: &niri_config::Config| {
+                c.outputs
+                    .0
+                    .iter()
+                    .map(|o| (o.name.clone(), o.shader.clone()))
+                    .collect::<Vec<_>>()
+            };
+            shaders_of(&config) != shaders_of(&old_config)
+        };
+
         if config.region_shaders != old_config.region_shaders
             || config.window_rules != old_config.window_rules
             || config.window_shaders != old_config.window_shaders
+            || config.output_shaders != old_config.output_shaders
+            || output_shaders_changed
         {
             let chains = scoped_shader_chains(&config);
             self.backend.with_primary_renderer(|renderer| {
@@ -3275,6 +3290,7 @@ impl Niri {
             unfinished_animations_remain: false,
             last_shader_frame: None,
             shader_throttle_timer: None,
+            shader_state: Default::default(),
             frame_clock: FrameClock::new(refresh_interval, vrr),
             last_drm_sequence: None,
             vblank_throttle: VBlankThrottle::new(self.event_loop.clone(), name.connector.clone()),
@@ -4639,10 +4655,33 @@ impl Niri {
         &self,
         output: &smithay::output::Output,
     ) -> Vec<(String, bool)> {
+        // Read the runtime override out of output_state before borrowing config, so the two
+        // borrows never overlap.
+        let (disabled, selected) = match self.output_state.get(output) {
+            Some(state) => (
+                state.shader_state.disabled,
+                state.shader_state.preset.clone(),
+            ),
+            None => (false, None),
+        };
+        if disabled {
+            return Vec::new();
+        }
+
         // This is the established idiom for output-config lookup in this file; see the call
         // sites at src/niri.rs:3216 and :3104. `find` matches on make/model/serial or connector.
         let name = output.user_data().get::<OutputName>().unwrap();
         let config = self.config.borrow();
+
+        // A selected preset overrides the output's configured rule. Resolved by name on every
+        // call, so a config reload is picked up without any re-resolution step.
+        if let Some(selected) = &selected {
+            let Some(preset) = config.output_shaders.iter().find(|p| &p.name == selected) else {
+                return Vec::new();
+            };
+            return preset.pass_sources(&read_scoped_shader_path);
+        }
+
         let Some(out_config) = config.outputs.find(name) else {
             return Vec::new();
         };
