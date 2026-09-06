@@ -235,6 +235,9 @@ mod tests {
         r.kelvin = Some(crate::utils::FloatOrInt(6500.0));
         let identity_src = builtin_preset_source(&r).unwrap();
         assert_ne!(default_src, identity_src, "kelvin property was ignored");
-        assert!(identity_src.contains("1.000000"), "6500 K not identity: {identity_src}");
+        assert!(
+            identity_src.contains("1.000000"),
+            "6500 K not identity: {identity_src}"
+        );
     }
 }

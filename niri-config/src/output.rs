@@ -738,7 +738,10 @@ mod tests {
         let edp = shader_of("eDP-1").expect("eDP-1 has no shader");
         let chain = edp.pass_sources(&config.output_shaders, &no_files);
         assert_eq!(chain.len(), 1);
-        assert!(chain[0].0.contains("vec4(vec3(l)"), "not grayscale: {chain:?}");
+        assert!(
+            chain[0].0.contains("vec4(vec3(l)"),
+            "not grayscale: {chain:?}"
+        );
 
         let dp2 = shader_of("DP-2").unwrap();
         assert!(dp2.pass_sources(&config.output_shaders, &no_files)[0]
@@ -750,7 +753,10 @@ mod tests {
             .0
             .contains("bgra"));
 
-        assert!(shader_of("DP-3").is_none(), "an output with no shader must stay None");
+        assert!(
+            shader_of("DP-3").is_none(),
+            "an output with no shader must stay None"
+        );
     }
 
     #[test]
@@ -827,6 +833,9 @@ mod tests {
             .as_ref()
             .unwrap()
             .pass_sources(&config.output_shaders, &no_files);
-        assert!(chain.is_empty(), "a pass must not resolve a user preset: {chain:?}");
+        assert!(
+            chain.is_empty(),
+            "a pass must not resolve a user preset: {chain:?}"
+        );
     }
 }

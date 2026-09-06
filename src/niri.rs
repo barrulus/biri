@@ -6060,8 +6060,10 @@ impl Niri {
             // recomposites `cap_fps` times/sec instead of at the panel's native refresh. Shaders
             // riding along with a non-shader animation (drag, transition, overview) are never
             // throttled — those must stay smooth.
-            let shader_animate =
-                global_shader_animate || region_shader_animate || output_shader_animate || window_shader_animate;
+            let shader_animate = global_shader_animate
+                || region_shader_animate
+                || output_shader_animate
+                || window_shader_animate;
             let cap_fps = self.config.borrow().shader_animation_max_fps;
             let now = std::time::Instant::now();
 

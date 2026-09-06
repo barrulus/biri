@@ -595,6 +595,116 @@ The selection is per-window runtime state: it survives config reloads (presets a
 
 ---
 
+## Per-output shaders
+
+A `shader {}` block inside an `output {}` block applies a post-process shader to that single output, without writing any GLSL. It takes the same source fields as `region-shader` (`source`, `path`, `mode`, `pass`), minus `geometry` — an output shader always covers the whole output it's attached to.
+
+```kdl
+output "eDP-1" {
+    shader {
+        preset "saturation" amount=1.4
+    }
+}
+
+output "DP-2" {
+    shader {
+        preset "temperature" kelvin=4000
+    }
+}
+```
+
+Output matching for `shader {}` goes through the same make/model/serial-or-connector matching as the rest of the `output` block.
+
+### Built-in filters
+
+Instead of hand-written GLSL, `shader {}` (and `pass {}` inside it) can name a built-in colour filter with `preset`:
+
+| Preset | Property | Default | Notes |
+|---|---|---|---|
+| `grayscale` | — | — | Converts to luma. |
+| `invert` | — | — | Inverts each colour channel. |
+| `saturation` | `amount=` | `1.5` | `0` is full grayscale, `1` is unchanged, values above `1` boost saturation. |
+| `temperature` | `kelvin=` | `4000` | Warms (low values) or cools (high values) the image. `kelvin=6500` is exactly neutral — identity, no tint. |
+
+These generated shaders are **static**: they contain no animation uniforms, so — unlike a hand-written shader that reads `niri_time` — they cost no continuous redraws. An output shader built entirely from built-in presets only redraws when the output's own content changes, making it safe to leave on permanently as an accessibility filter (e.g. an always-on grayscale or inverted-colour output).
+
+### Named presets (`output-shaders`)
+
+A top-level `output-shaders {}` block defines named shader presets that any output's `shader {}` can select by name, and that `cycle-output-shader` walks through at runtime:
+
+```kdl
+output-shaders {
+    preset "night" {
+        preset "temperature" kelvin=3200
+    }
+    preset "mono"  {
+        preset "grayscale"
+    }
+    preset "warm-mono" {
+        pass {
+            preset "grayscale"
+        }
+        pass {
+            preset "temperature" kelvin=3500
+        }
+    }
+}
+
+output "HDMI-A-1" {
+    shader {
+        preset "warm-mono"
+    }
+}
+```
+
+### Preset resolution and why recursion is impossible
+
+The `preset` field can appear in two different places, and each resolves differently:
+
+- A `preset` at the **top level** of a `shader {}` body (directly inside `output { shader { … } }`, or inside an `output-shaders { preset "name" { … } }` body) resolves against your `output-shaders` presets first, then falls back to the built-in table. This means a user preset **shadows** a built-in preset of the same name.
+- A `preset` **inside a `pass {}` block** resolves against the built-in table **only** — it can never name a user preset.
+
+That second rule is what makes preset recursion structurally impossible: a user preset's body can reach further presets only through its own `pass` blocks, and those can only ever resolve to a built-in. There is no path by which a preset can (directly or transitively) refer back to itself or to another user preset.
+
+### Compositing order
+
+When more than one shader effect is active on the same output, they compose in a fixed order, from the viewer's perspective:
+
+**global shader → output shader → region shaders → windows**
+
+The global shader (if any) is applied over everything, including the output shader. The output shader is applied over any region shaders on that output, which are themselves applied over the windows underneath. In practice this means a grayscale (or otherwise colour-filtered) output shader will also gray out any region shader effects on that same output — the output shader operates on the fully composited scene below it, region shaders included.
+
+### Toggling and cycling at runtime
+
+Two bindable actions control the output shader (both also available as `niri msg action …`):
+
+- `toggle-output-shader` — turns the output's shader off and back on. Takes an optional output-name argument; without one, it acts on the focused output.
+- `cycle-output-shader` — rotates the output through: default (the `output { shader {} }` shader, or none) → first `output-shaders` preset → … → last preset → back to default. Cycling always re-enables a shader that was turned off with `toggle-output-shader`.
+
+```kdl
+binds {
+    Mod+Shift+G {
+        toggle-output-shader;
+    }
+    Mod+Shift+H {
+        toggle-output-shader "eDP-1";
+    }
+    Mod+Shift+C {
+        cycle-output-shader;
+    }
+}
+```
+
+Or from the command line:
+
+```
+niri msg action toggle-output-shader --output DP-2
+```
+
+See [`toggle-output-shader`](./Configuration:-Key-Bindings.md#toggle-output-shader) and [`cycle-output-shader`](./Configuration:-Key-Bindings.md#cycle-output-shader) in Key Bindings for the full action reference.
+
+---
+
 ### Shaders in screencast / screenshots
 
 By default, shader effects — global, region, and per-window — do **not** appear in portal screencasts (Google Meet, OBS, browser screen-share, Zoom), `grim` screenshots, or `wl-screenrec` recordings. This keeps shaders as a local display effect and prevents them from leaking into shared or recorded content.
@@ -618,4 +728,4 @@ When the flag is present, the global shader, all region shaders, and all per-win
 
 - **TTY/DRM only.** The effect applies on the real (DRM/KMS) output. It is intentionally **not** applied on the nested winit backend (running niri in a window). By default it is also not applied to screenshots or screen recordings — use [`shaders-in-capture`](#shaders-in-screencast--screenshots) to opt in.
 - **Output transform.** The effect is verified on outputs with the default (`normal`) transform. On outputs configured with a non-default `transform` (e.g. `90`, `270`, `flipped`), the shader's view of `niri_screen`/`niri_prev` may be mis-oriented. If you use a rotated or flipped output, verify your shader there before relying on it.
-- **Whole-output `global-shader`.** The `global-shader` block applies to all outputs; per-output and per-layer global shaders are not supported. For sub-output scoping, use a [region shader](#region-shaders) (a screen rectangle) or a [per-window shader](#per-window-shaders) (`window-rule { shader {} }`). Multi-pass chains are supported (see [Multi-pass chains](#multi-pass-chains-pass)) but a chain of two or more passes is always whole-output (no `cursor-radius` region mode).
+- **Whole-output `global-shader`.** The `global-shader` block applies to all outputs; per-layer global shaders are not supported. For a shader scoped to one output, use a [per-output shader](#per-output-shaders) (`output { shader {} }`); for sub-output scoping, use a [region shader](#region-shaders) (a screen rectangle) or a [per-window shader](#per-window-shaders) (`window-rule { shader {} }`). Multi-pass chains are supported (see [Multi-pass chains](#multi-pass-chains-pass)) but a chain of two or more passes is always whole-output (no `cursor-radius` region mode).

@@ -373,6 +373,33 @@ binds {
 }
 ```
 
+#### `toggle-output-shader`
+
+Toggle an output's shader on or off.
+This affects the shader applied through an `output { shader {} }` block, or an `output-shaders` preset selected with `cycle-output-shader`.
+Takes an optional output-name argument; without one, it acts on the focused output.
+See [Per-output shaders](./Configuration:-Global-Shader.md#per-output-shaders).
+
+```kdl
+binds {
+    Mod+Shift+G { toggle-output-shader; }
+    Mod+Shift+H { toggle-output-shader "eDP-1"; }
+}
+```
+
+#### `cycle-output-shader`
+
+Cycle an output's shader through the presets defined in the top-level `output-shaders {}` block: default (the `output { shader {} }` shader, or none) → first preset → … → last preset → back to default.
+Cycling re-enables a shader turned off with `toggle-output-shader`.
+Takes an optional output-name argument; without one, it acts on the focused output.
+See [Named presets](./Configuration:-Global-Shader.md#named-presets-output-shaders).
+
+```kdl
+binds {
+    Mod+Shift+C { cycle-output-shader; }
+}
+```
+
 #### `toggle-window-sticky`
 
 <sup>Since: 25.11</sup>

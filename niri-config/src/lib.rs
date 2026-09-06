@@ -42,8 +42,8 @@ pub mod misc;
 pub mod output;
 pub mod output_shader;
 pub mod recent_windows;
-pub mod shader_presets;
 pub mod region_shader;
+pub mod shader_presets;
 pub mod utils;
 pub mod window_rule;
 pub mod window_shaders;
@@ -66,10 +66,8 @@ pub use crate::output_shader::{
 };
 use crate::recent_windows::RecentWindowsPart;
 pub use crate::recent_windows::{MruDirection, MruFilter, MruPreviews, MruScope, RecentWindows};
-pub use crate::shader_presets::{
-    builtin_preset_source, ShaderPresetRefPart, BUILTIN_PRESET_NAMES,
-};
 pub use crate::region_shader::{Geometry, RegionShader, RegionShaderPart};
+pub use crate::shader_presets::{builtin_preset_source, ShaderPresetRefPart, BUILTIN_PRESET_NAMES};
 pub use crate::utils::{BoolOrFloat, FloatOrInt};
 use crate::utils::{Flag, MergeWith as _};
 pub use crate::window_rule::{
