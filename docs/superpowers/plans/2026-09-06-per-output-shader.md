@@ -1797,5 +1797,15 @@ done, verify on real hardware and record the result in the issue:
 4. Define two `output-shaders` presets, bind and press `cycle-output-shader`; confirm it walks
    default -> preset 1 -> preset 2 -> default.
 5. With a `region-shader` also active on that output, confirm the output filter applies over it.
+6. Define a multi-pass preset (e.g. `warm-mono`: `pass { preset "grayscale"; }` then
+   `pass { preset "temperature" kelvin=3500; }`) and select it. The offscreen ping-pong between
+   passes is the only wholly untested render code, and `n_passes > 1` is the likeliest bug site —
+   every other check above is single-pass.
+7. Without `shaders-in-capture` set, confirm the filter does **not** appear in a portal screencast
+   (e.g. a browser screen-share) or a `grim` capture of that output; then add `shaders-in-capture`
+   and confirm it **does** appear in both. This is a privacy contract, not just a rendering detail.
+8. Cycle to a preset, then reload the config with an unrelated edit (e.g. touch a comment); confirm
+   the filter survives the reload and the correct one is still showing. This exercises the stale
+   preset re-resolution added in the final review pass.
 
-Do not close issue #35 until these five checks pass on hardware.
+Do not close issue #35 until these eight checks pass on hardware.

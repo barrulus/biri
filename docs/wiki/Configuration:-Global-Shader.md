@@ -703,6 +703,11 @@ niri msg action toggle-output-shader --output DP-2
 
 See [`toggle-output-shader`](./Configuration:-Key-Bindings.md#toggle-output-shader) and [`cycle-output-shader`](./Configuration:-Key-Bindings.md#cycle-output-shader) in Key Bindings for the full action reference.
 
+### Caveats
+
+- **The cursor is not filtered.** The output shader element is pushed below the pointer, and on the TTY backend the cursor is usually a hardware plane outside the captured framebuffer. So `preset "invert"` or `preset "grayscale"` leaves the mouse pointer un-inverted / un-grayed, even though the rest of the output is filtered. If you're setting this up for accessibility (e.g. an inverted-colour or grayscale output), be aware the pointer will not follow. The global shader has [`reads-cursor`](#reads-cursor) for this; the output shader has no equivalent.
+- **A `path`-sourced shader needs a config touch to reload.** As with [region shaders](#region-shaders), the shader chain is re-read from disk on render, but shader *programs* are only compiled on config reload. Editing a `.frag` file referenced by `path` without touching the config leaves the render-time cache key pointing at no compiled program, and the shader silently stops drawing. After editing a shader file on disk, touch or re-save your config file to trigger a reload.
+
 ---
 
 ### Shaders in screencast / screenshots
