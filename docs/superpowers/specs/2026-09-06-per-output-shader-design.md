@@ -78,6 +78,17 @@ reach built-ins, so resolution is one level deep by construction and needs no cy
 also keeps `resolve_scoped_pass_sources`'s signature unchanged, since built-in resolution is a pure
 function of name and properties and needs no access to `Config`.
 
+### Type layout
+
+Output shaders get their own `OutputShaderPassPart` (`source` / `path` / `mode` / `preset`) rather
+than reusing `GlobalShaderPassPart`. Reusing the shared type would add `preset` to region-shader
+and window-rule passes as a side effect, contradicting the non-goal above and widening the blast
+radius across four call sites. The duplicated struct is four fields.
+
+`resolve_scoped_pass_sources` is reused as-is: output shaders resolve each pass's `preset` to a
+`(source, hyprland=false)` pair *before* calling it, so the shared resolver never learns about
+presets and its signature does not change.
+
 ### Built-in table
 
 Lives in a new `niri-config/src/shader_presets.rs`. Every generated source is niri-dialect,
@@ -155,15 +166,17 @@ Action::ToggleOutputShader { output: Option<String> }
 Action::CycleOutputShader  { output: Option<String> }
 ```
 
-Config binds follow the `FocusMonitor(String)` precedent rather than the `ById` pair used by the
-window-shader actions, since the selector is a name rather than a u64:
+Config binds use a single variant with an optional KDL argument, following the
+`SetDynamicCastMonitor(Option<String>)` precedent at `niri-config/src/binds.rs:380`:
 
 ```
-ToggleOutputShader
-ToggleOutputShaderOn(String)
-CycleOutputShader
-CycleOutputShaderOn(String)
+ToggleOutputShader(Option<String>)
+CycleOutputShader(Option<String>)
 ```
+
+Not a `ToggleOutputShader` / `ToggleOutputShaderOn(String)` pair: knuffel derives the KDL node name
+from the variant name, so `ToggleOutputShaderOn` would parse as `toggle-output-shader-on` rather
+than as `toggle-output-shader` with an argument.
 
 `None` selects the focused output. `cycle` walks `default -> preset 1 -> … -> preset N -> default`
 and clears `disabled`, reusing `WindowShaderState::cycle`'s semantics exactly; a preset name no
