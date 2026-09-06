@@ -413,9 +413,7 @@ async fn process(ctx: &ClientCtx, request: Request) -> Reply {
         Request::Actions(actions) => {
             // Validate everything up front: an invalid action anywhere rejects the whole
             // batch, so a partial sequence never runs.
-            for (idx, action) in actions.iter().enumerate() {
-                validate_action(action).map_err(|err| format!("action {}: {err}", idx + 1))?;
-            }
+            validate_actions(&actions)?;
 
             let (tx, rx) = async_channel::bounded(1);
 
@@ -521,6 +519,15 @@ fn validate_action(action: &Action) -> Result<(), String> {
         }
     }
 
+    Ok(())
+}
+
+/// Validates every action in a batch before any of them runs, labelling a failure with the
+/// 1-based position of the offending action.
+fn validate_actions(actions: &[Action]) -> Result<(), String> {
+    for (idx, action) in actions.iter().enumerate() {
+        validate_action(action).map_err(|err| format!("action {}: {err}", idx + 1))?;
+    }
     Ok(())
 }
 
@@ -1074,15 +1081,7 @@ mod tests {
             },
         ];
 
-        let mut result = Ok(());
-        for (idx, action) in actions.iter().enumerate() {
-            if let Err(err) = validate_action(action) {
-                result = Err(format!("action {}: {err}", idx + 1));
-                break;
-            }
-        }
-
-        let err = result.unwrap_err();
+        let err = validate_actions(&actions).unwrap_err();
         assert!(
             err.contains("action 2"),
             "error should name action 2 (1-based): {err}"
