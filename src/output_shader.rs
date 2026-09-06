@@ -29,6 +29,23 @@ impl OutputShaderState {
             },
         };
     }
+
+    /// Clear a selected preset name that no longer exists in `presets` (e.g. renamed or removed
+    /// from `output-shaders` across a config reload), returning whether it cleared anything.
+    ///
+    /// Leaves `disabled` untouched: this is re-resolution of the selection, not a toggle. The
+    /// caller is expected to warn once when this returns `true`, since `output_shader_chain`'s
+    /// own fallback runs on every frame and must stay silent.
+    pub fn clear_stale_preset(&mut self, presets: &[String]) -> bool {
+        let stale = match &self.preset {
+            Some(name) => !presets.iter().any(|p| p == name),
+            None => false,
+        };
+        if stale {
+            self.preset = None;
+        }
+        stale
+    }
 }
 
 #[cfg(test)]
@@ -96,5 +113,46 @@ mod tests {
         s.cycle(&[]);
         assert_eq!(s.preset, None);
         assert!(!s.disabled);
+    }
+
+    #[test]
+    fn clear_stale_preset_keeps_a_preset_that_still_exists() {
+        let mut s = OutputShaderState {
+            preset: Some(String::from("night")),
+            disabled: false,
+        };
+        let cleared = s.clear_stale_preset(&names(&["night", "mono"]));
+        assert!(!cleared);
+        assert_eq!(s.preset.as_deref(), Some("night"));
+    }
+
+    #[test]
+    fn clear_stale_preset_clears_and_reports_a_vanished_preset() {
+        let mut s = OutputShaderState {
+            preset: Some(String::from("night")),
+            disabled: false,
+        };
+        let cleared = s.clear_stale_preset(&names(&["mono"]));
+        assert!(cleared);
+        assert_eq!(s.preset, None);
+    }
+
+    #[test]
+    fn clear_stale_preset_leaves_none_untouched() {
+        let mut s = OutputShaderState::default();
+        let cleared = s.clear_stale_preset(&names(&["mono"]));
+        assert!(!cleared);
+        assert_eq!(s.preset, None);
+    }
+
+    #[test]
+    fn clear_stale_preset_does_not_touch_disabled() {
+        let mut s = OutputShaderState {
+            preset: Some(String::from("night")),
+            disabled: true,
+        };
+        let cleared = s.clear_stale_preset(&[]);
+        assert!(cleared);
+        assert!(s.disabled, "clearing a stale preset must not flip disabled");
     }
 }

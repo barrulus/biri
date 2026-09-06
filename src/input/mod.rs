@@ -2752,9 +2752,14 @@ impl State {
     }
 
     fn toggle_output_shader(&mut self, output: &Output) {
-        if let Some(state) = self.niri.output_state.get_mut(output) {
-            state.shader_state.toggle();
-        }
+        // Every live output has an entry in output_state (populated in add_output), the same
+        // invariant queue_redraw() below relies on with its own unwrap.
+        self.niri
+            .output_state
+            .get_mut(output)
+            .unwrap()
+            .shader_state
+            .toggle();
         self.niri.queue_redraw(output);
     }
 
@@ -2767,9 +2772,14 @@ impl State {
             .iter()
             .map(|p| p.name.clone())
             .collect();
-        if let Some(state) = self.niri.output_state.get_mut(output) {
-            state.shader_state.cycle(&names);
-        }
+        // Every live output has an entry in output_state (populated in add_output), the same
+        // invariant queue_redraw() below relies on with its own unwrap.
+        self.niri
+            .output_state
+            .get_mut(output)
+            .unwrap()
+            .shader_state
+            .cycle(&names);
         self.niri.queue_redraw(output);
     }
 

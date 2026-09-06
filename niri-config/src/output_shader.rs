@@ -138,6 +138,18 @@ fn resolve_body(
         return out;
     }
 
+    // Enforce "set only one of source/path/preset" here too, before the user-preset lookup can
+    // return early below. Otherwise naming a user preset alongside `source`/`path` would
+    // silently drop the other fields and use the preset, while naming a built-in with the same
+    // mistake correctly warns and disables the chain via `resolve_leaf`'s own check — the two
+    // spellings must fail identically.
+    let set =
+        usize::from(source.is_some()) + usize::from(path.is_some()) + usize::from(preset.is_some());
+    if set > 1 {
+        warn!("output shader: set only one of 'source', 'path' or 'preset', disabling");
+        return Vec::new();
+    }
+
     // A top-level `preset` may name a user preset, which shadows a built-in of the same name.
     if let (Some(r), Some(presets)) = (preset, user_presets) {
         if let Some(user) = presets.iter().find(|p| p.name == r.name) {
@@ -230,7 +242,7 @@ mod tests {
         let mono = config.output_shaders[1].pass_sources(&no_files);
         assert_eq!(mono.len(), 1);
         assert!(
-            mono[0].0.contains("float l = dot"),
+            mono[0].0.contains("vec4(vec3(l)"),
             "not grayscale: {mono:?}"
         );
     }
@@ -258,8 +270,36 @@ mod tests {
 
         let chain = config.output_shaders[1].pass_sources(&no_files);
         assert_eq!(chain.len(), 2, "pass chain did not resolve: {chain:?}");
-        assert!(chain[0].0.contains("float l = dot"));
+        assert!(chain[0].0.contains("vec4(vec3(l)"));
         assert!(chain[1].0.contains("c.rgb * vec3("));
+    }
+
+    #[test]
+    fn source_and_user_preset_together_disables_the_chain() {
+        // The built-in spelling of this mistake (source + preset naming a built-in) already
+        // warned and disabled; the user-preset spelling must fail identically instead of
+        // silently dropping `source` and using the preset.
+        let config = Config::parse_mem(
+            r##"
+            output-shaders {
+                preset "mono" {
+                    preset "grayscale"
+                }
+            }
+            output "DP-1" {
+                shader {
+                    source "vec4 global_color(vec3 c){ return vec4(c, 1.0); }"
+                    preset "mono"
+                }
+            }
+            "##,
+        )
+        .unwrap();
+        let out_config = config.outputs.0.iter().find(|o| o.name == "DP-1").unwrap();
+        let shader = out_config.shader.as_ref().unwrap();
+        assert!(shader
+            .pass_sources(&config.output_shaders, &no_files)
+            .is_empty());
     }
 
     #[test]

@@ -1950,6 +1950,22 @@ impl State {
             self.niri.layout.with_windows_mut(|mapped, _| {
                 mapped.update_shader_preset(&config);
             });
+            let output_shader_preset_names: Vec<String> = config
+                .output_shaders
+                .iter()
+                .map(|p| p.name.clone())
+                .collect();
+            for state in self.niri.output_state.values_mut() {
+                if state
+                    .shader_state
+                    .clear_stale_preset(&output_shader_preset_names)
+                {
+                    warn!(
+                        "output shader preset is no longer defined in output-shaders; \
+                         falling back to the output's configured shader rule"
+                    );
+                }
+            }
             shaders_changed = true;
         }
 
@@ -4675,11 +4691,17 @@ impl Niri {
 
         // A selected preset overrides the output's configured rule. Resolved by name on every
         // call, so a config reload is picked up without any re-resolution step.
+        //
+        // A selected name that no longer exists (renamed/removed `output-shaders` preset,
+        // reloaded before the state was re-resolved) falls through to the output's own
+        // configured `shader` rule below rather than dropping the shader entirely. The config
+        // reload gate clears stale selections and warns the user; this is only the silent
+        // safety net for any path that reads the state in between, so it must not warn itself —
+        // it runs every frame, from both the render path and the redraw gate.
         if let Some(selected) = &selected {
-            let Some(preset) = config.output_shaders.iter().find(|p| &p.name == selected) else {
-                return Vec::new();
-            };
-            return preset.pass_sources(&read_scoped_shader_path);
+            if let Some(preset) = config.output_shaders.iter().find(|p| &p.name == selected) {
+                return preset.pass_sources(&read_scoped_shader_path);
+            }
         }
 
         let Some(out_config) = config.outputs.find(name) else {
