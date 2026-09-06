@@ -659,12 +659,12 @@ output "HDMI-A-1" {
 
 ### Preset resolution and why recursion is impossible
 
-The `preset` field can appear in two different places, and each resolves differently:
+The `preset` field resolves differently depending on where it appears:
 
-- A `preset` at the **top level** of a `shader {}` body (directly inside `output { shader { … } }`, or inside an `output-shaders { preset "name" { … } }` body) resolves against your `output-shaders` presets first, then falls back to the built-in table. This means a user preset **shadows** a built-in preset of the same name.
-- A `preset` **inside a `pass {}` block** resolves against the built-in table **only** — it can never name a user preset.
+- A `preset` at the **top level of an output's own `shader {}` block** — i.e. directly inside `output { shader { … } }` — resolves against your `output-shaders` presets first, then falls back to the built-in table. This means a user preset **shadows** a built-in preset of the same name.
+- A `preset` **anywhere inside an `output-shaders { preset "name" { … } }` body** — whether at that body's top level or nested inside one of its `pass {}` blocks — resolves against the built-in table **only**. It can never name another user preset.
 
-That second rule is what makes preset recursion structurally impossible: a user preset's body can reach further presets only through its own `pass` blocks, and those can only ever resolve to a built-in. There is no path by which a preset can (directly or transitively) refer back to itself or to another user preset.
+That second rule is what makes preset recursion structurally impossible: a user preset's body — top level or `pass`-nested — can only ever resolve to a built-in. There is no path by which a preset can (directly or transitively) refer back to itself or to another user preset.
 
 ### Compositing order
 
