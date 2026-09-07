@@ -1,11 +1,11 @@
 //! Note: This backend has limited DMA-BUF support intended for screencopy.
 
 use std::collections::HashMap;
-use std::mem;
 use std::os::fd::{FromRawFd, OwnedFd};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+use std::{io, mem};
 
 use anyhow::Context as _;
 use niri_config::OutputName;
@@ -559,7 +559,12 @@ impl input::LibinputInterface for HeadlessLibinputInterface {
         let flags = flags | libc::O_CLOEXEC | libc::O_NOCTTY | libc::O_NOFOLLOW | libc::O_NONBLOCK;
         let fd = unsafe { libc::open(c_path.as_ptr(), flags) };
         if fd < 0 {
-            let errno = unsafe { *libc::__errno_location() };
+            // `libc::__errno_location()` is glibc-specific and does not exist on FreeBSD or
+            // macOS. `last_os_error()` reads the same errno portably, and must stay immediately
+            // after the failing `open()` so nothing else can clobber it.
+            let errno = io::Error::last_os_error()
+                .raw_os_error()
+                .unwrap_or(libc::EIO);
 
             if errno == libc::ENOENT || errno == libc::ENODEV {
                 trace!("headless: libinput open_restricted failed for {path:?}: errno={errno}");
