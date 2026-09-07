@@ -11,6 +11,7 @@ You can find documentation for various sections of the config on these wiki page
 * [`window-rule {}`](./Configuration:-Window-Rules.md)
 * [`layer-rule {}`](./Configuration:-Layer-Rules.md)
 * [`animations {}`](./Configuration:-Animations.md)
+* [`global-shader {}`, `region-shader {}`, `window-shaders {}`, `output-shaders {}`](./Configuration:-Global-Shader.md)
 * [`gestures {}`](./Configuration:-Gestures.md)
 * [`recent-windows {}`](./Configuration:-Recent-Windows.md)
 * [`debug {}`](./Configuration:-Debug-Options.md)
