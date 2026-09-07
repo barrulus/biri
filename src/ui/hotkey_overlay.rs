@@ -506,6 +506,8 @@ fn action_name(action: &Action) -> String {
         Action::ToggleWindowFloating => String::from("Move Window Between Floating and Tiling"),
         Action::ToggleWindowShader => String::from("Toggle Window Shader"),
         Action::CycleWindowShader => String::from("Cycle Window Shader Preset"),
+        Action::ToggleOutputShader(_) => String::from("Toggle Output Shader"),
+        Action::CycleOutputShader(_) => String::from("Cycle Output Shader Preset"),
         Action::ToggleWindowSticky => String::from("Toggle Window Sticky Across Workspaces"),
         Action::SwitchFocusBetweenFloatingAndTiling => {
             String::from("Switch Focus Between Floating and Tiling")

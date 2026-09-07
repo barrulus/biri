@@ -369,6 +369,20 @@ output "DP-2" {
 }
 ```
 
+### `shader`
+
+Apply a post-process shader to this output, either hand-written GLSL or one of the built-in colour filters (`grayscale`, `invert`, `saturation`, `temperature`) — no GLSL required for the built-ins.
+
+```kdl
+output "eDP-1" {
+    shader {
+        preset "grayscale"
+    }
+}
+```
+
+See [Per-output shaders](./Configuration:-Global-Shader.md#per-output-shaders) on the Global Shader page for the full field reference, the built-in filter table, preset resolution rules, compositing order, and the `toggle-output-shader` / `cycle-output-shader` actions.
+
 ### Layout config overrides
 
 <sup>Since: 25.11</sup>

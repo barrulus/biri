@@ -40,8 +40,10 @@ pub mod layer_rule;
 pub mod layout;
 pub mod misc;
 pub mod output;
+pub mod output_shader;
 pub mod recent_windows;
 pub mod region_shader;
+pub mod shader_presets;
 pub mod utils;
 pub mod window_rule;
 pub mod window_shaders;
@@ -59,9 +61,13 @@ pub use crate::layer_rule::LayerRule;
 pub use crate::layout::*;
 pub use crate::misc::*;
 pub use crate::output::{Output, OutputName, Outputs, Position, Vrr};
+pub use crate::output_shader::{
+    OutputShaderPart, OutputShaderPassPart, OutputShaderPreset, OutputShadersPart,
+};
 use crate::recent_windows::RecentWindowsPart;
 pub use crate::recent_windows::{MruDirection, MruFilter, MruPreviews, MruScope, RecentWindows};
 pub use crate::region_shader::{Geometry, RegionShader, RegionShaderPart};
+pub use crate::shader_presets::{builtin_preset_source, ShaderPresetRefPart, BUILTIN_PRESET_NAMES};
 pub use crate::utils::{BoolOrFloat, FloatOrInt};
 use crate::utils::{Flag, MergeWith as _};
 pub use crate::window_rule::{
@@ -106,6 +112,7 @@ pub struct Config {
     pub recent_windows: RecentWindows,
     pub region_shaders: Vec<RegionShader>,
     pub window_shaders: Vec<WindowShaderPreset>,
+    pub output_shaders: Vec<OutputShaderPreset>,
 }
 
 #[derive(Debug, Clone)]
@@ -185,6 +192,7 @@ where
                     | "workspace"
                     | "region-shader"
                     | "window-shaders"
+                    | "output-shaders"
                     | "include"
             ) && !seen.insert(name)
             {
@@ -242,6 +250,10 @@ where
                 "window-shaders" => {
                     let part = WindowShadersPart::decode_node(node, ctx)?;
                     config.borrow_mut().window_shaders.extend(part.presets);
+                }
+                "output-shaders" => {
+                    let part = OutputShadersPart::decode_node(node, ctx)?;
+                    config.borrow_mut().output_shaders.extend(part.presets);
                 }
 
                 // Single-part sections.
@@ -1383,6 +1395,7 @@ mod tests {
                             },
                         ),
                         layout: None,
+                        shader: None,
                     },
                     Output {
                         off: false,
@@ -1411,6 +1424,7 @@ mod tests {
                         backdrop_color: None,
                         hot_corners: None,
                         layout: None,
+                        shader: None,
                     },
                     Output {
                         off: false,
@@ -1442,6 +1456,7 @@ mod tests {
                         backdrop_color: None,
                         hot_corners: None,
                         layout: None,
+                        shader: None,
                     },
                 ],
             ),
@@ -2656,6 +2671,7 @@ mod tests {
             },
             region_shaders: [],
             window_shaders: [],
+            output_shaders: [],
         }
         "#);
     }

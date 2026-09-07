@@ -720,6 +720,8 @@ pub struct OutputState {
     /// Pending one-shot timer that re-queues a throttled shader redraw at the next capped
     /// deadline. Stored so it can be cancelled/replaced; `None` when no throttle wake is armed.
     pub shader_throttle_timer: Option<RegistrationToken>,
+    /// Runtime shader override for this output: preset selection and on/off.
+    pub shader_state: crate::output_shader::OutputShaderState,
     /// Last sequence received in a vblank event.
     pub last_drm_sequence: Option<u32>,
     pub vblank_throttle: VBlankThrottle,
@@ -1923,9 +1925,22 @@ impl State {
             shaders_changed = true;
         }
 
+        let output_shaders_changed = {
+            let shaders_of = |c: &niri_config::Config| {
+                c.outputs
+                    .0
+                    .iter()
+                    .map(|o| (o.name.clone(), o.shader.clone()))
+                    .collect::<Vec<_>>()
+            };
+            shaders_of(&config) != shaders_of(&old_config)
+        };
+
         if config.region_shaders != old_config.region_shaders
             || config.window_rules != old_config.window_rules
             || config.window_shaders != old_config.window_shaders
+            || config.output_shaders != old_config.output_shaders
+            || output_shaders_changed
         {
             let chains = scoped_shader_chains(&config);
             self.backend.with_primary_renderer(|renderer| {
@@ -1935,6 +1950,22 @@ impl State {
             self.niri.layout.with_windows_mut(|mapped, _| {
                 mapped.update_shader_preset(&config);
             });
+            let output_shader_preset_names: Vec<String> = config
+                .output_shaders
+                .iter()
+                .map(|p| p.name.clone())
+                .collect();
+            for state in self.niri.output_state.values_mut() {
+                if state
+                    .shader_state
+                    .clear_stale_preset(&output_shader_preset_names)
+                {
+                    warn!(
+                        "output shader preset is no longer defined in output-shaders; \
+                         falling back to the output's configured shader rule"
+                    );
+                }
+            }
             shaders_changed = true;
         }
 
@@ -3275,6 +3306,7 @@ impl Niri {
             unfinished_animations_remain: false,
             last_shader_frame: None,
             shader_throttle_timer: None,
+            shader_state: Default::default(),
             frame_clock: FrameClock::new(refresh_interval, vrr),
             last_drm_sequence: None,
             vblank_throttle: VBlankThrottle::new(self.event_loop.clone(), name.connector.clone()),
@@ -4631,6 +4663,56 @@ impl Niri {
         }
     }
 
+    /// Resolve the configured shader chain for `output`, or an empty vec if it has none.
+    ///
+    /// This is the single place output shader chains are resolved, so the `scoped_key` computed
+    /// at compile time always matches the one looked up at render time.
+    pub(crate) fn output_shader_chain(
+        &self,
+        output: &smithay::output::Output,
+    ) -> Vec<(String, bool)> {
+        // Read the runtime override out of output_state before borrowing config, so the two
+        // borrows never overlap.
+        let (disabled, selected) = match self.output_state.get(output) {
+            Some(state) => (
+                state.shader_state.disabled,
+                state.shader_state.preset.clone(),
+            ),
+            None => (false, None),
+        };
+        if disabled {
+            return Vec::new();
+        }
+
+        // This is the established idiom for output-config lookup in this file; see the call
+        // sites at src/niri.rs:3216 and :3104. `find` matches on make/model/serial or connector.
+        let name = output.user_data().get::<OutputName>().unwrap();
+        let config = self.config.borrow();
+
+        // A selected preset overrides the output's configured rule. Resolved by name on every
+        // call, so a config reload is picked up without any re-resolution step.
+        //
+        // A selected name that no longer exists (renamed/removed `output-shaders` preset,
+        // reloaded before the state was re-resolved) falls through to the output's own
+        // configured `shader` rule below rather than dropping the shader entirely. The config
+        // reload gate clears stale selections and warns the user; this is only the silent
+        // safety net for any path that reads the state in between, so it must not warn itself —
+        // it runs every frame, from both the render path and the redraw gate.
+        if let Some(selected) = &selected {
+            if let Some(preset) = config.output_shaders.iter().find(|p| &p.name == selected) {
+                return preset.pass_sources(&read_scoped_shader_path);
+            }
+        }
+
+        let Some(out_config) = config.outputs.find(name) else {
+            return Vec::new();
+        };
+        let Some(shader) = &out_config.shader else {
+            return Vec::new();
+        };
+        shader.pass_sources(&config.output_shaders, &read_scoped_shader_path)
+    }
+
     pub fn update_shaders(&mut self) {
         self.layout.update_shaders();
 
@@ -5023,6 +5105,39 @@ impl Niri {
                 });
                 start.elapsed().as_secs_f32()
             };
+
+            // The output shader is a full-output region: same element, no geometry to configure.
+            let output_chain = self.output_shader_chain(output);
+            if !output_chain.is_empty() {
+                let key = shaders::scoped_key(&output_chain);
+                if Shaders::get(ctx.renderer)
+                    .program(ProgramType::Scoped(key, 0))
+                    .is_some()
+                {
+                    let n_passes = output_chain.len();
+                    let offscreens = (0..n_passes.saturating_sub(1))
+                        .map(|_| {
+                            std::rc::Rc::new(
+                                crate::render_helpers::offscreen::OffscreenBuffer::default(),
+                            )
+                        })
+                        .collect::<Vec<_>>();
+                    let elem = ScopedShaderElement::new(
+                        Id::new(),
+                        full,
+                        scale,
+                        time,
+                        cursor,
+                        [0., 0., 1., 1.],
+                        out_phys,
+                        key,
+                        n_passes,
+                        ScopedSource::Capture,
+                        offscreens,
+                    );
+                    push(elem.into());
+                }
+            }
 
             // Clone region data out before any mutable borrows.
             let regions: Vec<_> = {
@@ -5908,6 +6023,13 @@ impl Niri {
                 })
             };
 
+            // A hand-written animated output shader must keep redrawing, exactly like a region
+            // shader. Every built-in filter is static, so it costs no extra frames.
+            let output_shader_animate = {
+                let chain = self.output_shader_chain(output);
+                niri_config::GlobalShaderCaps::scan_chain(&chain).is_animating()
+            };
+
             // Decide whether a window on this output runs a time-driven per-window shader that
             // must keep redrawing. Scans resolved shader sources like the region shaders above;
             // static shaders (no niri_time usage) impose no continuous-redraw cost.
@@ -5960,8 +6082,10 @@ impl Niri {
             // recomposites `cap_fps` times/sec instead of at the panel's native refresh. Shaders
             // riding along with a non-shader animation (drag, transition, overview) are never
             // throttled — those must stay smooth.
-            let shader_animate =
-                global_shader_animate || region_shader_animate || window_shader_animate;
+            let shader_animate = global_shader_animate
+                || region_shader_animate
+                || output_shader_animate
+                || window_shader_animate;
             let cap_fps = self.config.borrow().shader_animation_max_fps;
             let now = std::time::Instant::now();
 
@@ -7978,6 +8102,21 @@ pub(crate) fn scoped_shader_chains(config: &niri_config::Config) -> Vec<Vec<(Str
     }
     for preset in &config.window_shaders {
         let chain = preset.pass_sources(read_scoped_shader_path);
+        if !chain.is_empty() {
+            chains.push(chain);
+        }
+    }
+    for out in &config.outputs.0 {
+        if let Some(shader) = &out.shader {
+            let chain = shader.pass_sources(&config.output_shaders, &read_scoped_shader_path);
+            if !chain.is_empty() {
+                chains.push(chain);
+            }
+        }
+    }
+    // Compile every preset eagerly so cycle-output-shader never stalls on a recompile.
+    for preset in &config.output_shaders {
+        let chain = preset.pass_sources(&read_scoped_shader_path);
         if !chain.is_empty() {
             chains.push(chain);
         }

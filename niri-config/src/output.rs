@@ -8,6 +8,7 @@ use knuffel::Decode;
 use niri_ipc::{ConfiguredMode, HSyncPolarity, Transform, VSyncPolarity};
 
 use crate::gestures::HotCorners;
+use crate::output_shader::OutputShaderPart;
 use crate::{Color, FloatOrInt, LayoutPart};
 
 #[derive(Debug, Default, Clone, PartialEq)]
@@ -80,6 +81,8 @@ pub struct Output {
     pub hot_corners: Option<HotCorners>,
     #[knuffel(child)]
     pub layout: Option<LayoutPart>,
+    #[knuffel(child)]
+    pub shader: Option<OutputShaderPart>,
 }
 
 impl Output {
@@ -114,6 +117,7 @@ impl Default for Output {
             backdrop_color: None,
             hot_corners: None,
             layout: None,
+            shader: None,
         }
     }
 }
@@ -686,6 +690,152 @@ mod tests {
             "DP-2 | DP-2",
         ]
         "#
+        );
+    }
+
+    use crate::Config;
+
+    fn no_files(_: &str) -> Option<String> {
+        None
+    }
+
+    #[test]
+    fn output_shader_child_parses() {
+        let config = Config::parse_mem(
+            r##"
+            output "eDP-1" {
+                scale 1.5
+                shader {
+                    preset "grayscale"
+                }
+            }
+            output "DP-2" {
+                shader {
+                    preset "temperature" kelvin=4000
+                }
+            }
+            output "HDMI-A-1" {
+                shader {
+                    source "vec4 global_color(vec3 c){ return tex2D_screen(c.xy).bgra; }"
+                }
+            }
+            output "DP-3" { }
+            "##,
+        )
+        .unwrap();
+
+        let shader_of = |name: &str| {
+            config
+                .outputs
+                .0
+                .iter()
+                .find(|o| o.name == name)
+                .unwrap()
+                .shader
+                .clone()
+        };
+
+        let edp = shader_of("eDP-1").expect("eDP-1 has no shader");
+        let chain = edp.pass_sources(&config.output_shaders, &no_files);
+        assert_eq!(chain.len(), 1);
+        assert!(
+            chain[0].0.contains("vec4(vec3(l)"),
+            "not grayscale: {chain:?}"
+        );
+
+        let dp2 = shader_of("DP-2").unwrap();
+        assert!(dp2.pass_sources(&config.output_shaders, &no_files)[0]
+            .0
+            .contains("c.rgb * vec3("));
+
+        let hdmi = shader_of("HDMI-A-1").unwrap();
+        assert!(hdmi.pass_sources(&config.output_shaders, &no_files)[0]
+            .0
+            .contains("bgra"));
+
+        assert!(
+            shader_of("DP-3").is_none(),
+            "an output with no shader must stay None"
+        );
+    }
+
+    #[test]
+    fn output_shader_resolves_user_preset_and_shadows_builtin() {
+        let config = Config::parse_mem(
+            r##"
+            output-shaders {
+                preset "night" {
+                    preset "temperature" kelvin=3200
+                }
+                preset "grayscale" {
+                    source "vec4 global_color(vec3 c){ return vec4(0.0); }"
+                }
+            }
+            output "DP-1" {
+                shader {
+                    preset "night"
+                }
+            }
+            output "DP-2" {
+                shader {
+                    preset "grayscale"
+                }
+            }
+            "##,
+        )
+        .unwrap();
+
+        let chain_of = |name: &str| {
+            config
+                .outputs
+                .0
+                .iter()
+                .find(|o| o.name == name)
+                .unwrap()
+                .shader
+                .as_ref()
+                .unwrap()
+                .pass_sources(&config.output_shaders, &no_files)
+        };
+
+        // User preset resolved by name.
+        assert!(chain_of("DP-1")[0].0.contains("c.rgb * vec3("));
+        // A user preset shadows the built-in of the same name.
+        assert!(
+            chain_of("DP-2")[0].0.contains("vec4(0.0)"),
+            "user preset did not shadow the built-in"
+        );
+    }
+
+    #[test]
+    fn user_preset_is_not_reachable_from_inside_a_pass() {
+        // Passes resolve against built-ins only. This is what makes recursion impossible.
+        let config = Config::parse_mem(
+            r##"
+            output-shaders {
+                preset "night" {
+                    preset "temperature" kelvin=3200
+                }
+            }
+            output "DP-1" {
+                shader {
+                    pass {
+                        preset "night"
+                    }
+                }
+            }
+            "##,
+        )
+        .unwrap();
+
+        let chain = config.outputs.0[0]
+            .shader
+            .as_ref()
+            .unwrap()
+            .pass_sources(&config.output_shaders, &no_files);
+        assert!(
+            chain.is_empty(),
+            "a pass must not resolve a user preset: {chain:?}"
         );
     }
 }
