@@ -1,5 +1,11 @@
 blank_issues_enabled: true
 contact_links:
-  - name: Upstream niri (biri is a fork)
+  - name: 💡 Feature ideas and suggestions
+    url: https://github.com/barrulus/biri/discussions/new?category=ideas
+    about: New ideas start as discussions where they can be upvoted. The most-wanted ideas get promoted to issues.
+  - name: ❓ Questions and help
+    url: https://github.com/barrulus/biri/discussions/new?category=q-a
+    about: Ask in the Q&A discussions.
+  - name: Upstream niri
     url: https://github.com/niri-wm/niri
-    about: biri is a personal fork of niri. For upstream feature ideas or questions, use the niri repo's Discussions.
+    about: biri is a fork of niri. Problems that also happen on upstream niri belong in the niri repo.

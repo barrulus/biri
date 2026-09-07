@@ -410,6 +410,31 @@ async fn process(ctx: &ClientCtx, request: Request) -> Reply {
             let _ = rx.recv().await;
             Response::Handled
         }
+        Request::Actions(actions) => {
+            // Validate everything up front: an invalid action anywhere rejects the whole
+            // batch, so a partial sequence never runs.
+            validate_actions(&actions)?;
+
+            let (tx, rx) = async_channel::bounded(1);
+
+            let actions: Vec<niri_config::Action> =
+                actions.into_iter().map(niri_config::Action::from).collect();
+            // One idle callback for the whole batch. This is the point of the request:
+            // nothing can interleave between the actions. Queuing one callback per action
+            // would not give that guarantee.
+            ctx.event_loop.insert_idle(move |state| {
+                // Make sure some logic like workspace clean-up has a chance to run before
+                // doing actions.
+                state.niri.advance_animations();
+                state.do_actions(actions, false);
+                let _ = tx.send_blocking(());
+            });
+
+            // Wait until the actions have been processed before returning, for the same
+            // reason as the single-action request.
+            let _ = rx.recv().await;
+            Response::Handled
+        }
         Request::Output { output, action } => {
             action.validate()?;
 
@@ -494,6 +519,15 @@ fn validate_action(action: &Action) -> Result<(), String> {
         }
     }
 
+    Ok(())
+}
+
+/// Validates every action in a batch before any of them runs, labelling a failure with the
+/// 1-based position of the offending action.
+fn validate_actions(actions: &[Action]) -> Result<(), String> {
+    for (idx, action) in actions.iter().enumerate() {
+        validate_action(action).map_err(|err| format!("action {}: {err}", idx + 1))?;
+    }
     Ok(())
 }
 
@@ -1009,5 +1043,48 @@ impl State {
         let event = Event::ScreenshotCaptured { path };
         state.apply(event.clone());
         server.send_event(event);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn valid_action_passes_validation() {
+        assert!(validate_action(&Action::FocusColumnRight {}).is_ok());
+    }
+
+    #[test]
+    fn relative_screenshot_path_is_rejected() {
+        let action = Action::Screenshot {
+            show_pointer: true,
+            path: Some("relative/path.png".to_owned()),
+        };
+        let err = validate_action(&action).unwrap_err();
+        assert!(
+            err.contains("must be absolute"),
+            "error should mention the path must be absolute: {err}"
+        );
+    }
+
+    #[test]
+    fn batch_error_names_the_one_based_index_of_the_bad_action() {
+        // Mirrors the labelling done in the `Request::Actions` handler: the first
+        // invalid action in the batch, at position two, must be reported as
+        // "action 2", not "action 1" (0-based) or the unlabelled underlying error.
+        let actions = [
+            Action::FocusColumnRight {},
+            Action::Screenshot {
+                show_pointer: true,
+                path: Some("relative/path.png".to_owned()),
+            },
+        ];
+
+        let err = validate_actions(&actions).unwrap_err();
+        assert!(
+            err.contains("action 2"),
+            "error should name action 2 (1-based): {err}"
+        );
     }
 }

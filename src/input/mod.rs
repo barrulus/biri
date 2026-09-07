@@ -684,12 +684,17 @@ impl State {
 
     pub fn handle_bind(&mut self, bind: Bind) {
         let Some(cooldown) = bind.cooldown else {
-            self.do_action(bind.action, bind.allow_when_locked);
+            self.do_actions(bind.actions, bind.allow_when_locked);
             return;
         };
 
         // Check this first so that it doesn't trigger the cooldown.
-        if self.niri.is_locked() && !(bind.allow_when_locked || allowed_when_locked(&bind.action)) {
+        //
+        // Run the bind if *any* of its actions would be allowed; do_action skips the rest
+        // individually.
+        if self.niri.is_locked()
+            && !(bind.allow_when_locked || bind.actions.iter().any(allowed_when_locked))
+        {
             return;
         }
 
@@ -710,8 +715,14 @@ impl State {
                     .unwrap();
                 entry.insert(token);
 
-                self.do_action(bind.action, bind.allow_when_locked);
+                self.do_actions(bind.actions, bind.allow_when_locked);
             }
+        }
+    }
+
+    pub fn do_actions(&mut self, actions: Vec<Action>, allow_when_locked: bool) {
+        for action in actions {
+            self.do_action(action, allow_when_locked);
         }
     }
 
@@ -1387,6 +1398,9 @@ impl State {
                 self.niri.queue_redraw_all();
             }
             Action::MoveWindowToWorkspace(reference, focus) => {
+                // A plain workspace index addresses the visible region; only a name or id
+                // may pick out a hidden workspace.
+                let allow_hidden = !matches!(reference, WorkspaceReference::Index(_));
                 if let Some((mut output, index)) =
                     self.niri.find_output_and_workspace_index(reference)
                 {
@@ -1417,7 +1431,9 @@ impl State {
                             self.maybe_warp_cursor_to_focus();
                         }
                     } else {
-                        self.niri.layout.move_to_workspace(None, index, activate);
+                        self.niri
+                            .layout
+                            .move_to_workspace(None, index, activate, allow_hidden);
                         self.maybe_warp_cursor_to_focus();
                     }
 
@@ -1433,6 +1449,9 @@ impl State {
                 let window = self.niri.layout.windows().find(|(_, m)| m.id().get() == id);
                 let window = window.map(|(_, m)| m.window.clone());
                 if let Some(window) = window {
+                    // A plain workspace index addresses the visible region; only a name or
+                    // id may pick out a hidden workspace.
+                    let allow_hidden = !matches!(reference, WorkspaceReference::Index(_));
                     if let Some((output, index)) =
                         self.niri.find_output_and_workspace_index(reference)
                     {
@@ -1466,9 +1485,12 @@ impl State {
                                 }
                             }
                         } else {
-                            self.niri
-                                .layout
-                                .move_to_workspace(Some(&window), index, activate);
+                            self.niri.layout.move_to_workspace(
+                                Some(&window),
+                                index,
+                                activate,
+                                allow_hidden,
+                            );
 
                             // If we focused the target window.
                             let new_focus = self.niri.layout.focus();
@@ -1495,6 +1517,9 @@ impl State {
                 self.niri.queue_redraw_all();
             }
             Action::MoveColumnToWorkspace(reference, focus) => {
+                // A plain workspace index addresses the visible region; only a name or id
+                // may pick out a hidden workspace.
+                let allow_hidden = !matches!(reference, WorkspaceReference::Index(_));
                 if let Some((mut output, index)) =
                     self.niri.find_output_and_workspace_index(reference)
                 {
@@ -1512,7 +1537,9 @@ impl State {
                             self.move_cursor_to_output(&output);
                         }
                     } else {
-                        self.niri.layout.move_column_to_workspace(index, focus);
+                        self.niri
+                            .layout
+                            .move_column_to_workspace(index, focus, allow_hidden);
                         if focus {
                             self.maybe_warp_cursor_to_focus();
                         }
@@ -3188,7 +3215,7 @@ impl State {
                     find_configured_bind(bindings, mod_key, trigger, mods)
                 })
                 .filter(|bind| {
-                    !self.niri.screenshot_ui.is_open() || allowed_during_screenshot(&bind.action)
+                    !self.niri.screenshot_ui.is_open() || bind_allowed_during_screenshot(bind)
                 }) {
                     self.niri.suppressed_buttons.insert(button_code);
                     self.handle_bind(bind.clone());
@@ -3571,7 +3598,7 @@ impl State {
                                     trigger: Trigger::WheelScrollLeft,
                                     modifiers: Modifiers::empty(),
                                 },
-                                action: Action::FocusColumnLeftUnderMouse,
+                                actions: vec![Action::FocusColumnLeftUnderMouse],
                                 repeat: true,
                                 cooldown: None,
                                 allow_when_locked: false,
@@ -3583,7 +3610,7 @@ impl State {
                                     trigger: Trigger::WheelScrollRight,
                                     modifiers: Modifiers::empty(),
                                 },
-                                action: Action::FocusColumnRightUnderMouse,
+                                actions: vec![Action::FocusColumnRightUnderMouse],
                                 repeat: true,
                                 cooldown: None,
                                 allow_when_locked: false,
@@ -3603,7 +3630,7 @@ impl State {
                             )
                             .filter(|bind| {
                                 !self.niri.screenshot_ui.is_open()
-                                    || allowed_during_screenshot(&bind.action)
+                                    || bind_allowed_during_screenshot(bind)
                             });
                             let bind_right = find_configured_bind(
                                 bindings,
@@ -3613,7 +3640,7 @@ impl State {
                             )
                             .filter(|bind| {
                                 !self.niri.screenshot_ui.is_open()
-                                    || allowed_during_screenshot(&bind.action)
+                                    || bind_allowed_during_screenshot(bind)
                             });
                             (bind_left, bind_right)
                         };
@@ -3640,7 +3667,7 @@ impl State {
                                 trigger: Trigger::WheelScrollUp,
                                 modifiers: Modifiers::empty(),
                             },
-                            action: Action::FocusWorkspaceUpUnderMouse,
+                            actions: vec![Action::FocusWorkspaceUpUnderMouse],
                             repeat: true,
                             cooldown: Some(Duration::from_millis(50)),
                             allow_when_locked: false,
@@ -3652,7 +3679,7 @@ impl State {
                                 trigger: Trigger::WheelScrollDown,
                                 modifiers: Modifiers::empty(),
                             },
-                            action: Action::FocusWorkspaceDownUnderMouse,
+                            actions: vec![Action::FocusWorkspaceDownUnderMouse],
                             repeat: true,
                             cooldown: Some(Duration::from_millis(50)),
                             allow_when_locked: false,
@@ -3683,7 +3710,7 @@ impl State {
                                 trigger: Trigger::WheelScrollUp,
                                 modifiers: Modifiers::empty(),
                             },
-                            action: Action::FocusColumnLeftUnderMouse,
+                            actions: vec![Action::FocusColumnLeftUnderMouse],
                             repeat: true,
                             cooldown: Some(Duration::from_millis(50)),
                             allow_when_locked: false,
@@ -3695,7 +3722,7 @@ impl State {
                                 trigger: Trigger::WheelScrollDown,
                                 modifiers: Modifiers::empty(),
                             },
-                            action: Action::FocusColumnRightUnderMouse,
+                            actions: vec![Action::FocusColumnRightUnderMouse],
                             repeat: true,
                             cooldown: Some(Duration::from_millis(50)),
                             allow_when_locked: false,
@@ -3715,13 +3742,13 @@ impl State {
                         )
                         .filter(|bind| {
                             !self.niri.screenshot_ui.is_open()
-                                || allowed_during_screenshot(&bind.action)
+                                || bind_allowed_during_screenshot(bind)
                         });
                         let bind_down =
                             find_configured_bind(bindings, mod_key, Trigger::WheelScrollDown, mods)
                                 .filter(|bind| {
                                     !self.niri.screenshot_ui.is_open()
-                                        || allowed_during_screenshot(&bind.action)
+                                        || bind_allowed_during_screenshot(bind)
                                 });
                         (bind_up, bind_down)
                     };
@@ -3867,14 +3894,13 @@ impl State {
                         mods,
                     )
                     .filter(|bind| {
-                        !self.niri.screenshot_ui.is_open()
-                            || allowed_during_screenshot(&bind.action)
+                        !self.niri.screenshot_ui.is_open() || bind_allowed_during_screenshot(bind)
                     });
                     let bind_right =
                         find_configured_bind(bindings, mod_key, Trigger::TouchpadScrollRight, mods)
                             .filter(|bind| {
                                 !self.niri.screenshot_ui.is_open()
-                                    || allowed_during_screenshot(&bind.action)
+                                    || bind_allowed_during_screenshot(bind)
                             });
                     drop(config);
 
@@ -3905,14 +3931,13 @@ impl State {
                         mods,
                     )
                     .filter(|bind| {
-                        !self.niri.screenshot_ui.is_open()
-                            || allowed_during_screenshot(&bind.action)
+                        !self.niri.screenshot_ui.is_open() || bind_allowed_during_screenshot(bind)
                     });
                     let bind_down =
                         find_configured_bind(bindings, mod_key, Trigger::TouchpadScrollDown, mods)
                             .filter(|bind| {
                                 !self.niri.screenshot_ui.is_open()
-                                    || allowed_during_screenshot(&bind.action)
+                                    || bind_allowed_during_screenshot(bind)
                             });
                     drop(config);
 
@@ -4328,7 +4353,7 @@ impl State {
                         }
                         .filter(|bind| {
                             !self.niri.screenshot_ui.is_open()
-                                || allowed_during_screenshot(&bind.action)
+                                || bind_allowed_during_screenshot(bind)
                         });
                         if let Some(bind) = bind {
                             self.niri.suppressed_buttons.insert(button);
@@ -4957,7 +4982,7 @@ fn should_intercept_key<'a>(
         let mut use_screenshot_ui_action = true;
 
         if let Some(bind) = &final_bind {
-            if allowed_during_screenshot(&bind.action) {
+            if bind_allowed_during_screenshot(bind) {
                 use_screenshot_ui_action = false;
             }
         }
@@ -4970,7 +4995,7 @@ fn should_intercept_key<'a>(
                         // Not entirely correct but it doesn't matter in how we currently use it.
                         modifiers: Modifiers::empty(),
                     },
-                    action,
+                    actions: vec![action],
                     repeat: true,
                     cooldown: None,
                     allow_when_locked: false,
@@ -5034,7 +5059,7 @@ fn find_bind<'a>(
                 trigger: Trigger::Keysym(modified),
                 modifiers: Modifiers::empty(),
             },
-            action,
+            actions: vec![action],
             repeat: true,
             cooldown: None,
             allow_when_locked: false,
@@ -5251,6 +5276,12 @@ fn allowed_during_screenshot(action: &Action) -> bool {
     )
 }
 
+/// A bind is usable while the screenshot UI is open only if *every* one of its actions is.
+/// The screenshot UI must never be handed a bind it can only half-run.
+fn bind_allowed_during_screenshot(bind: &Bind) -> bool {
+    bind.actions.iter().all(allowed_during_screenshot)
+}
+
 fn hardcoded_overview_bind(raw: Keysym, mods: ModifiersState) -> Option<Bind> {
     let mods = modifiers_from_state(mods);
     if !mods.is_empty() {
@@ -5277,7 +5308,7 @@ fn hardcoded_overview_bind(raw: Keysym, mods: ModifiersState) -> Option<Bind> {
             trigger: Trigger::Keysym(raw),
             modifiers: Modifiers::empty(),
         },
-        action,
+        actions: vec![action],
         repeat,
         cooldown: None,
         allow_when_locked: false,
@@ -5717,7 +5748,7 @@ mod tests {
                 trigger: Trigger::Keysym(close_keysym),
                 modifiers: Modifiers::COMPOSITOR | Modifiers::CTRL,
             },
-            action: Action::CloseWindow,
+            actions: vec![Action::CloseWindow],
             repeat: true,
             cooldown: None,
             allow_when_locked: false,
@@ -5781,9 +5812,9 @@ mod tests {
         assert!(matches!(
             filter,
             FilterResult::Intercept(Some(Bind {
-                action: Action::CloseWindow,
+                actions,
                 ..
-            }))
+            })) if actions.as_slice() == [Action::CloseWindow]
         ));
         assert!(suppressed_keys.contains(&close_key_code));
 
@@ -5815,9 +5846,9 @@ mod tests {
         assert!(matches!(
             filter,
             FilterResult::Intercept(Some(Bind {
-                action: Action::CloseWindow,
+                actions,
                 ..
-            }))
+            })) if actions.as_slice() == [Action::CloseWindow]
         ));
 
         let filter = none_key_event(&mut suppressed_keys, mods, true);
@@ -5835,9 +5866,9 @@ mod tests {
         assert!(matches!(
             filter,
             FilterResult::Intercept(Some(Bind {
-                action: Action::CloseWindow,
+                actions,
                 ..
-            }))
+            })) if actions.as_slice() == [Action::CloseWindow]
         ));
 
         mods = Default::default();
@@ -5882,9 +5913,9 @@ mod tests {
         assert!(matches!(
             filter,
             FilterResult::Intercept(Some(Bind {
-                action: Action::CloseWindow,
+                actions,
                 ..
-            }))
+            })) if actions.as_slice() == [Action::CloseWindow]
         ));
         assert!(suppressed_keys.contains(&close_key_code));
 
@@ -5903,7 +5934,7 @@ mod tests {
                     trigger: Trigger::Keysym(Keysym::q),
                     modifiers: Modifiers::COMPOSITOR,
                 },
-                action: Action::CloseWindow,
+                actions: vec![Action::CloseWindow],
                 repeat: true,
                 cooldown: None,
                 allow_when_locked: false,
@@ -5915,7 +5946,7 @@ mod tests {
                     trigger: Trigger::Keysym(Keysym::h),
                     modifiers: Modifiers::SUPER,
                 },
-                action: Action::FocusColumnLeft,
+                actions: vec![Action::FocusColumnLeft],
                 repeat: true,
                 cooldown: None,
                 allow_when_locked: false,
@@ -5927,7 +5958,7 @@ mod tests {
                     trigger: Trigger::Keysym(Keysym::j),
                     modifiers: Modifiers::empty(),
                 },
-                action: Action::FocusWindowDown,
+                actions: vec![Action::FocusWindowDown],
                 repeat: true,
                 cooldown: None,
                 allow_when_locked: false,
@@ -5939,7 +5970,7 @@ mod tests {
                     trigger: Trigger::Keysym(Keysym::k),
                     modifiers: Modifiers::COMPOSITOR | Modifiers::SUPER,
                 },
-                action: Action::FocusWindowUp,
+                actions: vec![Action::FocusWindowUp],
                 repeat: true,
                 cooldown: None,
                 allow_when_locked: false,
@@ -5951,7 +5982,7 @@ mod tests {
                     trigger: Trigger::Keysym(Keysym::l),
                     modifiers: Modifiers::SUPER | Modifiers::ALT,
                 },
-                action: Action::FocusColumnRight,
+                actions: vec![Action::FocusColumnRight],
                 repeat: true,
                 cooldown: None,
                 allow_when_locked: false,

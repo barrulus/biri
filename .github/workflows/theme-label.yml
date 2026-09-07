@@ -1,0 +1,91 @@
+name: Theme label
+
+on:
+  issues:
+    types: [opened]
+  discussion:
+    types: [created]
+
+permissions:
+  issues: write
+  discussions: write
+  contents: read
+
+jobs:
+  theme:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const DROPDOWN = {
+              "Shaders": "theme: shaders",
+              "Overview": "theme: overview",
+              "Workspaces": "theme: workspaces",
+              "Floating": "theme: floating",
+              "Layout": "theme: layout",
+              "Window rules": "theme: window-rules",
+              "Input & binds": "theme: input-binds",
+              "Outputs": "theme: outputs",
+              "IPC": "theme: ipc",
+              "Capture": "theme: capture",
+              "Upstream sync": "theme: upstream-sync",
+              "Project": "theme: project"
+            };
+            const KEYWORDS = {
+              "theme: shaders": ["shader", "shaders", "glsl", "frag", "uniform", "postprocess", "blur", "feedback", "niri_prev", "niri_screen", "hyprland", "crt", "scanline", "tint", "grayscale"],
+              "theme: overview": ["overview", "carousel", "zoom", "lens", "grid", "preset", "presets", "hot", "corner"],
+              "theme: workspaces": ["workspace", "workspaces", "hidden", "scratch", "named", "unhide", "hide", "strip"],
+              "theme: floating": ["floating", "float", "sticky", "pip", "picture", "snap", "overlay"],
+              "theme: layout": ["column", "columns", "tile", "tiling", "tab", "tabs", "tabbed", "vertical", "fullscreen", "maximize", "width", "height", "center", "centered", "struts", "gaps"],
+              "theme: window-rules": ["rule", "rules", "match", "matcher", "app-id", "focus", "activation", "urgent", "animation", "animations", "opacity", "radius", "border"],
+              "theme: input-binds": ["bind", "binds", "keybind", "keybinding", "hotkey", "chord", "mode", "modes", "gesture", "gestures", "touchpad", "dwt", "mouse", "keyboard", "tablet", "swipe", "scroll"],
+              "theme: outputs": ["output", "outputs", "monitor", "monitors", "display", "hdr", "vrr", "refresh", "resolution", "scale", "scaling", "gpu", "nvidia", "drm", "kms", "isolated", "dock"],
+              "theme: ipc": ["ipc", "msg", "socket", "action", "actions", "json", "event", "events", "script", "scripting", "cli"],
+              "theme: capture": ["screencast", "screencasting", "screenshot", "screenshots", "screencopy", "portal", "pipewire", "obs", "recording", "block-out"],
+              "theme: upstream-sync": ["upstream", "sync", "merge", "rebase", "drift", "cherry-pick", "niri-wm"],
+              "theme: project": ["build", "nix", "flake", "pkgbuild", "package", "packaging", "ci", "cargo", "docs", "wiki", "readme", "mkdocs", "release"]
+            };
+
+            const isDiscussion = !!context.payload.discussion;
+            const target = context.payload.discussion || context.payload.issue;
+            const existing = (target.labels || []).map(l => (typeof l === "string" ? l : l.name));
+            if (existing.some(l => l.startsWith("theme:"))) return;
+
+            let label = null;
+            const m = (target.body || "").match(/###\s*Theme\s*\n+\s*(.+)/i);
+            if (m) label = DROPDOWN[m[1].trim()] || null;
+
+            if (!label) {
+              const words = s => (s || "").toLowerCase().match(/[a-z_-]{2,}/g) || [];
+              const title = new Set(words(target.title));
+              const body = new Set(words(target.body).slice(0, 250));
+              let best = 0;
+              for (const [lbl, kws] of Object.entries(KEYWORDS)) {
+                let score = 0;
+                for (const k of kws) score += (title.has(k) ? 3 : 0) + (body.has(k) ? 1 : 0);
+                if (score > best) { best = score; label = lbl; }
+              }
+              if (best < 3) label = null; // require a title hit or several body hits
+            }
+
+            const apply = label || "needs-theme";
+            if (isDiscussion) {
+              const q = await github.graphql(
+                `query($owner:String!,$repo:String!,$name:String!){repository(owner:$owner,name:$repo){label(name:$name){id}}}`,
+                { owner: context.repo.owner, repo: context.repo.repo, name: apply }
+              );
+              const labelId = q.repository.label && q.repository.label.id;
+              if (!labelId) return core.warning(`label not found: ${apply}`);
+              await github.graphql(
+                `mutation($l:ID!,$ids:[ID!]!){addLabelsToLabelable(input:{labelableId:$l,labelIds:$ids}){clientMutationId}}`,
+                { l: target.node_id, ids: [labelId] }
+              );
+            } else {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: target.number,
+                labels: [apply]
+              });
+            }

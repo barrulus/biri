@@ -1,4 +1,48 @@
-# Contributing to niri
+# Contributing to biri
+
+biri is a fork of [niri](https://github.com/niri-wm/niri). Upstream's contributing guide follows below and still applies to code; this section covers how work is organised in this repo.
+
+## Where things go
+
+- **Bugs** → [Issues](https://github.com/barrulus/biri/issues/new/choose). If the problem also happens on upstream niri, report it there instead.
+- **Ideas and feature requests** → [Discussions → Ideas](https://github.com/barrulus/biri/discussions/new?category=ideas). Search first and upvote an existing idea rather than opening a duplicate: upvotes are how ideas get prioritised.
+- **Questions** → [Discussions → Q&A](https://github.com/barrulus/biri/discussions/new?category=q-a).
+
+## Themes
+
+Every issue and discussion carries exactly one `theme:` label. The bug report and idea forms ask for it, and a workflow applies the label (falling back to a keyword guess, or `needs-theme` when it cannot tell). The themes are:
+
+| Label | Scope |
+|---|---|
+| `theme: shaders` | global / region / window shaders, presets, feedback buffers, shaders in capture |
+| `theme: overview` | carousel overview, zoom presets, lens, grid and rounded-corner asks |
+| `theme: workspaces` | named, hidden and scratch workspaces, placement rules, per-output fallbacks |
+| `theme: floating` | floating and sticky windows, PiP, float-above-fullscreen, snapping |
+| `theme: layout` | tiling, columns, tabs, vertical layout, fullscreen and maximize behaviour |
+| `theme: window-rules` | matchers, focus and activation rules, per-app animation or effect overrides |
+| `theme: input-binds` | binds, chords and modes, multi-action binds, gestures, runtime device toggles |
+| `theme: outputs` | isolated outputs, per-output colour, HDR/VRR, multi-GPU, resolutions |
+| `theme: ipc` | `niri msg`, IPC events and properties, scripting surface |
+| `theme: capture` | screencast, screenshots, block-out, portals |
+| `theme: upstream-sync` | merges from upstream niri, drift fixes, fast-tracked upstream PRs |
+| `theme: project` | build, Nix and PKGBUILD packaging, CI, docs, wiki |
+
+`bug` marks defects and is orthogonal to the theme. There are no status labels: status lives on the [Biri project board](https://github.com/users/barrulus/projects/5), which tracks committed work only. `.github/scripts/theme_field_sync.py` mirrors theme labels onto the board's Theme field.
+
+## From idea to issue
+
+Promoting an idea is a maintainer decision: promote, merge into an existing idea, close, or keep collecting votes. A promoted idea becomes an issue with the discussion body copied and a footer `Promoted from discussion <url>`, and the issue link is posted back on the discussion. The discussion stays open until the work ships, then is closed with a note on what shipped.
+
+## Pull requests
+
+- Target `main`. The `upstream` branch is a pristine mirror of niri and never receives fork commits.
+- Reference the issue the PR closes; the PR inherits that issue's theme.
+- Run `cargo fmt`, `cargo clippy`, and the tests. For wiki changes, `cd docs && uv run --locked mkdocs build` must pass in strict mode.
+- No AI attribution lines in commits or PR bodies.
+
+---
+
+# Contributing to niri (upstream guide)
 
 Thanks for your interest in niri!
 The project has grown quite a bit, and we could use all help that we can.
