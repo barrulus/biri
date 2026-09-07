@@ -190,6 +190,17 @@ impl CompositorHandler for State {
                                 || output.is_none()
                                 || output.as_ref() == *parent_output
                         })
+                        // Don't follow the parent onto a hidden workspace. A hidden workspace is
+                        // somewhere the user is deliberately not looking, so a dialog opened there
+                        // is invisible and unreachable — for an authentication prompt that means
+                        // the prompt is simply lost. Fall through to the window rules and the
+                        // active workspace instead.
+                        .filter(|(mapped, _)| {
+                            !self
+                                .niri
+                                .layout
+                                .window_is_on_hidden_workspace(&mapped.window)
+                        })
                         .map(|(mapped, _)| mapped.window.clone());
 
                     // The mapped pre-commit hook deals with dma-bufs on its own.

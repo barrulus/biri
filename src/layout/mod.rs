@@ -1525,6 +1525,15 @@ impl<W: LayoutElement> Layout<W> {
         None
     }
 
+    /// Whether `window` currently sits on a hidden workspace.
+    ///
+    /// Used when placing a child window: a dialog must not follow its parent onto a hidden
+    /// workspace, where it would be invisible and unreachable.
+    pub fn window_is_on_hidden_workspace(&self, window: &W::Id) -> bool {
+        self.workspaces()
+            .any(|(_, _, ws)| ws.hidden && ws.has_window(window))
+    }
+
     pub fn find_workspace_by_name(&self, workspace_name: &str) -> Option<(usize, &Workspace<W>)> {
         match &self.monitor_set {
             MonitorSet::Normal { ref monitors, .. } => {

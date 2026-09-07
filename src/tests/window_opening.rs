@@ -891,3 +891,84 @@ post-map configures:
     let _guard = settings.bind_to_scope();
     assert_snapshot!(snapshot);
 }
+
+#[test]
+fn child_window_does_not_follow_parent_onto_hidden_workspace() {
+    // A hidden workspace is by definition somewhere the user is not looking. A dialog that
+    // follows its parent there is invisible and unreachable — for a password prompt (the case
+    // this was reported for) that is a real usability failure, so the child opens where the
+    // user is working instead.
+    let config = Config::parse_mem(
+        r##"
+workspace "stash" {
+    hidden true
+}
+
+window-rule {
+    match title="parent"
+    open-on-workspace "stash"
+}
+"##,
+    )
+    .unwrap();
+
+    let mut f = Fixture::with_config(config);
+    f.add_output(1, (1280, 720));
+
+    let id = f.add_client();
+    f.roundtrip(id);
+
+    // The parent opens on the hidden workspace.
+    let window = f.client(id).create_window();
+    let parent_surface = window.surface.clone();
+    let parent = window.xdg_toplevel.clone();
+    window.set_title("parent");
+    window.commit();
+    f.roundtrip(id);
+
+    let window = f.client(id).window(&parent_surface);
+    window.attach_new_buffer();
+    window.ack_last_and_commit();
+    f.roundtrip(id);
+
+    // The child sets its parent before the initial commit, the way a dialog does.
+    let client = f.client(id);
+    let window = client.create_window();
+    let surface = window.surface.clone();
+    client.window(&surface).set_parent(Some(&parent));
+    client.window(&surface).set_title("child");
+    client.window(&surface).commit();
+    f.roundtrip(id);
+
+    let window = f.client(id).window(&surface);
+    window.attach_new_buffer();
+    window.ack_last_and_commit();
+    f.double_roundtrip(id);
+
+    let niri = f.niri();
+    let mut parent_placement = None;
+    let mut child_placement = None;
+    for (_, _, ws) in niri.layout.workspaces() {
+        for win in ws.windows() {
+            let title = with_toplevel_role(win.toplevel(), |role| role.title.clone());
+            match title.as_deref() {
+                Some("parent") => parent_placement = Some((ws.name().cloned(), ws.hidden)),
+                Some("child") => child_placement = Some((ws.name().cloned(), ws.hidden)),
+                _ => (),
+            }
+        }
+    }
+
+    let (parent_ws, parent_hidden) = parent_placement.expect("parent window not found");
+    assert_eq!(parent_ws.as_deref(), Some("stash"));
+    assert!(
+        parent_hidden,
+        "test precondition failed: the parent is not on a hidden workspace"
+    );
+
+    let (child_ws, child_hidden) = child_placement.expect("child window not found");
+    assert!(
+        !child_hidden,
+        "child followed its parent onto hidden workspace {child_ws:?}"
+    );
+}
