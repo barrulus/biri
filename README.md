@@ -32,17 +32,24 @@ These exist only in biri, not in upstream niri. Unless noted, each is off by def
 
 ### Post-process shaders
 
-A GLSL fragment shader pipeline layered on top of niri's rendering, in three scopes that can all be active at once:
+A GLSL fragment shader pipeline layered on top of niri's rendering, in four scopes that can all be active at once:
 
 - **[`global-shader`](./docs/wiki/Configuration:-Global-Shader.md)** — a full-screen post-process pass over the whole composited output: colour grading, CRT scanlines, night-light tints, motion-blur trails, and so on. TTY/DRM backend only.
 - **`region-shader`** — the same shader contract scoped to a fixed screen rectangle, optionally pinned to one output. Repeatable.
 - **`shader {}` in a `window-rule`** — a shader applied to a single window's content, with borders and shadows rendered outside it. Animated, and only redrawn while the window is actually visible.
+- **[`shader {}` in an `output`](./docs/wiki/Configuration:-Global-Shader.md#per-output-shaders)** — a persistent post-process on one monitor, with no geometry to work out. Built-in `grayscale`, `invert`, `saturation` and `temperature` filters mean no GLSL for the common cases, so a washed-out laptop panel or an always-on accessibility filter is a two-line config. Answers upstream [niri#4355](https://github.com/niri-wm/niri/issues/4355), [#4303](https://github.com/niri-wm/niri/issues/4303) and [#4405](https://github.com/niri-wm/niri/issues/4405).
+
+```kdl
+output "eDP-1" {
+    shader {
+        preset "saturation" amount=1.4
+    }
+}
+```
 
 Supporting machinery:
 
-- Named **`window-shaders` presets** driven by the `toggle-window-shader` and `cycle-window-shader` binds: flip the focused window's shader off/on, or rotate it through your presets at runtime — no config editing or reload needed.
-- **Per-output colour filters**: `output "eDP-1" { shader { preset "grayscale"; }; }` — built-in grayscale, invert, saturation and temperature filters with no GLSL to write, plus `toggle-output-shader` and `cycle-output-shader` binds. Answers upstream niri #4355, #4303 and #4405.
-
+- Named presets with runtime switching: **`window-shaders`** driven by `toggle-window-shader` / `cycle-window-shader`, and **`output-shaders`** driven by `toggle-output-shader` / `cycle-output-shader`. Flip a shader off and on, or rotate through your presets, with no config editing or reload.
 - Two API flavours: a native `niri` mode and a `hyprland` mode that accepts most Hyprland `screen_shader` files with light edits.
 - Multi-pass chains via repeatable `pass {}` blocks, where each pass reads the previous pass's output.
 - A previous-frame feedback buffer (`niri_prev` / `tex2D_prev`) plus a dedicated `global_buffer` pass for trails and accumulation effects.
@@ -76,12 +83,31 @@ An `isolated` flag on an [output](./docs/wiki/Configuration:-Outputs.md#isolated
 
 Both compose with the config settings (config and toggle must agree), reset on restart, and apply to newly hot-plugged touchpads.
 
+### Multi-action binds
+
+A bind can list [several actions](./docs/wiki/Configuration:-Key-Bindings.md#multiple-actions), run in order with nothing else in between — so a sequence that used to need a wrapper script is one bind:
+
+```kdl
+binds {
+    Mod+G { focus-column-right; consume-or-expel-window-left; }
+}
+```
+
+The same sequencing is available over IPC. `niri msg action` runs one action per invocation, so chaining two with `&&` leaves a gap in which other events run; `niri msg actions` sends the whole list as a single batch, and if any action in it is invalid, none of them run:
+
+```sh
+niri msg actions "toggle-workspace-visibility stash" "focus-workspace stash"
+```
+
+Multi-action binds never appear in the hotkey overlay, and `allow-when-locked=true` is accepted only when every action in the bind is `spawn` or `spawn-sh`.
+
 ### Fast-tracked upstream PRs
 
-Open niri pull requests merged here ahead of upstream, originally combined in [niri-qol](https://github.com/AmmoniumX/niri-qol) (now absorbed into this fork):
+Open niri pull requests merged here ahead of upstream, several of them originally combined in [niri-qol](https://github.com/AmmoniumX/niri-qol) (now absorbed into this fork):
 
 - **Hidden workspaces** ([niri#2997](https://github.com/niri-wm/niri/pull/2997)) — a named workspace can be hidden: it keeps its windows but disappears from the workspace strip, the overview, and workspace switching until toggled back. Declare it hidden at startup with `workspace "name" { hidden true }`, or change it at runtime with the [`toggle-workspace-visibility`, `hide-workspace` and `unhide-workspace`](./docs/wiki/Configuration:-Named-Workspaces.md#hidden-workspaces) actions (binds or `niri msg action`; add `focus=true` to jump to the workspace as it appears). Hidden workspaces also stay out of the consolidated carousel's panels.
 - **Sticky floating windows** ([niri#3302](https://github.com/niri-wm/niri/pull/3302)) — floating windows that follow you across all workspaces of their output. Set [`open-sticky true`](./docs/wiki/Configuration:-Window-Rules.md#open-sticky) in a window rule (implies `open-floating`), or toggle any floating window with the [`toggle-window-sticky`](./docs/wiki/Configuration:-Key-Bindings.md#toggle-window-sticky) bind. In the consolidated carousel, sticky windows show on every workspace panel, and clicking one in the lens focuses it.
+- **`ignore-opacity`** ([niri#4105](https://github.com/niri-wm/niri/pull/4105)) — an option on `background-effect` in [window](./docs/wiki/Configuration:-Window-Rules.md#background-effect) and [layer](./docs/wiki/Configuration:-Layer-Rules.md#background-effect) rules that skips the blurred backdrop on transparent parts of a surface, so a full-screen shell layer with a small painted bar no longer blurs the whole screen. Takes `true`, `false`, or an alpha threshold between `0.0` and `1.0`.
 - **`float-above-fullscreen`** ([niri#4062](https://github.com/niri-wm/niri/pull/4062)) — a [window rule](./docs/wiki/Configuration:-Window-Rules.md#float-above-fullscreen) that keeps a floating window visible on top when a fullscreen window occupies the workspace. Off by default.
 
 ```kdl
