@@ -7,6 +7,7 @@ You can find documentation for various sections of the config on these wiki page
 * [`binds {}`](./Configuration:-Key-Bindings.md)
 * [`switch-events {}`](./Configuration:-Switch-Events.md)
 * [`layout {}`](./Configuration:-Layout.md)
+* [`workspace "browser" {}`](./Configuration:-Named-Workspaces.md)
 * [top-level options](./Configuration:-Miscellaneous.md)
 * [`window-rule {}`](./Configuration:-Window-Rules.md)
 * [`layer-rule {}`](./Configuration:-Layer-Rules.md)
