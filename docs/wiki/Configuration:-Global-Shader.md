@@ -674,6 +674,8 @@ When more than one shader effect is active on the same output, they compose in a
 
 The global shader (if any) is applied over everything, including the output shader. The output shader is applied over any region shaders on that output, which are themselves applied over the windows underneath. In practice this means a grayscale (or otherwise colour-filtered) output shader will also gray out any region shader effects on that same output — the output shader operates on the fully composited scene below it, region shaders included.
 
+The order cuts the other way for the global shader, which is worth stating plainly because it surprises people: **an output shader does not filter the global shader.** The global shader draws on top of the output shader's result, so its output keeps its own colours. A cursor-local global shader is the case where this is most visible — set `preset "grayscale"` on an output while a rainbow cursor-tunnel global shader is enabled, and everything greys except the rainbow around the pointer.
+
 ### Toggling and cycling at runtime
 
 Two bindable actions control the output shader (both also available as `niri msg action …`):
@@ -706,6 +708,7 @@ See [`toggle-output-shader`](./Configuration:-Key-Bindings.md#toggle-output-shad
 ### Caveats
 
 - **The cursor is not filtered.** The output shader element is pushed below the pointer, and on the TTY backend the cursor is usually a hardware plane outside the captured framebuffer. So `preset "invert"` or `preset "grayscale"` leaves the mouse pointer un-inverted / un-grayed, even though the rest of the output is filtered. If you're setting this up for accessibility (e.g. an inverted-colour or grayscale output), be aware the pointer will not follow. The global shader has [`reads-cursor`](#reads-cursor) for this; the output shader has no equivalent.
+- **A global shader is not filtered by an output shader.** The compositing order puts the global shader above the output shader (see [Compositing order](#compositing-order)), so if you set `preset "grayscale"` or `preset "invert"` on an output for accessibility while a `global-shader` is also enabled, the global shader's output keeps its original colours. If you want the whole screen filtered, either disable the global shader or apply the filter as the last pass of the global shader itself rather than as an output shader.
 - **A `path`-sourced shader needs a config touch to reload.** As with [region shaders](#region-shaders), the shader chain is re-read from disk on render, but shader *programs* are only compiled on config reload. Editing a `.frag` file referenced by `path` without touching the config leaves the render-time cache key pointing at no compiled program, and the shader silently stops drawing. After editing a shader file on disk, touch or re-save your config file to trigger a reload.
 
 ---
