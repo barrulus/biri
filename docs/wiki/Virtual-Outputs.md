@@ -203,3 +203,37 @@ WantedBy=default.target
 ```bash
 systemctl --user enable --now niri-headless
 ```
+
+## Notes for biri
+
+These two points concern fork-only features and are not part of upstream niri's virtual output
+support.
+
+### Mark a streaming or capture output `isolated`
+
+A virtual output that exists to be streamed or recorded — Sunshine, wayvnc, OBS — usually wants the
+[`isolated`](./Configuration:-Outputs.md#isolated) flag as well:
+
+```kdl
+output "sunshine" {
+    isolated
+}
+```
+
+`isolated` keeps compositor UI off that output: the overview, the Alt-Tab switcher, the hotkey
+overlay, and the config error notification. Without it, opening the overview on your physical
+screen also draws it into the stream.
+
+It has a second effect worth knowing: an isolated output is excluded from the
+[consolidated carousel](./Configuration:-Miscellaneous.md#consolidated-carousel), so a virtual
+output does not appear as a cover-flow panel among your physical monitors.
+
+### Shader effects need the TTY backend
+
+The [shader features](./Configuration:-Global-Shader.md) — `global-shader`, `region-shader`,
+per-window `shader {}`, and per-output `shader {}` — apply on the TTY/DRM backend. A virtual output
+created on a TTY session shares that backend's renderer, so shaders work on it like any physical
+output, and a per-output `shader {}` can be attached to a virtual output by name.
+
+On the headless backend, shader effects are not active. If you are running a pure headless session
+and expecting a colour filter on the stream, that is why.

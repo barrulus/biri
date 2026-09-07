@@ -77,10 +77,11 @@ Both compose with the config settings (config and toggle must agree), reset on r
 
 ### Fast-tracked upstream PRs
 
-Open niri pull requests merged here ahead of upstream, originally combined in [niri-qol](https://github.com/AmmoniumX/niri-qol) (now absorbed into this fork):
+Open niri pull requests merged here ahead of upstream, several of them originally combined in [niri-qol](https://github.com/AmmoniumX/niri-qol) (now absorbed into this fork):
 
 - **Hidden workspaces** ([niri#2997](https://github.com/niri-wm/niri/pull/2997)) — a named workspace can be hidden: it keeps its windows but disappears from the workspace strip, the overview, and workspace switching until toggled back. Declare it hidden at startup with `workspace "name" { hidden true }`, or change it at runtime with the [`toggle-workspace-visibility`, `hide-workspace` and `unhide-workspace`](./docs/wiki/Configuration:-Named-Workspaces.md#hidden-workspaces) actions (binds or `niri msg action`; add `focus=true` to jump to the workspace as it appears). Hidden workspaces also stay out of the consolidated carousel's panels.
 - **Sticky floating windows** ([niri#3302](https://github.com/niri-wm/niri/pull/3302)) — floating windows that follow you across all workspaces of their output. Set [`open-sticky true`](./docs/wiki/Configuration:-Window-Rules.md#open-sticky) in a window rule (implies `open-floating`), or toggle any floating window with the [`toggle-window-sticky`](./docs/wiki/Configuration:-Key-Bindings.md#toggle-window-sticky) bind. In the consolidated carousel, sticky windows show on every workspace panel, and clicking one in the lens focuses it.
+- **Virtual outputs** ([niri#3800](https://github.com/niri-wm/niri/pull/3800)) — outputs that exist without a physical monitor, for a headless session over SSH, a Sunshine/Moonlight streaming target, a tablet used as a second screen, or a wayvnc target. Create and remove them at runtime with `niri msg output`, or declare them in config with `output "name" { create-virtual ... }`. Works on both the TTY and headless backends. See [Virtual Outputs](./docs/wiki/Virtual-Outputs.md) — one used for streaming usually wants the `isolated` flag too.
 - **`float-above-fullscreen`** ([niri#4062](https://github.com/niri-wm/niri/pull/4062)) — a [window rule](./docs/wiki/Configuration:-Window-Rules.md#float-above-fullscreen) that keeps a floating window visible on top when a fullscreen window occupies the workspace. Off by default.
 
 ```kdl
