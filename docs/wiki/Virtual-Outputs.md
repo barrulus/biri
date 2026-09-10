@@ -228,12 +228,17 @@ It has a second effect worth knowing: an isolated output is excluded from the
 [consolidated carousel](./Configuration:-Miscellaneous.md#consolidated-carousel), so a virtual
 output does not appear as a cover-flow panel among your physical monitors.
 
-### Shader effects need the TTY backend
+### Shader effects on virtual outputs
 
 The [shader features](./Configuration:-Global-Shader.md) — `global-shader`, `region-shader`,
-per-window `shader {}`, and per-output `shader {}` — apply on the TTY/DRM backend. A virtual output
-created on a TTY session shares that backend's renderer, so shaders work on it like any physical
-output, and a per-output `shader {}` can be attached to a virtual output by name.
+per-window `shader {}`, and per-output `shader {}` — are available on both the TTY/DRM and headless
+backends, including at startup. A per-output `shader {}` can be attached to a virtual output by name.
 
-On the headless backend, shader effects are not active. If you are running a pure headless session
-and expecting a colour filter on the stream, that is why.
+To include shader effects in a Sunshine, wayvnc, or other capture stream, enable
+[`shaders-in-capture`](./Configuration:-Global-Shader.md#shaders-in-screencast-and-screenshots) in your config:
+
+```kdl
+shaders-in-capture true
+```
+
+Capture omits shader effects by default. The Winit backend does not apply shader effects.

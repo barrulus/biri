@@ -36,7 +36,7 @@ use smithay::wayland::dmabuf::{DmabufFeedbackBuilder, DmabufGlobal};
 use smithay::wayland::presentation::Refresh;
 
 use super::{virtual_output, IpcOutputMap, OutputId, RenderResult, VirtualOutputMarker};
-use crate::niri::{Niri, RedrawState, State};
+use crate::niri::{global_shader_pass_sources, scoped_shader_chains, Niri, RedrawState, State};
 use crate::render_helpers::{resources, shaders};
 use crate::utils::{get_monotonic_time, logical_output};
 
@@ -106,6 +106,10 @@ impl Headless {
             if let Some(src) = config.animations.window_open.custom_shader.as_deref() {
                 shaders::set_custom_open_program(renderer, Some(src));
             }
+            let passes = global_shader_pass_sources(&config.global_shader);
+            shaders::set_custom_global_passes(renderer, &passes);
+            let chains = scoped_shader_chains(&config);
+            shaders::set_scoped_programs(renderer, &chains);
             drop(config);
 
             niri.update_shaders();
