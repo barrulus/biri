@@ -4,7 +4,7 @@ Biri supports a **global post-process shader** that runs over the entire composi
 Use it for effects such as colour grading, CRT scanlines, night-light tints, motion-blur trails, or any full-screen visual transformation.
 
 > [!NOTE]
-> The global shader runs on the **TTY/DRM backend only**.
+> The global shader is available on the **TTY/DRM and headless backends** from startup.
 > It has no effect on the winit (nested/X11) backend.
 > By default, screenshots and screen recordings (screencopy / screencast) render **without** shader effects. See [Shaders in screencast and screenshots](#shaders-in-screencast-and-screenshots) to opt in via `shaders-in-capture`.
 
@@ -734,6 +734,6 @@ When the flag is present, the global shader, all region shaders, and all per-win
 
 ### Scope and Limitations
 
-- **TTY/DRM only.** The effect applies on the real (DRM/KMS) output. It is intentionally **not** applied on the nested winit backend (running niri in a window). By default it is also not applied to screenshots or screen recordings — use [`shaders-in-capture`](#shaders-in-screencast-and-screenshots) to opt in.
+- **TTY/DRM and headless.** The effect is available on both backends from startup. It is intentionally **not** applied on the nested winit backend (running niri in a window). By default it is also not applied to screenshots or screen recordings — use [`shaders-in-capture`](#shaders-in-screencast-and-screenshots) to opt in, including streams from headless outputs.
 - **Output transform.** The effect is verified on outputs with the default (`normal`) transform. On outputs configured with a non-default `transform` (e.g. `90`, `270`, `flipped`), the shader's view of `niri_screen`/`niri_prev` may be mis-oriented. If you use a rotated or flipped output, verify your shader there before relying on it.
 - **Whole-output `global-shader`.** The `global-shader` block applies to all outputs; per-layer global shaders are not supported. For a shader scoped to one output, use a [per-output shader](#per-output-shaders) (`output { shader {} }`); for sub-output scoping, use a [region shader](#region-shaders) (a screen rectangle) or a [per-window shader](#per-window-shaders) (`window-rule { shader {} }`). Multi-pass chains are supported (see [Multi-pass chains](#multi-pass-chains-pass)) but a chain of two or more passes is always whole-output (no `cursor-radius` region mode).
