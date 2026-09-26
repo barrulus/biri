@@ -43,6 +43,9 @@ use crate::utils::{
 pub struct Tile<W: LayoutElement> {
     /// The toplevel window itself.
     window: W,
+    pub(super) drag_physics: Option<crate::animation::drag_physics::DragPhysics>,
+    drag_physics_time: Duration,
+    drag_physics_buffer: OffscreenBuffer,
 
     /// The border around the window.
     border: FocusRing,
@@ -206,6 +209,9 @@ impl<W: LayoutElement> Tile<W> {
 
         Self {
             window,
+            drag_physics: None,
+            drag_physics_time: Duration::ZERO,
+            drag_physics_buffer: OffscreenBuffer::default(),
             border: FocusRing::new(border_config.into()),
             focus_ring: FocusRing::new(focus_ring_config),
             shadow: Shadow::new(shadow_config),
@@ -439,7 +445,69 @@ impl<W: LayoutElement> Tile<W> {
         self.rounded_corner_damage.set_corner_radius(radius);
     }
 
+    pub(super) fn begin_drag_physics(&mut self, grab: Point<f64, Logical>) {
+        if let Some(parameters) = self
+            .options
+            .animations
+            .window_movement
+            .drag_physics
+            .filter(|p| {
+                p.enable
+                    && !self.options.animations.off
+                    && !self.options.animations.window_movement.anim.off
+            })
+        {
+            let size = self.window_size();
+            self.drag_physics = Some(crate::animation::drag_physics::DragPhysics::new(
+                [size.w, size.h],
+                [grab.x, grab.y],
+                parameters,
+            ));
+            self.drag_physics_time = self.clock.now();
+        }
+    }
+
+    pub(super) fn move_drag_physics(&mut self, delta: Point<f64, Logical>) {
+        self.advance_drag_physics();
+        if let Some(physics) = &mut self.drag_physics {
+            physics.move_by([delta.x, delta.y]);
+        }
+    }
+
+    fn advance_drag_physics(&mut self) {
+        if self.drag_physics.is_none() {
+            return;
+        }
+        let size = self.window_size();
+        let parameters = self
+            .options
+            .animations
+            .window_movement
+            .drag_physics
+            .filter(|p| {
+                p.enable
+                    && !self.options.animations.off
+                    && !self.options.animations.window_movement.anim.off
+            });
+        if let (Some(physics), Some(parameters)) = (&mut self.drag_physics, parameters) {
+            let now = self.clock.now();
+            physics.parameters = parameters;
+            physics.resize([size.w, size.h]);
+            physics.tick(now.saturating_sub(self.drag_physics_time).as_secs_f64());
+            self.drag_physics_time = now;
+            if !physics.grabbed && !physics.active {
+                self.drag_physics = None;
+            }
+        } else {
+            self.drag_physics = None;
+        }
+        if self.drag_physics.as_ref().is_none_or(|p| !p.active) {
+            self.drag_physics_buffer.clear();
+        }
+    }
+
     pub fn advance_animations(&mut self) {
+        self.advance_drag_physics();
         if let Some(open) = &mut self.open_animation {
             if open.is_done() {
                 self.open_animation = None;
@@ -475,7 +543,8 @@ impl<W: LayoutElement> Tile<W> {
     }
 
     pub fn are_transitions_ongoing(&self) -> bool {
-        self.open_animation.is_some()
+        self.drag_physics.as_ref().is_some_and(|p| p.active)
+            || self.open_animation.is_some()
             || self.resize_animation.is_some()
             || self.move_x_animation.is_some()
             || self.move_y_animation.is_some()
@@ -619,7 +688,7 @@ impl<W: LayoutElement> Tile<W> {
     }
 
     pub fn animate_move_from(&mut self, from: Point<f64, Logical>) {
-        self.animate_move_from_with_config(from, self.options.animations.window_movement.0);
+        self.animate_move_from_with_config(from, self.options.animations.window_movement.anim);
     }
 
     pub fn animate_move_from_with_config(
@@ -632,7 +701,7 @@ impl<W: LayoutElement> Tile<W> {
     }
 
     pub fn animate_move_x_from(&mut self, from: f64) {
-        self.animate_move_x_from_with_config(from, self.options.animations.window_movement.0);
+        self.animate_move_x_from_with_config(from, self.options.animations.window_movement.anim);
     }
 
     pub fn animate_move_x_from_with_config(&mut self, from: f64, config: niri_config::Animation) {
@@ -656,7 +725,7 @@ impl<W: LayoutElement> Tile<W> {
     }
 
     pub fn animate_move_y_from(&mut self, from: f64) {
-        self.animate_move_y_from_with_config(from, self.options.animations.window_movement.0);
+        self.animate_move_y_from_with_config(from, self.options.animations.window_movement.anim);
     }
 
     pub fn animate_move_y_from_with_config(&mut self, from: f64, config: niri_config::Animation) {
@@ -1154,6 +1223,26 @@ impl<W: LayoutElement> Tile<W> {
             &mut |elem| push(elem.into()),
         );
 
+        if let Some(width) = self
+            .visual_border_width()
+            .filter(|_| self.border.draws_above_window())
+        {
+            self.border.render(
+                ctx.renderer,
+                location + Point::from((width, width)),
+                &mut |elem| push(elem.into()),
+            );
+        }
+
+        // Hide the focus ring when maximized/fullscreened. It's not normally visible anyway due to
+        // being outside the monitor or obscured by a solid colored bar, but it is visible under
+        // semitransparent bars in maximized state (which is a bit weird) and in the overview (also
+        // a bit weird).
+        if focus_ring && expanded_progress < 1. && self.focus_ring.draws_above_window() {
+            self.focus_ring
+                .render(ctx.renderer, location, &mut |elem| push(elem.into()));
+        }
+
         // If we're resizing, try to render a shader, or a fallback.
         let mut pushed_resize = false;
         if let Some(resize) = &self.resize_animation {
@@ -1399,7 +1488,10 @@ impl<W: LayoutElement> Tile<W> {
             }
         }
 
-        if let Some(width) = self.visual_border_width() {
+        if let Some(width) = self
+            .visual_border_width()
+            .filter(|_| !self.border.draws_above_window())
+        {
             self.border.render(
                 ctx.renderer,
                 location + Point::from((width, width)),
@@ -1411,7 +1503,7 @@ impl<W: LayoutElement> Tile<W> {
         // being outside the monitor or obscured by a solid colored bar, but it is visible under
         // semitransparent bars in maximized state (which is a bit weird) and in the overview (also
         // a bit weird).
-        if focus_ring && expanded_progress < 1. {
+        if focus_ring && expanded_progress < 1. && !self.focus_ring.draws_above_window() {
             self.focus_ring
                 .render(ctx.renderer, location, &mut |elem| push(elem.into()));
         }
@@ -1503,6 +1595,40 @@ impl<W: LayoutElement> Tile<W> {
                 Err(err) => {
                     warn!("error rendering window opening animation: {err:?}");
                 }
+            }
+        } else if let Some(physics) = self.drag_physics.as_ref().filter(|p| p.active).filter(|_| {
+            Shaders::get(ctx.renderer)
+                .program(ProgramType::DragPhysics)
+                .is_some()
+        }) {
+            let mut ctx = ctx.as_gles();
+            let mut elements = Vec::new();
+            self.render_inner(
+                ctx.r(),
+                Point::new(0., 0.),
+                xray_pos,
+                focus_ring,
+                &mut |e| elements.push(e),
+            );
+            match self
+                .drag_physics_buffer
+                .render(ctx.renderer, scale, &elements)
+            {
+                Ok((source, _sync, mut data)) => {
+                    let element = crate::render_helpers::drag_physics::render(
+                        physics,
+                        &source,
+                        &mut data,
+                        Rectangle::new(self.window_loc(), self.window_size()),
+                        location,
+                        scale,
+                        tile_alpha,
+                    );
+                    self.window().set_offscreen_data(Some(data));
+                    push(OpeningWindowRenderElement::Shader(element).into());
+                    pushed = true;
+                }
+                Err(err) => warn!("error rendering drag physics: {err:?}"),
             }
         } else if let Some(alpha) = &self.alpha_animation {
             let mut ctx = ctx.as_gles();

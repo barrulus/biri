@@ -1,0 +1,9 @@
+// Include this file at the end of ~/.config/biri/config.kdl.
+// Requires the biri build with draw-inside decorations and drag physics.
+include "foot.kdl"
+include "ghostty.kdl"
+include "kitty.kdl"
+
+// Apply Taffy to all pointer-dragged windows, including other applications.
+animations { on; }
+include "../drag/taffy.kdl"

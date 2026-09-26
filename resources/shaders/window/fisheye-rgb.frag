@@ -1,7 +1,12 @@
+// Custom shader by Barrulus.
+// Descending smoothstep edges in the original are undefined in GLSL.
+float smoothstep_any_order(float a, float b, float x) {
+    return a > b ? 1.0 - smoothstep(b, a, x) : smoothstep(a, b, x);
+}
 // Edge fisheye + RGB split — a frozen lens that swells toward the window edges,
 // with chromatic fringing that grows with radius. Centre stays crisp.
 //
-// biri/niri window shader (niri mode). Static: does NOT use niri_time.
+// Window shader. Static: does NOT use niri_time.
 //   c.xy : 0..1 across the window, c.y = 0 at the TOP
 //   niri_size : window size in physical pixels
 //   tex2D_screen(uv) : samples the window's own composited pixels
@@ -28,7 +33,7 @@ vec4 global_color(vec3 c) {
     vec3 col = vec3(rC, gC, bC);
 
     // Slight edge darkening so the warp reads as a lens rather than a smear.
-    col *= mix(1.0, 0.70, smoothstep(0.35, 0.72, r));
+    col *= mix(1.0, 0.70, smoothstep_any_order(0.35, 0.72, r));
 
     return vec4(col, a);
 }

@@ -1,0 +1,245 @@
+// Paper fall/unfurl and scrunch/fall, ported from Barrulus's Umbriel collection.
+animations {
+    window-open {
+        duration-ms 1350
+        curve "linear"
+        custom-shader r#"
+vec4 paper_sample(vec2 uv) {
+    if (any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))) return vec4(0.0);
+    return texture2D(niri_tex, (niri_geo_to_tex * vec3(uv, 1.0)).xy);
+}
+// One sheet, two timelines: fall and unfurl / scrunch and fall through the bottom.
+// Lifecycle targets are clipped to their captured rectangle. The ball enters
+// and exits that frame; this shader cannot travel across the rest of the output.
+float paper_folds(vec2 p) {
+    float shade = 0.0;
+    for (int i = 0; i < 6; i++) {
+        float n = float(i);
+        vec2 axis = vec2(cos(n * 2.399), sin(n * 2.399));
+        float f = fract(dot(p, axis) * (2.8 + n * 0.63)
+            + 0.16 * sin(dot(p, vec2(-axis.y, axis.x)) * 9.0 + n));
+        shade += (abs(2.0 * f - 1.0) - 0.5) * 0.25;
+        shade -= exp(-min(f, 1.0 - f) * 65.0) * 0.22;
+        shade += exp(-abs(f - 0.045) * 65.0) * 0.18;
+    }
+    return shade;
+}
+
+vec4 animation(vec2 uv) {
+    float t = niri_clamped_progress;
+    bool opening = 1.0 > 0.0;
+    if (t <= 0.0) return opening ? vec4(0.0) : paper_sample(uv);
+    if (t >= 1.0) return opening ? paper_sample(uv) : vec4(0.0);
+
+    vec2 size = max(niri_geo_size, vec2(1.0));
+    float radius = clamp(min(size.x, size.y) * 0.105, 4.0, 46.0);
+    float unfold;
+    vec2 center;
+    float angle;
+    vec2 squash = vec2(1.0);
+    float handedness = niri_random_seed < 0.5 ? -1.0 : 1.0;
+
+    if (opening) {
+        float fall = clamp(t / 0.38, 0.0, 1.0);
+        float release = clamp((t - 0.34) / 0.66, 0.0, 1.0);
+        // Start gently, then keep opening right through the last frame. A
+        // smoothstep here exhausted most of the visible motion too early.
+        unfold = release * release * (2.0 - release);
+        center = vec2(size.x * 0.5, mix(-radius * 2.0, size.y * 0.53, fall * fall));
+        center.x += handedness * size.x * 0.10 * sin(fall * 3.141593) * (1.0 - unfold);
+        // A small landing recoil gives the crumpled ball weight before opening.
+        float recoil = sin(clamp((t - 0.38) / 0.22, 0.0, 1.0) * 3.141593);
+        center.y -= radius * 0.65 * recoil;
+        center = mix(center, size * 0.5, unfold);
+        squash = vec2(1.0 + 0.20 * recoil, 1.0 - 0.18 * recoil);
+        angle = handedness * (fall * 5.2 - 5.2) * (1.0 - unfold)
+            + handedness * 0.22 * sin(unfold * 3.141593);
+    } else {
+        float scrunch = smoothstep(0.0, 0.43, t);
+        unfold = 1.0 - scrunch;
+        center = size * 0.5;
+        angle = handedness * scrunch * 0.65;
+        if (t > 0.43) {
+            float flight = (t - 0.43) / 0.57;
+            // Accelerate straight down until the entire irregular silhouette
+            // has crossed the bottom of the captured frame. No sideways exit.
+            center.y = mix(size.y * 0.5, size.y + radius * 2.0, flight * flight);
+            angle += handedness * flight * 1.7;
+        }
+    }
+
+    vec2 p = uv * size - center;
+    float c = cos(angle), s = sin(angle);
+    p = vec2(c * p.x + s * p.y, -s * p.x + c * p.y);
+    vec2 half_size = mix(radius * vec2(1.16, 0.84) * squash, size * 0.5, unfold);
+    vec2 q = p / half_size;
+    float crumple = 1.0 - unfold;
+    q.x += q.y * 0.14 * crumple;
+    float crease_strength = crumple;
+    float silhouette_unfold = unfold;
+    if (opening) {
+        // Release folds from the centre toward the edges. The last edge folds
+        // flatten only as the sheet reaches its full extent, including corners.
+        float reach = clamp(max(abs(q.x), abs(q.y)), 0.0, 1.0);
+        float release_at = mix(0.48, 1.0, smoothstep(0.12, 1.0, reach));
+        float edge_fold = (1.0 - smoothstep(max(release_at - 0.5, 0.0), release_at, unfold))
+            * smoothstep(0.12, 0.35, unfold);
+        vec2 curl = vec2(
+            sin(q.y * 8.0 + 0.4) + 0.35 * sin(q.y * 17.0 - 0.8),
+            sin(q.x * 9.0 + 2.1) + 0.30 * sin(q.x * 19.0 + 0.5));
+        // Deform both silhouette and print with the same folds, so the content
+        // follows the opening sheet all the way to its moving boundary.
+        q += curl * (0.13 * edge_fold);
+        crease_strength = max(crumple, edge_fold * 0.8);
+        silhouette_unfold = unfold * unfold;
+    }
+    float theta = atan(q.y, q.x + 0.00001);
+    // Broad uneven lobes and pinched folds make a lopsided wad, rather than a
+    // sphere with fine ripples. Keep its outline stable as the paper tumbles.
+    float rough = crumple * (0.17 * sin(theta * 3.0 + 0.7)
+        + 0.095 * sin(theta * 5.0 - 0.4)
+        + 0.055 * (abs(sin(theta * 7.0 + 1.1)) - 0.5));
+    float edge = mix(length(q), max(abs(q.x), abs(q.y)), silhouette_unfold) + rough;
+    float aa = 1.0 / max(min(half_size.x, half_size.y), 1.0);
+    float mask = 1.0 - smoothstep(1.0 - aa, 1.0 + aa, edge);
+    if (mask <= 0.0) return vec4(0.0);
+
+    // Fold the captured print with the sheet; displacement vanishes at rest.
+    vec2 folds = sin(q.yx * vec2(17.0, 21.0) + sin(q.xy * 11.0));
+    vec2 sample_uv = q * 0.5 + 0.5 + folds * (0.055 * crease_strength);
+    vec4 source = paper_sample(clamp(sample_uv, 0.0, 1.0));
+    float relief = paper_folds(q) * crease_strength;
+    float round_light = 1.0 - crumple * 0.22 * dot(q, q)
+        + crumple * dot(q, vec2(-0.13, -0.18));
+    vec3 sheet = vec3(0.985) * (round_light + relief);
+    vec3 print_color = source.rgb / max(source.a, 0.0001);
+    // Compressed print gets buried among the folds, then returns as it opens.
+    vec3 color = mix(print_color * (1.0 + relief), sheet, crumple * 0.88);
+    return vec4(clamp(color, 0.0, 1.0) * source.a, source.a) * mask;
+}
+
+vec4 open_color(vec3 coords_geo, vec3 size_geo) { return animation(coords_geo.xy); }
+"#
+    }
+    window-close {
+        duration-ms 1150
+        curve "linear"
+        custom-shader r#"
+vec4 paper_sample(vec2 uv) {
+    if (any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))) return vec4(0.0);
+    return texture2D(niri_tex, (niri_geo_to_tex * vec3(uv, 1.0)).xy);
+}
+// One sheet, two timelines: fall and unfurl / scrunch and fall through the bottom.
+// Lifecycle targets are clipped to their captured rectangle. The ball enters
+// and exits that frame; this shader cannot travel across the rest of the output.
+float paper_folds(vec2 p) {
+    float shade = 0.0;
+    for (int i = 0; i < 6; i++) {
+        float n = float(i);
+        vec2 axis = vec2(cos(n * 2.399), sin(n * 2.399));
+        float f = fract(dot(p, axis) * (2.8 + n * 0.63)
+            + 0.16 * sin(dot(p, vec2(-axis.y, axis.x)) * 9.0 + n));
+        shade += (abs(2.0 * f - 1.0) - 0.5) * 0.25;
+        shade -= exp(-min(f, 1.0 - f) * 65.0) * 0.22;
+        shade += exp(-abs(f - 0.045) * 65.0) * 0.18;
+    }
+    return shade;
+}
+
+vec4 animation(vec2 uv) {
+    float t = niri_clamped_progress;
+    bool opening = -1.0 > 0.0;
+    if (t <= 0.0) return opening ? vec4(0.0) : paper_sample(uv);
+    if (t >= 1.0) return opening ? paper_sample(uv) : vec4(0.0);
+
+    vec2 size = max(niri_geo_size, vec2(1.0));
+    float radius = clamp(min(size.x, size.y) * 0.105, 4.0, 46.0);
+    float unfold;
+    vec2 center;
+    float angle;
+    vec2 squash = vec2(1.0);
+    float handedness = niri_random_seed < 0.5 ? -1.0 : 1.0;
+
+    if (opening) {
+        float fall = clamp(t / 0.38, 0.0, 1.0);
+        float release = clamp((t - 0.34) / 0.66, 0.0, 1.0);
+        // Start gently, then keep opening right through the last frame. A
+        // smoothstep here exhausted most of the visible motion too early.
+        unfold = release * release * (2.0 - release);
+        center = vec2(size.x * 0.5, mix(-radius * 2.0, size.y * 0.53, fall * fall));
+        center.x += handedness * size.x * 0.10 * sin(fall * 3.141593) * (1.0 - unfold);
+        // A small landing recoil gives the crumpled ball weight before opening.
+        float recoil = sin(clamp((t - 0.38) / 0.22, 0.0, 1.0) * 3.141593);
+        center.y -= radius * 0.65 * recoil;
+        center = mix(center, size * 0.5, unfold);
+        squash = vec2(1.0 + 0.20 * recoil, 1.0 - 0.18 * recoil);
+        angle = handedness * (fall * 5.2 - 5.2) * (1.0 - unfold)
+            + handedness * 0.22 * sin(unfold * 3.141593);
+    } else {
+        float scrunch = smoothstep(0.0, 0.43, t);
+        unfold = 1.0 - scrunch;
+        center = size * 0.5;
+        angle = handedness * scrunch * 0.65;
+        if (t > 0.43) {
+            float flight = (t - 0.43) / 0.57;
+            // Accelerate straight down until the entire irregular silhouette
+            // has crossed the bottom of the captured frame. No sideways exit.
+            center.y = mix(size.y * 0.5, size.y + radius * 2.0, flight * flight);
+            angle += handedness * flight * 1.7;
+        }
+    }
+
+    vec2 p = uv * size - center;
+    float c = cos(angle), s = sin(angle);
+    p = vec2(c * p.x + s * p.y, -s * p.x + c * p.y);
+    vec2 half_size = mix(radius * vec2(1.16, 0.84) * squash, size * 0.5, unfold);
+    vec2 q = p / half_size;
+    float crumple = 1.0 - unfold;
+    q.x += q.y * 0.14 * crumple;
+    float crease_strength = crumple;
+    float silhouette_unfold = unfold;
+    if (opening) {
+        // Release folds from the centre toward the edges. The last edge folds
+        // flatten only as the sheet reaches its full extent, including corners.
+        float reach = clamp(max(abs(q.x), abs(q.y)), 0.0, 1.0);
+        float release_at = mix(0.48, 1.0, smoothstep(0.12, 1.0, reach));
+        float edge_fold = (1.0 - smoothstep(max(release_at - 0.5, 0.0), release_at, unfold))
+            * smoothstep(0.12, 0.35, unfold);
+        vec2 curl = vec2(
+            sin(q.y * 8.0 + 0.4) + 0.35 * sin(q.y * 17.0 - 0.8),
+            sin(q.x * 9.0 + 2.1) + 0.30 * sin(q.x * 19.0 + 0.5));
+        // Deform both silhouette and print with the same folds, so the content
+        // follows the opening sheet all the way to its moving boundary.
+        q += curl * (0.13 * edge_fold);
+        crease_strength = max(crumple, edge_fold * 0.8);
+        silhouette_unfold = unfold * unfold;
+    }
+    float theta = atan(q.y, q.x + 0.00001);
+    // Broad uneven lobes and pinched folds make a lopsided wad, rather than a
+    // sphere with fine ripples. Keep its outline stable as the paper tumbles.
+    float rough = crumple * (0.17 * sin(theta * 3.0 + 0.7)
+        + 0.095 * sin(theta * 5.0 - 0.4)
+        + 0.055 * (abs(sin(theta * 7.0 + 1.1)) - 0.5));
+    float edge = mix(length(q), max(abs(q.x), abs(q.y)), silhouette_unfold) + rough;
+    float aa = 1.0 / max(min(half_size.x, half_size.y), 1.0);
+    float mask = 1.0 - smoothstep(1.0 - aa, 1.0 + aa, edge);
+    if (mask <= 0.0) return vec4(0.0);
+
+    // Fold the captured print with the sheet; displacement vanishes at rest.
+    vec2 folds = sin(q.yx * vec2(17.0, 21.0) + sin(q.xy * 11.0));
+    vec2 sample_uv = q * 0.5 + 0.5 + folds * (0.055 * crease_strength);
+    vec4 source = paper_sample(clamp(sample_uv, 0.0, 1.0));
+    float relief = paper_folds(q) * crease_strength;
+    float round_light = 1.0 - crumple * 0.22 * dot(q, q)
+        + crumple * dot(q, vec2(-0.13, -0.18));
+    vec3 sheet = vec3(0.985) * (round_light + relief);
+    vec3 print_color = source.rgb / max(source.a, 0.0001);
+    // Compressed print gets buried among the folds, then returns as it opens.
+    vec3 color = mix(print_color * (1.0 + relief), sheet, crumple * 0.88);
+    return vec4(clamp(color, 0.0, 1.0) * source.a, source.a) * mask;
+}
+
+vec4 close_color(vec3 coords_geo, vec3 size_geo) { return animation(coords_geo.xy); }
+"#
+    }
+}

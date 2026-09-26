@@ -17,6 +17,7 @@ pub struct DecorationShader {
     pub enable: bool,
     pub animated: bool,
     pub speed: FloatOrInt<0, 10>,
+    pub draw_inside: bool,
     pub padding: FloatOrInt<0, 1024>,
     pub light: Option<DecorationLight>,
 }
@@ -48,6 +49,8 @@ struct ShaderPart {
     speed: FloatOrInt<0, 10>,
     #[knuffel(child, unwrap(argument), default = FloatOrInt(0.))]
     padding: FloatOrInt<0, 1024>,
+    #[knuffel(child, unwrap(argument), default = false)]
+    draw_inside: bool,
     #[knuffel(child)]
     light: Option<DecorationLight>,
 }
@@ -122,6 +125,7 @@ impl<S: knuffel::traits::ErrorSpan> knuffel::Decode<S> for DecorationShader {
             animated: part.animated,
             speed: part.speed,
             padding: part.padding,
+            draw_inside: part.draw_inside,
             light: part.light,
         })
     }

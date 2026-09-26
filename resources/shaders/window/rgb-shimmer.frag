@@ -1,3 +1,8 @@
+// Custom shader by Barrulus.
+// Descending smoothstep edges in the original are undefined in GLSL.
+float smoothstep_any_order(float a, float b, float x) {
+    return a > b ? 1.0 - smoothstep(b, a, x) : smoothstep(a, b, x);
+}
 // RGB shimmer — a faint iridescent oil-slick sheen that drifts across the window in soft patches.
 // Deliberately SUBTLE and NON-UNIFORM: most of the window shows nothing, and where the sheen does
 // appear it's organic blobs of shifting rainbow (noise-driven), not regular bands. The content
@@ -41,7 +46,7 @@ vec4 global_color(vec3 c){
 
     // Coverage mask — a DIFFERENT drifting noise decides WHERE the sheen shows, so it's patchy:
     // large clear areas, occasional soft iridescent patches.
-    float patch = smoothstep(0.35, 0.62, fbm(p*2.0 - vec2(niri_time*0.10, 0.0)));
+    float patch = smoothstep_any_order(0.35, 0.62, fbm(p*2.0 - vec2(niri_time*0.10, 0.0)));
 
     // Very sparse faint twinkle sitting on the patches.
     float spark = pow(vnoise(p*38.0 + niri_time*1.5), 22.0) * 0.35;

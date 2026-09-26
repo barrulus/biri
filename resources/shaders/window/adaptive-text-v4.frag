@@ -1,3 +1,8 @@
+// Custom shader by Barrulus.
+// Descending smoothstep edges in the original are undefined in GLSL.
+float smoothstep_any_order(float a, float b, float x) {
+    return a > b ? 1.0 - smoothstep(b, a, x) : smoothstep(a, b, x);
+}
 // Adaptive text legibility v4 — smooth-only operations (no per-pixel text classification,
 // which speckles at glyph edges). A wide blur of the capture estimates the BACKDROP; where
 // bright, it is gently dimmed (multiplicative — wallpaper hue kept, reads as the terminal's
@@ -43,12 +48,12 @@ vec4 global_color(vec3 c){
     m /= 17.0;
 
     // Adaptive dim: bright backdrop pixels get pulled down, dark ones stay as they are.
-    float dimf = mix(1.0, DIM, smoothstep(DIMLO, DIMHI, lum(m)));
+    float dimf = mix(1.0, DIM, smoothstep_any_order(DIMLO, DIMHI, lum(m)));
 
     // Soft-knee detail gain: wallpaper-scale amplitudes pass at 1.0, glyph-scale amplified.
     vec3  detail = s.rgb - m;
     float amp    = max(abs(lum(detail)), length(detail) * 0.5);
-    float g      = mix(1.0, GAIN, smoothstep(KNEE0, KNEE1, amp));
+    float g      = mix(1.0, GAIN, smoothstep_any_order(KNEE0, KNEE1, amp));
 
     vec3 outc = m * dimf + detail * g;
     return vec4(clamp(outc, 0.0, 1.0), s.a);

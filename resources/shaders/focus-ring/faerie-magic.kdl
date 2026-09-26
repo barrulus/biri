@@ -1,0 +1,12 @@
+// Include this file; keep the adjacent .frag file with it.
+layout {
+    focus-ring {
+        on
+        width 6
+        shader {
+            path "faerie-magic.frag"
+            padding 8
+            draw-inside true
+        }
+    }
+}

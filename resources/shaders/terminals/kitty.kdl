@@ -1,0 +1,18 @@
+// Personal preset: window shader paths use the biri checkout at ~/dev/biri.
+window-rule {
+    match app-id=r#"^(kitty|net\.kovidgoyal\.kitty)$"#
+
+    shader {
+        path "~/dev/biri/resources/shaders/window/rainbow-smoke.frag"
+    }
+    border { off; }
+    focus-ring {
+        on
+        width 6
+        shader {
+            path "../focus-ring/portal-lava.frag"
+            padding 14
+            draw-inside true
+        }
+    }
+}

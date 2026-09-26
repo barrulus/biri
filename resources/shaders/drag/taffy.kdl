@@ -1,0 +1,11 @@
+animations {
+    window-movement {
+        drag-physics {
+            coupling 48
+            damping 4.8
+            stiffness-gradient -0.55
+            lag-gradient 0.9
+            downward-pull 18
+        }
+    }
+}

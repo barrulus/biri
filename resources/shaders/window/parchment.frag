@@ -1,9 +1,14 @@
+// Custom shader by Barrulus.
+// Descending smoothstep edges in the original are undefined in GLSL.
+float smoothstep_any_order(float a, float b, float x) {
+    return a > b ? 1.0 - smoothstep(b, a, x) : smoothstep(a, b, x);
+}
 // Parchment / vellum — aged treasure-map paper laid OVER the window.
 // Builds a standalone parchment "sheet" (tan tone + crackle veins + burnt
 // edges) and composites it so dark areas BECOME the paper while bright,
 // coloured content (text/icons) stays its own colour, like ink on parchment.
 //
-// biri/niri window shader (niri mode). Static: does NOT use niri_time.
+// Window shader. Static: does NOT use niri_time.
 //   c.xy : 0..1 across the window, c.y = 0 at the TOP
 //   niri_size : window size in physical pixels
 //   tex2D_screen(uv) : samples the window's own composited pixels
@@ -58,7 +63,7 @@ float cracks(vec2 p, float width) {
         }
     }
     float edge = sqrt(f2) - sqrt(f1);
-    return 1.0 - smoothstep(0.0, width, edge);
+    return 1.0 - smoothstep_any_order(0.0, width, edge);
 }
 
 vec4 global_color(vec3 c) {
@@ -90,7 +95,7 @@ vec4 global_color(vec3 c) {
     // Irregular burnt edge (box-distance to border, warped by noise).
     vec2 e = abs(uv - 0.5) * 2.0;
     float edge = max(e.x, e.y) + (fbm(px * 0.03) - 0.5) * 0.35;
-    float burn = smoothstep(burnWidth, 1.05, edge);
+    float burn = smoothstep_any_order(burnWidth, 1.05, edge);
 
     // ---- build the standalone parchment sheet ------------------------------
     float tone = 0.72 + crumpleAmount * (crumple - 0.5) * 2.0;
@@ -115,7 +120,7 @@ vec4 global_color(vec3 c) {
 
     // Replace dark areas with the actual paper sheet so backgrounds become
     // parchment; bright coloured content stays itself (ink on paper).
-    float paperMix = (1.0 - smoothstep(0.06, inkKeep, lum)) * paperOpacity;
+    float paperMix = (1.0 - smoothstep_any_order(0.06, inkKeep, lum)) * paperOpacity;
     col = mix(col, sheet, paperMix);
 
     // Gentle warm aging wash (keeps hue).

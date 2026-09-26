@@ -1,3 +1,8 @@
+// Custom shader by Barrulus.
+// Descending smoothstep edges in the original are undefined in GLSL.
+float smoothstep_any_order(float a, float b, float x) {
+    return a > b ? 1.0 - smoothstep(b, a, x) : smoothstep(a, b, x);
+}
 // Ripple drops — small water ripples spawn at RANDOM origins and flow outward across the window,
 // each a refracting wavefront that bends the content and leaves a faint bright crest, then fades.
 // A few independent drops, each with its own random position, tempo and phase — and a DUTY CYCLE
@@ -39,7 +44,7 @@ vec4 global_color(vec3 c){
         vec2  delta = uv - origin;
         float d    = length(delta * ar);                        // round distance to the drop
         float r    = p * 0.55;                                  // wavefront expands outward
-        float env  = smoothstep(0.0, 0.08, p) * smoothstep(1.0, 0.5, p);  // fade in, out, and ZERO when idle (p>1)
+        float env  = smoothstep_any_order(0.0, 0.08, p) * smoothstep_any_order(1.0, 0.5, p);  // fade in, out, and ZERO when idle (p>1)
         float wave = sin((d - r)*90.0) * exp(-abs(d - r)*22.0) * env;      // wavelets at the front
 
         vec2 dir = delta / max(length(delta), 1e-4);            // radial direction (uv space)

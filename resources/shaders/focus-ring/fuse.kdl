@@ -1,0 +1,13 @@
+// Optional global preset. For a single application, put this focus-ring block
+// inside a window-rule instead. Requires compositor support for light spill.
+layout {
+    focus-ring {
+        on
+        width 6
+        shader {
+            path "fuse.frag"
+            padding 48
+            light spread=90 intensity=1.4 threshold=0.5
+        }
+    }
+}

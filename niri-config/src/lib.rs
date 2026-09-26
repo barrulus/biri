@@ -33,6 +33,7 @@ pub mod appearance;
 pub mod binds;
 pub mod debug;
 pub mod decoration_shader;
+pub mod drag_physics;
 pub mod error;
 pub mod gestures;
 pub mod global_shader;
@@ -1774,8 +1775,8 @@ mod tests {
                         ),
                     },
                 ),
-                window_movement: WindowMovementAnim(
-                    Animation {
+                window_movement: WindowMovementAnim {
+                    anim: Animation {
                         off: false,
                         kind: Spring(
                             SpringParams {
@@ -1785,7 +1786,8 @@ mod tests {
                             },
                         ),
                     },
-                ),
+                    drag_physics: None,
+                },
                 window_resize: WindowResizeAnim {
                     anim: Animation {
                         off: false,

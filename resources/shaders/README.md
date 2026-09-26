@@ -2,8 +2,8 @@
 
 A ready-to-use collection of shaders for biri's [post-process shader
 system](../../docs/wiki/Configuration:-Global-Shader.md), collected from a live setup.
-Everything here is self-contained — the `.kdl` files inline their GLSL, and the `.frag`
-files are plain fragment shader sources referenced by `path` from window rules.
+KDL presets either inline their GLSL or reference adjacent `.frag` files. The
+window preset index uses installed paths, described below.
 
 ## Layout
 
@@ -12,7 +12,8 @@ files are plain fragment shader sources referenced by `path` from window rules.
 | `cursor/` | Full `global-shader {}` blocks: effects that follow the mouse (glow, comet, trail, ripple, spotlight, …). See the note on `cursor-radius` below. | `include` + symlink cycle (below) |
 | `screen/` | Full `global-shader {}` blocks: whole-output colour grades (CRT, grayscale, vignette, warm tint). | same cycle, `screen` group |
 | `close/` | `animations { window-open {} window-close {} }` blocks: a matched open/close pair per effect (whirlpool, melt, ripple, lightning). Each file **owns both nodes** — including it overrides any `window-open`/`window-close` set earlier in `config.kdl`. Nothing else in `animations` is touched. | `include "shaders/current.kdl"` + `scripts/shader-cycle` |
-| `focus-ring/` | Editable focus-ring GLSL (wax-like rainbow, cyan pulse, and travelling lightning), plus a rainbow preset. | `focus-ring { shader { path "…"; } }` or `include` |
+| `drag/` | Jelly, Taffy, and lateral wobble physics presets. | `include` |
+| `focus-ring/` | Editable focus-ring GLSL, including inward-growing vines, faerie magic, liquid effects, and travelling sparks, plus optional presets. | `focus-ring { shader { path "…"; } }` or `include` |
 | `window/` | Per-window `.frag` sources for `shader {}` in window rules (CRT, parchment, pixel mosaic, fisheye + RGB split, text-legibility for transparent terminals, shimmer, ripple drops, Rorschach ink, mercury sheen). | `window-rule { shader { path "…" } }` |
 | `off.kdl` | No-op — linking `current.kdl` here disables the global shader. | |
 | `scripts/` | The cycle scripts the includes/binds below rely on. They expect the bundle copied to `~/.config/biri/` (override with `$BIRI_CONFIG_DIR`). | |
@@ -22,6 +23,61 @@ files are plain fragment shader sources referenced by `path` from window rules.
 Copy the entire `focus-ring/` directory to your config directory. Include `focus-ring/rainbow-ripple.kdl` for a global ring, or assign its `.frag` files to individual applications through `window-rule { focus-ring { on; shader { path "focus-ring/rainbow-ripple.frag"; padding 14; }; }; }`. Paths resolve relative to the containing config/include. Saving a shader reloads it automatically; no rebuild is needed. `pulse.frag` is a simpler second effect requiring no extra padding.
 
 See [the decoration shader contract](../../docs/wiki/Configuration:-Layout.md#custom-focus-ring-and-border-shaders). These shaders do not have the global shaders' full-screen or capture restrictions. Add `light spread=80 intensity=1.0 threshold=0.5` inside a decoration's `shader` block to spill its bright highlights onto nearby window content. `lightning.frag` uses a travelling blue-white pulse; at width 6, use `padding 24`. The same opt-in lighting works with your existing shader files and reloads from the config without rebuilding.
+
+`fuse.frag` draws a stationary, irregular braided cord with a travelling orange-white ember, a charred trail and flying sparks. At width 6 use `padding 48` and `light spread=90 intensity=1.4 threshold=0.5`: the cord stays dim while the ember casts warm light on nearby windows. The cord stays within the nominal ring width, so width 6 fits 6-pixel layout gaps; `padding` reserves extra space for sparks and does not push the cord outward. The optional `focus-ring/fuse.kdl` preset enables this globally; for one application, use its focus-ring block in a window rule. Edit `FUSE_SECONDS` (seconds per lap), `FUSE_WANDER` (0–1) and `FUSE_BRIGHTNESS` (ember and sparks only) in the file to tune it. Brightness does not increase the unburnt cord's contribution, keeping it below the suggested light threshold. No compositor rebuild is needed to add this shader; the `light` setting requires the light-spill-capable binary.
+
+Both travelling effects support **1–4 simultaneous heads**, evenly spaced around the same ring. Edit the constant near the top of the relevant `.frag` file and save; it reloads automatically:
+
+```glsl
+// lightning.frag
+const int LIGHTNING_COUNT = 3;
+
+// fuse.frag — burning tips, each with its own sparks
+const int EMBER_COUNT = 3;
+```
+
+Both default to `1`; values below 1 or above 4 are clamped. Each head retains the same lap time and size, and the optional `light` pass illuminates every head. More fuse tips also generate more sparks. The fuse's cord remains below the recommended light threshold regardless of `FUSE_BRIGHTNESS`.
+
+### Effects returned from Umbriel
+
+The collection now includes `flowering-vine`, `faerie-magic`, `flowing-water`,
+`neon-bleed`, `portal-lava`, `sentient-runner`, `sentient-spark`, and
+`scribbling-pencils`. Each has an adjacent KDL preset. `rainbow-bleed` is the
+inward-growing version of the rainbow ring; `rainbow-ripple` retains the original
+appearance. Existing local lightning and fuse head counts are preserved.
+
+The paired inner/outer effects use one ring shader in biri: `draw-inside true`
+lets the shader paint over client content as well as outside it. This keeps the
+same time, corner radius, and colour on both sides of the edge, independently of
+the window's content shader. It follows focus and hides when maximized or
+fullscreen. Other ring shaders remain hollow by default.
+
+```kdl
+include "shaders/focus-ring/flowering-vine.kdl"
+include "shaders/drag/jelly.kdl"
+```
+
+`drag/jelly.kdl`, `drag/taffy.kdl`, and `drag/lateral-wobble.kdl` enable the ported
+elastic sheet simulation during pointer moves. Include one, or configure it
+inline as described in [drag physics](../../docs/wiki/Configuration:-Animations.md#drag-physics).
+The whole live window and its decorations deform, then settle after release.
+This is opt-in; it does not change window geometry or input regions.
+
+`close/close-paper.kdl` adds the matching paper fall/unfurl and scrunch/fall
+opening and closing animations.
+
+New content shaders include weather, fire, rainbow waves and smoke, liquid glass,
+flap boards, sentient circuits, colour-vision variants, and crumpled paper.
+`window/presets.kdl` registers the content collection for biri's existing
+window-shader actions. It assumes the bundle is installed at
+`~/.config/niri/shaders`; adjust those paths if using the separate biri directory.
+The imported versions also fix undefined descending `smoothstep` edges in the
+older window shaders.
+
+The source collection is Barrulus's `bumbriel` fork, from
+`docs/examples/shaders` and `examples/shaders/barrulus` (including its working
+paper shaders), adapted back to biri's `niri_*` uniforms and `global_color` entry
+point. The solver is a Rust port of `umbrielfx/render/drag_physics.c`.
 
 ### `cursor-radius` and full-output cost
 

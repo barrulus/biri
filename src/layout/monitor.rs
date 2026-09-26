@@ -1393,7 +1393,7 @@ impl<W: LayoutElement> Monitor<W> {
         let config = if activate {
             self.options.animations.workspace_switch.0
         } else {
-            self.options.animations.window_movement.0
+            self.options.animations.window_movement.anim
         };
 
         self.add_tile(
@@ -1510,7 +1510,7 @@ impl<W: LayoutElement> Monitor<W> {
         let config = if activate {
             self.options.animations.workspace_switch.0
         } else {
-            self.options.animations.window_movement.0
+            self.options.animations.window_movement.anim
         };
 
         let new_id = self.workspaces[new_idx].id();

@@ -1,3 +1,4 @@
+// Custom shader by Barrulus.
 // Mercury sheen — a flowing liquid-metal / chrome surface raked with moving specular glints.
 // A domain-warped noise field is treated as a molten surface; its normal fakes an environment
 // reflection (dark steel in the valleys, bright chrome on the ridges) and a rotating light throws

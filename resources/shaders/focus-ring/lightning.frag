@@ -1,4 +1,4 @@
-// Blue-white lightning with one travelling crackle spot.
+// Blue-white lightning with one to four travelling crackle spots.
 // Biri file-based decoration shader: vec4 ring_color(vec2 coords).
 // Host supplies ring_size, ring_width, ring_padding, ring_distance(coords),
 // niri_time and niri_scale. Coordinates are logical pixels from the client
@@ -18,6 +18,8 @@
 // 2.5 * width + 2 / output_scale logical pixels of shader padding.
 
 // Edit these constants to tune the effect. SPEED=0 freezes it.
+// Number of evenly spaced pulses (1-4; out-of-range values are clamped).
+const int LIGHTNING_COUNT = 1;
 const float SPEED = 1.0;
 const float STRENGTH = 0.9;
 const float BRIGHTNESS = 1.0;
@@ -66,9 +68,10 @@ vec4 ring_color(vec2 coords) {
     vec3 rgb;
     float coverage;
 
-    // One concentrated storm travels clockwise, leaving a short fading wake.
-    float behind = fract(phase - u);
-    float delta = abs(fract(u - phase + 0.5) - 0.5);
+    // Repeat the travelling spot without changing each pulse's width or lap time.
+    float count = clamp(float(LIGHTNING_COUNT), 1.0, 4.0);
+    float behind = fract((phase - u) * count) / count;
+    float delta = abs(fract((u - phase) * count + 0.5) - 0.5) / count;
     float head = exp(-pow(delta / 0.027, 2.0));
     float wake = exp(-behind * 19.0);
     float energy = max(head, wake * 0.65);

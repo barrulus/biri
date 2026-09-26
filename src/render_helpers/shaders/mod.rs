@@ -24,6 +24,7 @@ pub struct Shaders {
     pub clipped_surface: Option<GlesTexProgram>,
     pub postprocess_and_clip: Option<GlesTexProgram>,
     pub resize: Option<ShaderProgram>,
+    pub drag_physics: Option<ShaderProgram>,
     pub gradient_fade: Option<GlesTexProgram>,
     pub blur: Option<BlurProgram>,
     pub custom_resize: RefCell<Option<ShaderProgram>>,
@@ -45,6 +46,7 @@ pub enum ProgramType {
     Panel,
     Shadow,
     Resize,
+    DragPhysics,
     Close,
     Open,
     Global,
@@ -156,6 +158,27 @@ impl Shaders {
             })
             .ok();
 
+        let mut drag_uniforms = vec![
+            UniformName::new("area", UniformType::_4f),
+            UniformName::new("window", UniformType::_4f),
+            UniformName::new("source_rect", UniformType::_4f),
+            UniformName::new("texture_size", UniformType::_2f),
+        ];
+        for i in 0..16 {
+            drag_uniforms.push(UniformName::new(
+                format!("deformation_{i}"),
+                UniformType::_2f,
+            ));
+        }
+        let drag_physics = ShaderProgram::compile(
+            renderer,
+            include_str!("drag_physics.frag"),
+            &drag_uniforms,
+            &["niri_tex"],
+        )
+        .map_err(|err| warn!("error compiling drag physics shader: {err:?}"))
+        .ok();
+
         let resize = compile_resize_program(renderer, include_str!("resize.frag"))
             .map_err(|err| {
                 warn!("error compiling resize shader: {err:?}");
@@ -192,6 +215,7 @@ impl Shaders {
             clipped_surface,
             postprocess_and_clip,
             resize,
+            drag_physics,
             gradient_fade,
             blur,
             custom_resize: RefCell::new(None),
@@ -240,6 +264,7 @@ impl Shaders {
 
     pub fn program(&self, program: ProgramType) -> Option<ShaderProgram> {
         match program {
+            ProgramType::DragPhysics => self.drag_physics.clone(),
             ProgramType::Border => self.border.clone(),
             ProgramType::DecorationLight => self.decoration_light.clone(),
             ProgramType::Decoration(key) => self
@@ -658,6 +683,7 @@ fn compile_decoration_program(
             UniformName::new("border_width", UniformType::_1f),
             UniformName::new("rainbow_ripple", UniformType::_4f),
             UniformName::new("ring_width", UniformType::_1f),
+            UniformName::new("ring_draw_inside", UniformType::_1f),
             UniformName::new("emission_threshold", UniformType::_1f),
             UniformName::new("niri_time", UniformType::_1f),
         ],

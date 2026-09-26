@@ -1,0 +1,19 @@
+// Personal preset: window shader paths use the biri checkout at ~/dev/biri.
+window-rule {
+    match app-id=r#"^(com\.mitchellh\.ghostty|ghostty)$"#
+
+    shader {
+        path "~/dev/biri/resources/shaders/window/prairie-wind.frag"
+    }
+    border { off; }
+    focus-ring {
+        on
+        width 6
+        shader {
+            path "../focus-ring/flowering-vine.frag"
+            padding 8
+            draw-inside true
+            light spread=16 intensity=0.25 threshold=0.75
+        }
+    }
+}

@@ -76,7 +76,7 @@ fn set_up() -> Fixture {
     let mut config = Config::default();
     config.layout.gaps = 0.0;
     config.animations.window_resize.anim.kind = LINEAR;
-    config.animations.window_movement.0.kind = LINEAR;
+    config.animations.window_movement.anim.kind = LINEAR;
 
     let mut f = Fixture::with_config(config);
     f.niri_state().backend.headless().add_renderer().unwrap();

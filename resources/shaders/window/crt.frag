@@ -1,6 +1,11 @@
+// Custom shader by Barrulus.
+// Descending smoothstep edges in the original are undefined in GLSL.
+float smoothstep_any_order(float a, float b, float x) {
+    return a > b ? 1.0 - smoothstep(b, a, x) : smoothstep(a, b, x);
+}
 // CRT phosphor — scanlines, RGB aperture-grille mask, barrel bulge, vignette.
 //
-// biri/niri window shader (niri mode). Static: does NOT use niri_time.
+// Window shader. Static: does NOT use niri_time.
 //   c.xy : 0..1 across the window, c.y = 0 at the TOP
 //   niri_size : window size in physical pixels
 //   tex2D_screen(uv) : samples the window's own composited pixels
@@ -37,7 +42,7 @@ vec4 global_color(vec3 c) {
     col *= mix(vec3(1.0), grille, 0.35);
 
     // --- vignette + a little brightness to compensate for the mask -----------
-    float vig = smoothstep(0.85, 0.20, r2 * 2.0);
+    float vig = smoothstep_any_order(0.85, 0.20, r2 * 2.0);
     col *= mix(0.45, 1.18, vig);
 
     col *= mask;
