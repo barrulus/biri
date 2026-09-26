@@ -1,0 +1,18 @@
+// Personal preset: window shader paths use the biri checkout at ~/dev/biri.
+// Include after existing Foot rules so this theme takes precedence.
+window-rule {
+    match app-id=r#"^(foot|footclient|foot-.*)$"#
+
+    shader {
+        path "~/dev/biri/resources/shaders/window/sentient-circuit-v2.frag"
+    }
+    border { off; }
+    focus-ring {
+        on
+        width 6
+        shader {
+            path "../focus-ring/sentient-runner.frag"
+            padding 14
+        }
+    }
+}

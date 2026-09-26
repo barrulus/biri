@@ -1,0 +1,13 @@
+// Include this file; keep the adjacent .frag file with it.
+layout {
+    focus-ring {
+        on
+        width 6
+        shader {
+            path "flowering-vine.frag"
+            padding 8
+            draw-inside true
+            light spread=16 intensity=0.25 threshold=0.75
+        }
+    }
+}

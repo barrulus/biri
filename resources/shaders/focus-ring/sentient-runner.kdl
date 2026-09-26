@@ -1,0 +1,11 @@
+// Include this file; keep the adjacent .frag file with it.
+layout {
+    focus-ring {
+        on
+        width 6
+        shader {
+            path "sentient-runner.frag"
+            padding 14
+        }
+    }
+}

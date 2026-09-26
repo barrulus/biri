@@ -134,10 +134,10 @@ impl FocusRing {
         );
         let width = self.config.width + padding;
         let radius = radius.expanded_by(padding as f32);
-        // The animated decoration is always hollow, including behind translucent clients.
+        // Keep the standard ring hollow; draw-inside uses a full quad above the client.
         let is_border = is_border || has_effect;
         self.full_size = win_size + Size::from((width, width)).upscale(2.);
-        self.is_border = is_border;
+        self.is_border = is_border && !custom.is_some_and(|shader| shader.draw_inside);
 
         let color = if is_urgent {
             self.config.urgent_color
@@ -197,7 +197,7 @@ impl FocusRing {
         // * We do not divide anything, only add, subtract and multiply by integers.
         // * At rendering time, tile positions are rounded to physical pixels.
 
-        if is_border {
+        if self.is_border {
             let top_left = f64::max(width, ceil(f64::from(radius.top_left)));
             let top_right = f64::min(
                 self.full_size.w - top_left,
@@ -302,6 +302,7 @@ impl FocusRing {
                 } else {
                     0.
                 },
+                custom.is_some_and(|shader| shader.draw_inside),
             );
         }
     }
@@ -344,6 +345,7 @@ impl FocusRing {
             .borders
             .iter()
             .zip(self.locations)
+            .take(if self.is_border { 8 } else { 1 })
             .map(|(border, loc)| {
                 border
                     .clone()
@@ -366,6 +368,10 @@ impl FocusRing {
                 None
             }
         }
+    }
+
+    pub fn draws_above_window(&self) -> bool {
+        self.custom_key.is_some() && self.config.shader.as_ref().is_some_and(|s| s.draw_inside)
     }
 
     pub fn render(
@@ -1016,6 +1022,66 @@ mod tests {
                             .write_image_data(&pixels)
                             .unwrap();
                     }
+                }
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod inside_tests {
+    use super::*;
+
+    #[test]
+    fn egl_draw_inside_is_opt_in_and_tracks_focus() {
+        use smithay::backend::allocator::Fourcc;
+        use smithay::backend::egl::native::EGLSurfacelessDisplay;
+        use smithay::backend::egl::{EGLContext, EGLDisplay};
+        use smithay::backend::renderer::gles::GlesRenderer;
+        use smithay::utils::Transform;
+
+        use crate::render_helpers::{render_to_vec, shaders};
+
+        let mut renderer = unsafe {
+            let display = EGLDisplay::new(EGLSurfacelessDisplay).unwrap();
+            GlesRenderer::new(EGLContext::new(&display).unwrap()).unwrap()
+        };
+        crate::render_helpers::resources::init(&mut renderer);
+        shaders::init(&mut renderer);
+        for inside in [false, true] {
+            let config = niri_config::Config::parse_mem(&format!(
+                "layout {{ focus-ring {{ width 6; shader {{ draw-inside {inside}; source \"vec4 ring_color(vec2 p) {{ return vec4(1., 0., 0., 1.); }}\"; }}; }}; }}"
+            )).unwrap();
+            shaders::set_decoration_programs(&mut renderer, &config);
+            let mut ring = FocusRing::new(config.layout.focus_ring);
+            for active in [true, false] {
+                for scale in [1., 1.25, 2.] {
+                    ring.update_render_elements(
+                        (80., 60.).into(),
+                        active,
+                        true,
+                        false,
+                        Rectangle::from_size((120., 100.).into()),
+                        CornerRadius::default(),
+                        scale,
+                        1.,
+                    );
+                    assert_eq!(ring.draws_above_window(), inside && active);
+                    let mut elements = Vec::new();
+                    ring.render(&mut renderer, (20., 20.).into(), &mut |e| elements.push(e));
+                    let pixels = render_to_vec(
+                        &mut renderer,
+                        ((120. * scale) as i32, (100. * scale) as i32).into(),
+                        scale.into(),
+                        Transform::Normal,
+                        Fourcc::Abgr8888,
+                        elements.into_iter(),
+                    )
+                    .unwrap();
+                    let idx = (((40. * scale) as usize) * ((120. * scale) as usize)
+                        + (60. * scale) as usize)
+                        * 4;
+                    assert_eq!(pixels[idx + 3] > 0, inside && active);
                 }
             }
         }

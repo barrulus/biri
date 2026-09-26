@@ -1,0 +1,39 @@
+// Copy resources/shaders to ~/.config/niri/shaders, then include this file.
+window-shaders {
+    preset "adaptive-text-v3" { path "~/.config/niri/shaders/window/adaptive-text-v3.frag"; }
+    preset "adaptive-text-v4" { path "~/.config/niri/shaders/window/adaptive-text-v4.frag"; }
+    preset "autumn-leaves" { path "~/.config/niri/shaders/window/autumn-leaves.frag"; }
+    preset "crt" { path "~/.config/niri/shaders/window/crt.frag"; }
+    preset "crumpled-paper" { path "~/.config/niri/shaders/window/crumpled-paper.frag"; }
+    preset "cvd-deutan" { path "~/.config/niri/shaders/window/cvd-deutan.frag"; }
+    preset "cvd-deutan-alphabet" { path "~/.config/niri/shaders/window/cvd-deutan-alphabet.frag"; }
+    preset "cvd-deutan-combo" { path "~/.config/niri/shaders/window/cvd-deutan-combo.frag"; }
+    preset "cvd-deutan-drift" { path "~/.config/niri/shaders/window/cvd-deutan-drift.frag"; }
+    preset "cvd-deutan-oriented" { path "~/.config/niri/shaders/window/cvd-deutan-oriented.frag"; }
+    preset "cvd-protan" { path "~/.config/niri/shaders/window/cvd-protan.frag"; }
+    preset "cvd-tritan" { path "~/.config/niri/shaders/window/cvd-tritan.frag"; }
+    preset "film-grain" { path "~/.config/niri/shaders/window/film-grain.frag"; }
+    preset "fire" { path "~/.config/niri/shaders/window/fire.frag"; }
+    preset "fire-tendrils" { path "~/.config/niri/shaders/window/fire-tendrils.frag"; }
+    preset "fisheye-rgb" { path "~/.config/niri/shaders/window/fisheye-rgb.frag"; }
+    preset "flap-board" { path "~/.config/niri/shaders/window/flap-board.frag"; }
+    preset "liquid-glass" { path "~/.config/niri/shaders/window/liquid-glass.frag"; }
+    preset "mercury-sheen" { path "~/.config/niri/shaders/window/mercury-sheen.frag"; }
+    preset "parchment" { path "~/.config/niri/shaders/window/parchment.frag"; }
+    preset "parchment-dark" { path "~/.config/niri/shaders/window/parchment-dark.frag"; }
+    preset "pixel-mosaic" { path "~/.config/niri/shaders/window/pixel-mosaic.frag"; }
+    preset "prairie-wind" { path "~/.config/niri/shaders/window/prairie-wind.frag"; }
+    preset "rainbow-radial" { path "~/.config/niri/shaders/window/rainbow-radial.frag"; }
+    preset "rainbow-smoke" { path "~/.config/niri/shaders/window/rainbow-smoke.frag"; }
+    preset "rainbow-waves" { path "~/.config/niri/shaders/window/rainbow-waves.frag"; }
+    preset "rainfall" { path "~/.config/niri/shaders/window/rainfall.frag"; }
+    preset "rgb-border" { path "~/.config/niri/shaders/window/rgb-border.frag"; }
+    preset "rgb-shimmer" { path "~/.config/niri/shaders/window/rgb-shimmer.frag"; }
+    preset "ripple-drops" { path "~/.config/niri/shaders/window/ripple-drops.frag"; }
+    preset "rolling-clouds" { path "~/.config/niri/shaders/window/rolling-clouds.frag"; }
+    preset "rorschach" { path "~/.config/niri/shaders/window/rorschach.frag"; }
+    preset "rorschach2" { path "~/.config/niri/shaders/window/rorschach2.frag"; }
+    preset "sentient-circuit" { path "~/.config/niri/shaders/window/sentient-circuit.frag"; }
+    preset "sentient-circuit-v2" { path "~/.config/niri/shaders/window/sentient-circuit-v2.frag"; }
+    preset "snowfall" { path "~/.config/niri/shaders/window/snowfall.frag"; }
+}

@@ -1362,7 +1362,7 @@ impl<W: LayoutElement> Layout<W> {
                 }
                 InteractiveMoveState::Moving(move_) => {
                     if move_.tile.window().id() == window {
-                        let Some(InteractiveMoveState::Moving(move_)) =
+                        let Some(InteractiveMoveState::Moving(mut move_)) =
                             self.interactive_move.take()
                         else {
                             unreachable!()
@@ -1375,6 +1375,10 @@ impl<W: LayoutElement> Layout<W> {
                         // Unlock the view on the workspaces.
                         for ws in self.workspaces_mut() {
                             ws.dnd_scroll_gesture_end();
+                        }
+
+                        if let Some(physics) = &mut move_.tile.drag_physics {
+                            physics.grabbed = false;
                         }
 
                         return Some(RemovedTile {
@@ -4337,7 +4341,7 @@ impl<W: LayoutElement> Layout<W> {
                     move_.tile.animate_alpha(
                         INTERACTIVE_MOVE_ALPHA,
                         1.,
-                        self.options.animations.window_movement.0,
+                        self.options.animations.window_movement.anim,
                     );
 
                     // Unlock the view on the workspaces.
@@ -4349,7 +4353,7 @@ impl<W: LayoutElement> Layout<W> {
                     move_.tile.animate_alpha(
                         1.,
                         INTERACTIVE_MOVE_ALPHA,
-                        self.options.animations.window_movement.0,
+                        self.options.animations.window_movement.anim,
                     );
                     move_.tile.hold_alpha_animation_after_done();
                 }
@@ -5629,11 +5633,13 @@ impl<W: LayoutElement> Layout<W> {
                     tile.animate_alpha(
                         1.,
                         INTERACTIVE_MOVE_ALPHA,
-                        self.options.animations.window_movement.0,
+                        self.options.animations.window_movement.anim,
                     );
                     tile.hold_alpha_animation_after_done();
                 }
 
+                tile.begin_drag_physics(pointer_ratio_within_window.into());
+                tile.move_drag_physics(delta);
                 let mut data = InteractiveMoveData {
                     tile,
                     output,
@@ -5707,6 +5713,9 @@ impl<W: LayoutElement> Layout<W> {
                     move_.tile.update_config(view_size, scale, Rc::new(options));
                 }
 
+                move_
+                    .tile
+                    .move_drag_physics(delta.downscale(self.overview_zoom()));
                 move_.pointer_pos_within_output = pointer_pos_within_output;
 
                 self.interactive_move = Some(InteractiveMoveState::Moving(move_));
@@ -5794,6 +5803,10 @@ impl<W: LayoutElement> Layout<W> {
             mon.dnd_scroll_gesture_end();
         }
 
+        if let Some(physics) = &mut move_.tile.drag_physics {
+            physics.grabbed = false;
+        }
+
         // Unlock the view on the workspaces.
         if !move_.is_floating {
             for ws in self.workspaces_mut() {
@@ -5804,7 +5817,7 @@ impl<W: LayoutElement> Layout<W> {
             move_.tile.animate_alpha(
                 INTERACTIVE_MOVE_ALPHA,
                 1.,
-                self.options.animations.window_movement.0,
+                self.options.animations.window_movement.anim,
             );
         }
 

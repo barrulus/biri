@@ -4,6 +4,7 @@ use keyframe::functions::{EaseOutCubic, EaseOutQuad};
 use keyframe::EasingFunction;
 
 mod bezier;
+pub mod drag_physics;
 use bezier::CubicBezier;
 
 mod spring;

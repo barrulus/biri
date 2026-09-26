@@ -104,6 +104,8 @@ shader {
 }
 ```
 
+The bundled [`fuse.frag`](./resources/shaders/focus-ring/fuse.frag) follows an irregular braided cord with a burning ember, ash and sparks. At width 6, use `padding 48` and `light spread=90 intensity=1.4 threshold=0.5` for warm illumination. Set `EMBER_COUNT` in `fuse.frag` or `LIGHTNING_COUNT` in `lightning.frag` to 1–4 for multiple travelling tips or pulses; saving the file reloads the effect.
+
 `spread` controls the glow's reach, `intensity` its brightness, and `threshold` excludes dim parts of the ring. This is a soft screen-space lighting effect; shader files and lighting settings remain editable without rebuilding.
 
 Animation respects `shader-animation-max-fps`, and static shaders can use `animated false`. Invalid shaders log an error and fall back to configured colours. See [Custom focus-ring and border shaders](./docs/wiki/Configuration:-Layout.md#custom-focus-ring-and-border-shaders) for the shader contract, reload behaviour, and examples. The original `rainbow-ripple` configuration remains supported.

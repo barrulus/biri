@@ -457,6 +457,32 @@ Light is drawn above window content, including floating and sticky windows, foll
 
 Lighting is opt-in and adds a half-resolution emission pass plus blur passes for each visible lit decoration. Static emission reuses its blurred texture; animated effects follow the existing shader frame cap. Wider spread and larger windows require more texture memory and GPU work. Float blur textures avoid banding where supported, with lower-precision fallbacks for other drivers.
 
+##### Inward-growing rings
+
+Set `draw-inside true` inside `shader` to allow a ring to grow over the client.
+The decoration renders above window content and below popups, with its actual
+window size and corner radii. The same shader produces both the inward and
+outward parts, independently of any window content shader. Padding still reserves
+only the outside envelope. This is opt-in and follows the normal active-ring,
+urgent, fullscreen, and maximized rules.
+
+```kdl
+layout {
+    focus-ring {
+        width 6
+        shader {
+            path "shaders/focus-ring/flowering-vine.frag"
+            padding 8
+            draw-inside true
+        }
+    }
+}
+```
+
+Bundled presets enable this for flowering vines, faerie magic, rainbow bleed,
+neon bleed, lava portals, and scribbling pencils. Ordinary hollow shaders and
+the legacy rainbow ripple remain unchanged.
+
 ##### Writing a shader
 
 Provide a GLES2 / GLSL ES 1.00 function returning **straight (not premultiplied) RGBA**:
@@ -472,7 +498,7 @@ vec4 ring_color(vec2 coords) {
 }
 ```
 
-Do not supply `#version` or `main()`: the compositor wraps your function, preserves the configured colour/gradient opacity, applies window opacity once, and prevents painting inside the client. Shape the outer silhouette and antialias its edges in your shader. Pixels outside the reserved `width + padding` envelope are clipped. All eight ring pieces share window coordinates, so effects can flow continuously around corners.
+Do not supply `#version` or `main()`: the compositor wraps your function, preserves the configured colour/gradient opacity, applies window opacity once, and prevents painting inside the client unless `draw-inside true` is set. Shape the outer silhouette and antialias its edges in your shader. Pixels outside the reserved `width + padding` envelope are clipped. All eight ring pieces share window coordinates, so effects can flow continuously around corners.
 
 | Symbol | Meaning |
 | --- | --- |

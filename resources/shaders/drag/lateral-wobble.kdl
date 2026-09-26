@@ -1,0 +1,10 @@
+animations {
+    window-movement {
+        drag-physics {
+            stiffness 18
+            coupling 170
+            damping 8
+            pointer-response 2.8
+        }
+    }
+}

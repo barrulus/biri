@@ -226,6 +226,7 @@ float rounded_rect_distance(vec2 coords, vec2 size, vec4 radii) {
 // Shared contract for file-based decoration shaders. Coordinates are logical pixels
 // relative to the client top-left; negative coordinates are outside the client.
 uniform float ring_width;
+uniform float ring_draw_inside;
 uniform float emission_threshold;
 uniform float niri_time;
 #define ring_size (geo_size - vec2(border_width * 2.0))
@@ -245,8 +246,8 @@ vec4 ring_color(vec2 coords);
 vec4 custom_ring_color(vec2 coords) {
     vec4 color = ring_color(coords);
     color.a = clamp(color.a, 0.0, 1.0) * ring_base_color(coords).a;
-    // Custom code can shape the outer silhouette but cannot paint over the client.
-    if (all(greaterThanEqual(coords, vec2(0.0))) && all(lessThanEqual(coords, ring_size))) {
+    // Painting over client content is opt-in.
+    if (ring_draw_inside < 0.5 && all(greaterThanEqual(coords, vec2(0.0))) && all(lessThanEqual(coords, ring_size))) {
         color.a *= 1.0 - niri_rounding_alpha(coords, ring_size, ring_radius);
     }
     return premul_rect(color);

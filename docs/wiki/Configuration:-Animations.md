@@ -322,6 +322,63 @@ animations {
 }
 ```
 
+##### Drag physics
+
+An optional `drag-physics` block inside `window-movement` makes a pointer-dragged
+window behave like an elastic sheet. The grab point stays pinned while the rest
+of the window lags and oscillates. The effect includes borders and focus rings,
+uses live window content, and settles after release. It leaves layout sizes and
+input regions unchanged. Keyboard movement and resize use their existing animations.
+
+```kdl
+animations {
+    window-movement {
+        drag-physics
+    }
+}
+```
+
+The defaults match Umbriel's Jelly. For Taffy, which stretches downwards while
+moving, use:
+
+```kdl
+animations {
+    window-movement {
+        drag-physics {
+            coupling 48
+            damping 4.8
+            stiffness-gradient -0.55
+            lag-gradient 0.9
+            downward-pull 18
+        }
+    }
+}
+```
+
+| Setting | Default | Range | Meaning |
+| --- | --- | --- | --- |
+| `enable` | `true` | boolean | Enable this simulation. |
+| `stiffness` | 36 | 1–1000 | Pull towards the undeformed shape. |
+| `coupling` | 100 | 0–500 | Coupling between neighbouring control points. |
+| `damping` | 6.5 | 0.5–60 | Dissipation of oscillation. |
+| `pointer-response` | 2 | 0–10 | Strength of the response to pointer motion. |
+| `stiffness-gradient` | 0 | −0.9–1 | Change in stiffness from top to bottom. |
+| `lag-gradient` | 0 | −0.9–4 | Change in pointer lag from top to bottom. |
+| `downward-pull` | 0 | 0–50 | Motion-dependent hanging weight. |
+| `motion-gain` | 8 | 0–32 | How quickly movement loads the hanging sheet. |
+| `decay` | 2.8 | 0.1–30 | How quickly that load fades. |
+
+For broad lateral sway, try `stiffness 18`, `coupling 170`, `damping 8`, and
+`pointer-response 2.8`, leaving the other defaults. These settings also ship as
+`resources/shaders/drag/lateral-wobble.kdl`.
+
+Omitting the block, setting `enable false`, disabling `window-movement`, or
+`animations { off; }` disables deformation. Config reload updates parameters;
+disabling the effect clears an active simulation. Animation slowdown applies.
+The solver advances at fixed 240 Hz steps and settles immediately after a pause
+over 250 ms of animation time. Drawing needs a live offscreen texture only while
+the sheet is deformed; the texture is released when it settles.
+
 #### `window-resize`
 
 <sup>Since: 0.1.5</sup>

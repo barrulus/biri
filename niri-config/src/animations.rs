@@ -215,18 +215,24 @@ impl Default for HorizontalViewMovementAnim {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct WindowMovementAnim(pub Animation);
+pub struct WindowMovementAnim {
+    pub anim: Animation,
+    pub drag_physics: Option<crate::drag_physics::DragPhysics>,
+}
 
 impl Default for WindowMovementAnim {
     fn default() -> Self {
-        Self(Animation {
-            off: false,
-            kind: Kind::Spring(SpringParams {
-                damping_ratio: 1.,
-                stiffness: 800,
-                epsilon: 0.0001,
-            }),
-        })
+        Self {
+            anim: Animation {
+                off: false,
+                kind: Kind::Spring(SpringParams {
+                    damping_ratio: 1.,
+                    stiffness: 800,
+                    epsilon: 0.0001,
+                }),
+            },
+            drag_physics: None,
+        }
     }
 }
 
@@ -385,10 +391,33 @@ where
         node: &knuffel::ast::SpannedNode<S>,
         ctx: &mut knuffel::decode::Context<S>,
     ) -> Result<Self, DecodeError<S>> {
-        let default = Self::default().0;
-        Ok(Self(Animation::decode_node(node, ctx, default, |_, _| {
-            Ok(false)
-        })?))
+        let mut drag_physics = None;
+        let anim = Animation::decode_node(node, ctx, Self::default().anim, |child, ctx| {
+            if &**child.node_name != "drag-physics" {
+                return Ok(false);
+            }
+            if drag_physics.is_some() {
+                ctx.emit_error(DecodeError::unexpected(
+                    child,
+                    "node",
+                    "duplicate drag-physics",
+                ));
+            }
+            let parameters = crate::drag_physics::DragPhysics::decode_node(child, ctx)?;
+            if parameters.damping.0 < 0.5
+                || parameters.stiffness_gradient.0 < -0.9
+                || parameters.lag_gradient.0 < -0.9
+                || parameters.decay.0 < 0.1
+            {
+                ctx.emit_error(DecodeError::conversion(
+                    child,
+                    "drag physics requires damping >= 0.5, gradients >= -0.9, and decay >= 0.1",
+                ));
+            }
+            drag_physics = Some(parameters);
+            Ok(true)
+        })?;
+        Ok(Self { anim, drag_physics })
     }
 }
 

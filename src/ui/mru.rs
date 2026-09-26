@@ -1312,7 +1312,7 @@ impl Inner {
     }
 
     fn animate_view_pos_from(&mut self, from: f64) {
-        let config = self.config.borrow().animations.window_movement.0;
+        let config = self.config.borrow().animations.window_movement.anim;
         self.view_pos
             .animate_from_with_config(from, config, self.clock.clone());
     }
@@ -1405,7 +1405,7 @@ impl Inner {
             let prev_size = self.wmru.thumbnails[idx].preview_size(output_size, scale);
             let delta = prev_size.w + gap;
 
-            let config = self.config.borrow().animations.window_movement.0;
+            let config = self.config.borrow().animations.window_movement.anim;
 
             // If the removed window is to the left of the currently selected one, we need to offset
             // the view position to compensate for the change.
@@ -1479,7 +1479,7 @@ impl Inner {
         let padding = round(padding) + round(BORDER);
         let gap = padding + round(GAP) + padding;
 
-        let config = self.config.borrow().animations.window_movement.0;
+        let config = self.config.borrow().animations.window_movement.anim;
 
         let mut delta = 0.;
         for t in &mut self.wmru.thumbnails[idx + 1..] {

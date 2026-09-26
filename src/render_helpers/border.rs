@@ -31,6 +31,7 @@ pub struct BorderRenderElement {
     rainbow_ripple: [f32; 4],
     shader_time: f32,
     ring_width: f32,
+    draw_inside: bool,
     emission_threshold: f32,
 }
 
@@ -71,6 +72,7 @@ impl BorderRenderElement {
             rainbow_ripple: [0.; 4],
             shader_time: 0.,
             ring_width: 0.,
+            draw_inside: false,
             emission_threshold: -1.,
             params: Parameters {
                 size,
@@ -97,6 +99,7 @@ impl BorderRenderElement {
             rainbow_ripple: [0.; 4],
             shader_time: 0.,
             ring_width: 0.,
+            draw_inside: false,
             emission_threshold: -1.,
             params: Parameters {
                 size: Default::default(),
@@ -162,10 +165,11 @@ impl BorderRenderElement {
         }
     }
 
-    pub fn set_shader(&mut self, key: Option<u64>, time: f32, width: f32) {
+    pub fn set_shader(&mut self, key: Option<u64>, time: f32, width: f32, draw_inside: bool) {
         self.inner
             .set_program(key.map_or(ProgramType::Border, ProgramType::Decoration));
-        if self.shader_time != time || self.ring_width != width {
+        if self.shader_time != time || self.ring_width != width || self.draw_inside != draw_inside {
+            self.draw_inside = draw_inside;
             self.shader_time = time;
             self.ring_width = width;
             self.update_inner();
@@ -252,6 +256,10 @@ impl BorderRenderElement {
                 Uniform::new("border_width", border_width),
                 Uniform::new("rainbow_ripple", self.rainbow_ripple),
                 Uniform::new("niri_time", self.shader_time),
+                Uniform::new(
+                    "ring_draw_inside",
+                    if self.draw_inside { 1_f32 } else { 0_f32 },
+                ),
                 Uniform::new("ring_width", self.ring_width),
                 Uniform::new("emission_threshold", self.emission_threshold),
             ]),

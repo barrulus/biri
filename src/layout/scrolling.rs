@@ -1325,11 +1325,11 @@ impl<W: LayoutElement> ScrollingSpace<W> {
             if target_column.active_tile_idx == tile_idx {
                 // Fade out the previously active tile.
                 let tile = &mut target_column.tiles[prev_active_tile_idx];
-                tile.animate_alpha(1., 0., self.options.animations.window_movement.0);
+                tile.animate_alpha(1., 0., self.options.animations.window_movement.anim);
             } else {
                 // Fade out when adding into a tabbed column into the background.
                 let tile = &mut target_column.tiles[tile_idx];
-                tile.animate_alpha(1., 0., self.options.animations.window_movement.0);
+                tile.animate_alpha(1., 0., self.options.animations.window_movement.anim);
             }
         }
 
@@ -1399,7 +1399,7 @@ impl<W: LayoutElement> ScrollingSpace<W> {
 
         // Animate movement of other columns.
         let offset = self.column_main_pos(idx + 1) - self.column_main_pos(idx);
-        let config = anim_config.unwrap_or(self.options.animations.window_movement.0);
+        let config = anim_config.unwrap_or(self.options.animations.window_movement.anim);
         if self.active_column_idx <= idx {
             for col in &mut self.columns[idx + 1..] {
                 col.animate_move_x_from_with_config(-offset, config);
@@ -1463,7 +1463,7 @@ impl<W: LayoutElement> ScrollingSpace<W> {
         let column = &mut self.columns[column_idx];
         let prev_width = self.data[column_idx].width;
 
-        let movement_config = anim_config.unwrap_or(self.options.animations.window_movement.0);
+        let movement_config = anim_config.unwrap_or(self.options.animations.window_movement.anim);
 
         // Animate movement of other tiles.
         // FIXME: tiles can move along the main axis too, in a centered or resizing layout with
@@ -1568,7 +1568,7 @@ impl<W: LayoutElement> ScrollingSpace<W> {
         anim_config: Option<niri_config::Animation>,
     ) -> Column<W> {
         // Animate movement of the other columns.
-        let movement_config = anim_config.unwrap_or(self.options.animations.window_movement.0);
+        let movement_config = anim_config.unwrap_or(self.options.animations.window_movement.anim);
         let offset = self.column_main_pos(column_idx + 1) - self.column_main_pos(column_idx);
         if self.active_column_idx <= column_idx {
             for col in &mut self.columns[column_idx + 1..] {
@@ -2119,7 +2119,10 @@ impl<W: LayoutElement> ScrollingSpace<W> {
             }
         }
 
-        self.activate_column_with_anim_config(new_idx, self.options.animations.window_movement.0);
+        self.activate_column_with_anim_config(
+            new_idx,
+            self.options.animations.window_movement.anim,
+        );
     }
 
     pub fn move_left(&mut self) -> bool {
@@ -2233,7 +2236,7 @@ impl<W: LayoutElement> ScrollingSpace<W> {
                 source_col_idx,
                 0,
                 Transaction::new(),
-                Some(self.options.animations.window_movement.0),
+                Some(self.options.animations.window_movement.anim),
             );
             self.add_tile_to_column(target_column_idx, None, tile, source_tile_was_active);
 
@@ -2259,7 +2262,7 @@ impl<W: LayoutElement> ScrollingSpace<W> {
                 source_tile_was_active,
                 removed.width,
                 removed.is_full_width,
-                Some(self.options.animations.window_movement.0),
+                Some(self.options.animations.window_movement.anim),
             );
 
             if source_tile_was_active {
@@ -2333,7 +2336,7 @@ impl<W: LayoutElement> ScrollingSpace<W> {
                 source_col_idx,
                 0,
                 Transaction::new(),
-                Some(self.options.animations.window_movement.0),
+                Some(self.options.animations.window_movement.anim),
             );
             self.add_tile_to_column(target_column_idx, None, tile, source_tile_was_active);
 
@@ -2357,7 +2360,7 @@ impl<W: LayoutElement> ScrollingSpace<W> {
                 source_tile_was_active,
                 removed.width,
                 removed.is_full_width,
-                Some(self.options.animations.window_movement.0),
+                Some(self.options.animations.window_movement.anim),
             );
 
             move_offset += main_space_vec(if self.active_column_idx <= target_column_idx {
@@ -2431,7 +2434,7 @@ impl<W: LayoutElement> ScrollingSpace<W> {
             false,
             removed.width,
             removed.is_full_width,
-            Some(self.options.animations.window_movement.0),
+            Some(self.options.animations.window_movement.anim),
         );
 
         move_offset += main_space_vec(source_column_main - self.column_main_pos(target_col_idx));
@@ -4232,7 +4235,7 @@ impl<W: LayoutElement> Column<W> {
             // Usually new columns are created together with window movement actions. For new
             // windows, we handle that in start_open_animation().
             rv.tab_indicator
-                .start_open_animation(rv.clock.clone(), rv.options.animations.window_movement.0);
+                .start_open_animation(rv.clock.clone(), rv.options.animations.window_movement.anim);
         }
 
         rv
@@ -4461,7 +4464,7 @@ impl<W: LayoutElement> Column<W> {
     }
 
     pub fn animate_move_from(&mut self, from: Point<f64, Logical>) {
-        self.animate_move_from_with_config(from, self.options.animations.window_movement.0);
+        self.animate_move_from_with_config(from, self.options.animations.window_movement.anim);
     }
 
     pub fn animate_move_from_with_config(
@@ -4476,7 +4479,7 @@ impl<W: LayoutElement> Column<W> {
     pub fn animate_move_x_from(&mut self, from_x_offset: f64) {
         self.animate_move_x_from_with_config(
             from_x_offset,
-            self.options.animations.window_movement.0,
+            self.options.animations.window_movement.anim,
         );
     }
 
@@ -4501,7 +4504,7 @@ impl<W: LayoutElement> Column<W> {
     pub fn animate_move_y_from(&mut self, from_y_offset: f64) {
         self.animate_move_y_from_with_config(
             from_y_offset,
-            self.options.animations.window_movement.0,
+            self.options.animations.window_movement.anim,
         );
     }
 
@@ -5538,7 +5541,7 @@ impl<W: LayoutElement> Column<W> {
                 } else {
                     (0., 1.)
                 };
-                tile.animate_alpha(from, to, self.options.animations.window_movement.0);
+                tile.animate_alpha(from, to, self.options.animations.window_movement.anim);
             }
         }
 
@@ -5546,7 +5549,7 @@ impl<W: LayoutElement> Column<W> {
         if display == ColumnDisplay::Tabbed {
             self.tab_indicator.start_open_animation(
                 self.clock.clone(),
-                self.options.animations.window_movement.0,
+                self.options.animations.window_movement.anim,
             );
         }
 

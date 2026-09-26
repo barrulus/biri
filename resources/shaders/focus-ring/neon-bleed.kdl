@@ -1,0 +1,12 @@
+// Include this file; keep the adjacent .frag file with it.
+layout {
+    focus-ring {
+        on
+        width 6
+        shader {
+            path "neon-bleed.frag"
+            padding 14
+            draw-inside true
+        }
+    }
+}

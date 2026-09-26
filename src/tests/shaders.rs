@@ -112,3 +112,89 @@ fn egl_headless_shaders_startup_and_reload() {
     assert!(cleared.1.is_empty());
     assert!(cleared.2.is_empty());
 }
+
+#[test]
+fn egl_umbriel_shader_collection_compiles() {
+    use smithay::backend::egl::native::EGLSurfacelessDisplay;
+    use smithay::backend::egl::{EGLContext, EGLDisplay};
+    use smithay::backend::renderer::gles::GlesRenderer;
+
+    use crate::render_helpers::shaders;
+
+    let mut renderer = unsafe {
+        let display = EGLDisplay::new(EGLSurfacelessDisplay).unwrap();
+        GlesRenderer::new(EGLContext::new(&display).unwrap()).unwrap()
+    };
+    crate::render_helpers::resources::init(&mut renderer);
+    shaders::init(&mut renderer);
+    assert!(Shaders::get(&mut renderer).drag_physics.is_some());
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("resources/shaders");
+    for entry in std::fs::read_dir(root.join("focus-ring")).unwrap() {
+        let path = entry.unwrap().path();
+        if path.extension().is_none_or(|e| e != "frag") {
+            continue;
+        }
+        let config = Config::parse_mem(&format!(
+            "layout {{ focus-ring {{ shader {{ path {:?}; draw-inside true; }}; }}; }}",
+            path
+        ))
+        .unwrap();
+        shaders::set_decoration_programs(&mut renderer, &config);
+        let key = config.layout.focus_ring.shader.unwrap().key().unwrap();
+        assert!(
+            Shaders::get(&mut renderer)
+                .decorations
+                .borrow()
+                .contains_key(&key),
+            "{}",
+            path.display()
+        );
+    }
+    for entry in std::fs::read_dir(root.join("window")).unwrap() {
+        let path = entry.unwrap().path();
+        if path.extension().is_none_or(|e| e != "frag") {
+            continue;
+        }
+        let chain = vec![(std::fs::read_to_string(&path).unwrap(), false)];
+        shaders::set_scoped_programs(&mut renderer, &[chain]);
+        assert_eq!(
+            Shaders::get(&mut renderer)
+                .scoped
+                .borrow()
+                .values()
+                .filter(|p| !p.is_empty())
+                .count(),
+            1,
+            "{}",
+            path.display()
+        );
+    }
+    let paper = Config::parse_mem(include_str!(
+        "../../resources/shaders/close/close-paper.kdl"
+    ))
+    .unwrap();
+    shaders::set_custom_open_program(
+        &mut renderer,
+        paper.animations.window_open.custom_shader.as_deref(),
+    );
+    shaders::set_custom_close_program(
+        &mut renderer,
+        paper.animations.window_close.custom_shader.as_deref(),
+    );
+    assert!(Shaders::get(&mut renderer).custom_open.borrow().is_some());
+    assert!(Shaders::get(&mut renderer).custom_close.borrow().is_some());
+    for dir in ["focus-ring", "drag", "window", "close"] {
+        for entry in std::fs::read_dir(root.join(dir)).unwrap() {
+            let path = entry.unwrap().path();
+            if path.extension().is_some_and(|e| e == "kdl") {
+                let parsed = Config::parse(&path, &std::fs::read_to_string(&path).unwrap());
+                assert!(
+                    parsed.config.is_ok(),
+                    "{}: {:?}",
+                    path.display(),
+                    parsed.config
+                );
+            }
+        }
+    }
+}

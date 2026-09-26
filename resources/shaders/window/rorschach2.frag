@@ -1,3 +1,8 @@
+// Custom shader by Barrulus.
+// Descending smoothstep edges in the original are undefined in GLSL.
+float smoothstep_any_order(float a, float b, float x) {
+    return a > b ? 1.0 - smoothstep(b, a, x) : smoothstep(a, b, x);
+}
 // Rorschach — a shifting inkblot in the middle of the window. The blot is a central
 // shape whose radius is strongly deformed by a domain-warped, slowly drifting noise
 // field, mirrored around the vertical center axis (like a folded inkblot card) — so
@@ -63,7 +68,7 @@ vec4 global_color(vec3 c){
     float breath = 0.05*sin(niri_time*0.21);
     float radius = SPREAD * max(0.55 + breath + WOBBLE*n, 0.15);
 
-    float ink = smoothstep(radius + EDGE, radius - EDGE, r);
+    float ink = smoothstep_any_order(radius + EDGE, radius - EDGE, r);
 
     // Press near-black ink onto the content; everything outside the blot is untouched.
     vec3 black = vec3(0.03, 0.03, 0.04);

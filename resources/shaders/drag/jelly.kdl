@@ -1,0 +1,5 @@
+animations {
+    window-movement {
+        drag-physics
+    }
+}

@@ -1,3 +1,8 @@
+// Custom shader by Barrulus.
+// Descending smoothstep edges in the original are undefined in GLSL.
+float smoothstep_any_order(float a, float b, float x) {
+    return a > b ? 1.0 - smoothstep(b, a, x) : smoothstep(a, b, x);
+}
 // Parchment (dark-app variant) — parchment look for dark UIs like Discord,
 // tuned for READABILITY. Instead of replacing dark areas with opaque paper
 // (which kills text contrast), it remaps the UI's luminance through a parchment
@@ -6,7 +11,7 @@
 // colours, emoji) keep their colour. Crackle/crumple texture is layered on as a
 // gentle multiplier so it reads as paper without hurting legibility.
 //
-// biri/niri window shader (niri mode). Static: does NOT use niri_time.
+// Window shader. Static: does NOT use niri_time.
 //   c.xy : 0..1 across the window, c.y = 0 at the TOP
 //   niri_size : window size in physical pixels
 //   tex2D_screen(uv) : samples the window's own composited pixels
@@ -60,7 +65,7 @@ float cracks(vec2 p, float width) {
         }
     }
     float edge = sqrt(f2) - sqrt(f1);
-    return 1.0 - smoothstep(0.0, width, edge);
+    return 1.0 - smoothstep_any_order(0.0, width, edge);
 }
 
 vec4 global_color(vec3 c) {
@@ -96,7 +101,7 @@ vec4 global_color(vec3 c) {
     float mx = max(max(src.r, src.g), src.b);
     float mn = min(min(src.r, src.g), src.b);
     float chroma = mx - mn;
-    float colorful = smoothstep(0.10, 0.32, chroma) * colorKeep;
+    float colorful = smoothstep_any_order(0.10, 0.32, chroma) * colorKeep;
     vec3 warmed = src.rgb * vec3(1.04, 0.98, 0.84);
     vec3 base = mix(sepia, warmed, colorful);
 
@@ -117,7 +122,7 @@ vec4 global_color(vec3 c) {
     // ---- gentle burnt edge -------------------------------------------------
     vec2 e = abs(uv - 0.5) * 2.0;
     float edge = max(e.x, e.y) + (fbm(px * 0.03) - 0.5) * 0.30;
-    float burn = smoothstep(burnWidth, 1.05, edge);
+    float burn = smoothstep_any_order(burnWidth, 1.05, edge);
     col *= mix(1.0, 0.45, burn * edgeBurn);
     col = mix(col, vec3(0.20, 0.12, 0.06), burn * edgeBurn * 0.5);
 

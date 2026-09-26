@@ -36,7 +36,7 @@ fn make_options() -> Options {
         ..Options::default()
     };
     options.animations.window_resize.anim.kind = LINEAR;
-    options.animations.window_movement.0.kind = LINEAR;
+    options.animations.window_movement.anim.kind = LINEAR;
 
     options
 }
@@ -859,7 +859,7 @@ fn height_resize_cancel_with_stationary_second_window() {
     ];
     let mut options = make_options();
     // Window movement will happen instantly.
-    options.animations.window_movement.0.off = true;
+    options.animations.window_movement.anim.off = true;
     let mut layout = check_ops_with_options(options, ops);
 
     // The resize is in progress.
@@ -1096,4 +1096,91 @@ fn width_resize_and_cancel_of_column_to_the_left() {
     100 × 100 at x:  0 y:  0
     200 × 200 at x:100 y:  0
     ");
+}
+
+#[test]
+fn drag_physics_follows_move_release_and_disable() {
+    for enabled in [false, true] {
+        let mut options = make_options();
+        if enabled {
+            options.animations.window_movement.drag_physics = niri_config::Config::parse_mem(
+                include_str!("../../../resources/shaders/drag/jelly.kdl"),
+            )
+            .unwrap()
+            .animations
+            .window_movement
+            .drag_physics;
+        }
+        let mut layout = check_ops_with_options(
+            options,
+            [
+                Op::AddOutput(1),
+                Op::AddWindow {
+                    params: TestWindowParams::new(1),
+                },
+                Op::CompleteAnimations,
+            ],
+        );
+        let output = layout.outputs().next().cloned().unwrap();
+        let start = {
+            let (tile, pos, _) = layout
+                .active_workspace()
+                .unwrap()
+                .tiles_with_render_positions()
+                .next()
+                .unwrap();
+            pos + tile.window_loc() + Point::from((20., 20.))
+        };
+        assert!(layout.interactive_move_begin(1, &output, start));
+        let delta = Point::from((400., 100.));
+        assert!(layout.interactive_move_update(&1, delta, output.clone(), start + delta));
+        let moving = layout
+            .interactive_move
+            .as_ref()
+            .unwrap()
+            .moving()
+            .expect("move passed threshold");
+        assert_eq!(moving.tile.drag_physics.is_some(), enabled);
+        if enabled {
+            assert!(moving.tile.drag_physics.as_ref().unwrap().active);
+        }
+        Op::AdvanceAnimations { msec_delta: 16 }.apply(&mut layout);
+        layout.interactive_move_end(&1);
+        let physics = &layout
+            .active_workspace()
+            .unwrap()
+            .tiles()
+            .find(|t| *t.window().id() == 1)
+            .unwrap()
+            .drag_physics;
+        if enabled {
+            assert!(!physics.as_ref().unwrap().grabbed);
+        }
+        for _ in 0..600 {
+            Op::AdvanceAnimations { msec_delta: 16 }.apply(&mut layout);
+        }
+        assert!(layout
+            .active_workspace()
+            .unwrap()
+            .tiles()
+            .find(|t| *t.window().id() == 1)
+            .unwrap()
+            .drag_physics
+            .is_none());
+        if enabled {
+            assert!(layout.interactive_move_begin(1, &output, start));
+            assert!(layout.interactive_move_update(&1, delta, output, start + delta));
+            layout.update_config(&niri_config::Config::default());
+            Op::AdvanceAnimations { msec_delta: 16 }.apply(&mut layout);
+            assert!(layout
+                .interactive_move
+                .as_ref()
+                .unwrap()
+                .moving()
+                .unwrap()
+                .tile
+                .drag_physics
+                .is_none());
+        }
+    }
 }
