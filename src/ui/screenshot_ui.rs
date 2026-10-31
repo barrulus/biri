@@ -4,10 +4,11 @@ use std::collections::HashMap;
 use std::f64::consts::TAU;
 use std::iter::zip;
 use std::rc::Rc;
+use std::sync::LazyLock;
 
 use anyhow::Context;
 use arrayvec::ArrayVec;
-use niri_config::{Action, Config};
+use niri_config::{Action, Bind, BoundAction, Config, Key, Modifiers, Trigger};
 use niri_ipc::SizeChange;
 use pango::{Alignment, FontDescription};
 use pangocairo::cairo::{self, ImageSurface};
@@ -17,7 +18,7 @@ use smithay::backend::renderer::element::utils::{Relocate, RelocateRenderElement
 use smithay::backend::renderer::element::Kind;
 use smithay::backend::renderer::gles::{GlesRenderer, GlesTexture};
 use smithay::backend::renderer::{ExportMem, Texture as _};
-use smithay::input::keyboard::{Keysym, ModifiersState};
+use smithay::input::keyboard::Keysym;
 use smithay::output::{Output, WeakOutput};
 use smithay::utils::{Buffer, Physical, Point, Rectangle, Scale, Size, Transform};
 
@@ -764,17 +765,82 @@ impl ScreenshotUi {
         Ok((rect.size, copy.to_vec()))
     }
 
-    pub fn action(&self, raw: Keysym, mods: ModifiersState) -> Option<Action> {
+    pub fn binds(&self) -> impl Iterator<Item = &Bind> + Clone {
+        fn bind(key: Key, action: Action) -> Bind {
+            Bind {
+                key,
+                action: BoundAction::Press(vec![action]),
+                repeat: false, // Not useful for these actions.
+                pass_through: None,
+                cooldown: None,
+                allow_when_locked: true,
+                allow_inhibiting: false,
+                hotkey_overlay_title: None,
+            }
+        }
+
+        static BINDS: LazyLock<[Bind; 4]> = LazyLock::new(|| {
+            [
+                bind(
+                    Key {
+                        trigger: Trigger::Keysym(Keysym::Escape),
+                        modifiers: Modifiers::empty(),
+                    },
+                    Action::CancelScreenshot,
+                ),
+                bind(
+                    Key {
+                        trigger: Trigger::Keysym(Keysym::Return),
+                        modifiers: Modifiers::empty(),
+                    },
+                    Action::ConfirmScreenshot {
+                        write_to_disk: true,
+                    },
+                ),
+                bind(
+                    Key {
+                        trigger: Trigger::Keysym(Keysym::c),
+                        modifiers: Modifiers::CTRL,
+                    },
+                    Action::ConfirmScreenshot {
+                        write_to_disk: false,
+                    },
+                ),
+                bind(
+                    Key {
+                        trigger: Trigger::Keysym(Keysym::p),
+                        modifiers: Modifiers::empty(),
+                    },
+                    Action::ScreenshotTogglePointer,
+                ),
+            ]
+        });
+
+        static SPACE: LazyLock<[Bind; 1]> = LazyLock::new(|| {
+            [bind(
+                Key {
+                    trigger: Trigger::Keysym(Keysym::space),
+                    modifiers: Modifiers::empty(),
+                },
+                Action::ConfirmScreenshot {
+                    write_to_disk: true,
+                },
+            )]
+        });
+
+        // A bit of gymnastics to return an iterator over static &Bind values.
         let Self::Open { button, .. } = self else {
-            return None;
+            return [].iter().chain([].iter());
         };
 
         // Pressing Space while the button is down goes into origin moving rather than capture.
-        if matches!(button, Button::Down { .. }) && raw == Keysym::space {
-            return None;
-        }
+        let space: &[Bind] = if matches!(button, Button::Down { .. }) {
+            &[]
+        } else {
+            &*SPACE
+        };
 
-        action(raw, mods)
+        space.iter().chain(BINDS.iter())
     }
 
     pub fn selection_output(&self) -> Option<&Output> {
@@ -1066,33 +1132,6 @@ impl OutputScreenshot {
             pointer,
         }
     }
-}
-
-fn action(raw: Keysym, mods: ModifiersState) -> Option<Action> {
-    if raw == Keysym::Escape {
-        return Some(Action::CancelScreenshot);
-    }
-
-    if mods.alt || mods.shift {
-        return None;
-    }
-
-    if !mods.ctrl && (raw == Keysym::space || raw == Keysym::Return) {
-        return Some(Action::ConfirmScreenshot {
-            write_to_disk: true,
-        });
-    }
-    if mods.ctrl && raw == Keysym::c {
-        return Some(Action::ConfirmScreenshot {
-            write_to_disk: false,
-        });
-    }
-
-    if !mods.ctrl && raw == Keysym::p {
-        return Some(Action::ScreenshotTogglePointer);
-    }
-
-    None
 }
 
 pub fn rect_from_corner_points(
