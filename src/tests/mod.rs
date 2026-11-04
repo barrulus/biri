@@ -7,6 +7,7 @@ mod test_input_backend;
 
 mod animations;
 mod binds;
+mod carousel;
 mod floating;
 mod fullscreen;
 mod keyboard_config;

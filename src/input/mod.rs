@@ -780,7 +780,7 @@ impl State {
                         && hardcoded_overview_binds().any(|b| b == bind)
                         && this.niri.layout.in_carousel_lens()
                     {
-                        this.niri.layout.carousel_focus_jump_to_focused();
+                        this.confirm_carousel_focus_jump(None);
                         // FIXME: granular.
                         this.niri.queue_redraw_all();
                         return ShouldInterceptResult::InterceptOnly;
@@ -3662,7 +3662,7 @@ impl State {
 
                         // Settled center hit — the lens. Consume regardless of whether a window
                         // was actually found under `uv` (see comment above).
-                        self.niri.layout.carousel_focus_jump(uv);
+                        self.confirm_carousel_focus_jump(Some(uv));
                         // FIXME: granular.
                         self.niri.queue_redraw_all();
                         return;

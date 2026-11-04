@@ -1524,6 +1524,27 @@ impl State {
         }
     }
 
+    /// Confirm the carousel lens selection and hand both input devices to its output.
+    pub fn confirm_carousel_focus_jump(&mut self, uv: Option<(f64, f64)>) -> bool {
+        let jumped = match uv {
+            Some(uv) => self.niri.layout.carousel_focus_jump(uv),
+            None => self.niri.layout.carousel_focus_jump_to_focused(),
+        };
+        if !jumped {
+            return false;
+        }
+
+        // The event loop has not yet replaced overview keyboard focus with layout focus.
+        // Refresh it before warping, otherwise the focused-tile helper rejects the move.
+        self.update_keyboard_focus();
+        if !self.maybe_warp_cursor_to_focus_centered() {
+            if let Some(output) = self.niri.layout.active_output().cloned() {
+                self.move_cursor_to_output(&output);
+            }
+        }
+        true
+    }
+
     pub fn maybe_warp_cursor_to_focus(&mut self) -> bool {
         let focused = match self.niri.config.borrow().input.warp_mouse_to_focus {
             None => return false,
