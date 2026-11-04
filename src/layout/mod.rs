@@ -3129,6 +3129,10 @@ impl<W: LayoutElement> Layout<W> {
     }
 
     pub fn center_column(&mut self) {
+        if let Some(monitor) = self.active_monitor().filter(|mon| mon.sticky_is_active()) {
+            monitor.sticky.center_window(None);
+            return;
+        }
         let Some(workspace) = self.active_workspace_mut() else {
             return;
         };
@@ -3143,13 +3147,14 @@ impl<W: LayoutElement> Layout<W> {
         }
 
         if let Some(id) = id {
-            if self.is_sticky_window(id) {
-                return;
+            if let MonitorSet::Normal { monitors, .. } = &mut self.monitor_set {
+                if let Some(monitor) = monitors.iter_mut().find(|mon| mon.sticky_has_window(id)) {
+                    monitor.sticky.center_window(Some(id));
+                    return;
+                }
             }
-        } else if self
-            .active_monitor_ref()
-            .is_some_and(|mon| mon.sticky_is_active())
-        {
+        } else if let Some(monitor) = self.active_monitor().filter(|mon| mon.sticky_is_active()) {
+            monitor.sticky.center_window(None);
             return;
         }
 
@@ -4644,24 +4649,27 @@ impl<W: LayoutElement> Layout<W> {
     }
 
     pub fn focus_floating(&mut self) {
-        let Some(workspace) = self.active_workspace_mut() else {
-            return;
-        };
-        workspace.focus_floating();
+        if let Some(monitor) = self.active_monitor() {
+            monitor.focus_floating();
+        } else if let Some(workspace) = self.active_workspace_mut() {
+            workspace.focus_floating();
+        }
     }
 
     pub fn focus_tiling(&mut self) {
-        let Some(workspace) = self.active_workspace_mut() else {
-            return;
-        };
-        workspace.focus_tiling();
+        if let Some(monitor) = self.active_monitor() {
+            monitor.focus_tiling();
+        } else if let Some(workspace) = self.active_workspace_mut() {
+            workspace.focus_tiling();
+        }
     }
 
     pub fn switch_focus_floating_tiling(&mut self) {
-        let Some(workspace) = self.active_workspace_mut() else {
-            return;
-        };
-        workspace.switch_focus_floating_tiling();
+        if let Some(monitor) = self.active_monitor() {
+            monitor.switch_focus_floating_tiling();
+        } else if let Some(workspace) = self.active_workspace_mut() {
+            workspace.switch_focus_floating_tiling();
+        }
     }
 
     pub fn move_floating_window(
@@ -6786,9 +6794,10 @@ impl<W: LayoutElement> Layout<W> {
                         mon.dnd_scroll_gesture_end();
                     }
 
+                    let workspace_is_active = is_active && !mon.sticky_is_active();
                     for (ws_idx, ws) in mon.workspaces.iter_mut().enumerate() {
-                        let is_focused = is_active && ws_idx == mon.active_workspace_idx;
-                        ws.refresh(is_active, is_focused);
+                        let is_focused = workspace_is_active && ws_idx == mon.active_workspace_idx;
+                        ws.refresh(workspace_is_active, is_focused);
 
                         if let Some(is_scrolling) = ongoing_scrolling_dnd {
                             // Lock or unlock the view for scrolling interactive move.

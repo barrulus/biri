@@ -1815,6 +1815,157 @@ fn scrolling_position_for_window(ws: &Workspace<TestWindow>, id: usize) -> Optio
 }
 
 #[test]
+fn sticky_focus_switches_between_tiling_and_sticky() {
+    let mut layout = check_ops([
+        Op::AddOutput(1),
+        Op::AddWindow {
+            params: TestWindowParams::new(1),
+        },
+        Op::AddWindow {
+            params: TestWindowParams::new(2),
+        },
+    ]);
+    layout.toggle_window_sticky(Some(&2));
+    assert_eq!(
+        layout
+            .active_monitor()
+            .unwrap()
+            .active_window()
+            .unwrap()
+            .id(),
+        &2
+    );
+
+    layout.switch_focus_floating_tiling();
+    assert_eq!(
+        layout
+            .active_monitor()
+            .unwrap()
+            .active_window()
+            .unwrap()
+            .id(),
+        &1
+    );
+    layout.switch_focus_floating_tiling();
+    assert_eq!(
+        layout
+            .active_monitor()
+            .unwrap()
+            .active_window()
+            .unwrap()
+            .id(),
+        &2
+    );
+
+    layout.refresh(true);
+    let monitor = layout.active_monitor().unwrap();
+    assert!(monitor
+        .sticky
+        .active_window()
+        .unwrap()
+        .0
+        .pending_activated
+        .get());
+    assert!(!monitor
+        .active_workspace_ref()
+        .active_window()
+        .unwrap()
+        .0
+        .pending_activated
+        .get());
+
+    layout.focus_tiling();
+    assert_eq!(
+        layout
+            .active_monitor()
+            .unwrap()
+            .active_window()
+            .unwrap()
+            .id(),
+        &1
+    );
+    layout.focus_floating();
+    assert_eq!(
+        layout
+            .active_monitor()
+            .unwrap()
+            .active_window()
+            .unwrap()
+            .id(),
+        &2
+    );
+    layout.verify_invariants();
+}
+
+#[test]
+fn sticky_center_actions_target_sticky_window() {
+    let mut layout = check_ops([
+        Op::AddOutput(1),
+        Op::AddWindow {
+            params: TestWindowParams::new(1),
+        },
+    ]);
+    layout.toggle_window_sticky(Some(&1));
+    for action in 0..3 {
+        layout.move_floating_window(
+            None,
+            PositionChange::SetFixed(0.),
+            PositionChange::SetFixed(0.),
+            false,
+        );
+        let before = layout
+            .active_monitor()
+            .unwrap()
+            .sticky
+            .tiles_with_render_positions()
+            .next()
+            .unwrap()
+            .1;
+        match action {
+            0 => layout.center_column(),
+            1 => layout.center_window(None),
+            _ => layout.center_window(Some(&1)),
+        }
+        layout.clock.set_complete_instantly(true);
+        layout.advance_animations();
+        layout.clock.set_complete_instantly(false);
+        let after = layout
+            .active_monitor()
+            .unwrap()
+            .sticky
+            .tiles_with_render_positions()
+            .next()
+            .unwrap()
+            .1;
+        assert_ne!(before, after);
+        layout.verify_invariants();
+    }
+}
+
+#[test]
+fn sticky_focus_stays_when_no_tiled_window_exists() {
+    let mut layout = check_ops([
+        Op::AddOutput(1),
+        Op::AddWindow {
+            params: TestWindowParams::new(1),
+        },
+    ]);
+    layout.toggle_window_sticky(Some(&1));
+    layout.focus_tiling();
+    layout.switch_focus_floating_tiling();
+    assert_eq!(
+        layout
+            .active_monitor()
+            .unwrap()
+            .active_window()
+            .unwrap()
+            .id(),
+        &1
+    );
+    layout.verify_invariants();
+}
+
+#[test]
 fn toggle_sticky_restores_tiling_window_to_column() {
     let ops = [
         Op::AddOutput(1),
