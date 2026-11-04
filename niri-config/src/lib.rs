@@ -2346,6 +2346,17 @@ mod tests {
                         ),
                     },
                 ),
+                focus_ring: FocusRingAnim(
+                    Animation {
+                        off: true,
+                        kind: Easing(
+                            EasingParams {
+                                duration_ms: 300,
+                                curve: EaseOutQuad,
+                            },
+                        ),
+                    },
+                ),
             },
             blur: Blur {
                 off: false,

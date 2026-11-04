@@ -6745,6 +6745,7 @@ impl<W: LayoutElement> Layout<W> {
         let mut ongoing_scrolling_dnd = self.dnd.is_some().then_some(true);
 
         if let Some(InteractiveMoveState::Moving(move_)) = &mut self.interactive_move {
+            move_.tile.update_focus(true, true);
             let win = move_.tile.window_mut();
 
             win.set_active_in_column(true);
@@ -6794,10 +6795,11 @@ impl<W: LayoutElement> Layout<W> {
                         mon.dnd_scroll_gesture_end();
                     }
 
-                    let workspace_is_active = is_active && !mon.sticky_is_active();
+                    let workspace_focus_ring = !mon.sticky_is_active();
+                    let workspace_is_active = is_active && workspace_focus_ring;
                     for (ws_idx, ws) in mon.workspaces.iter_mut().enumerate() {
                         let is_focused = workspace_is_active && ws_idx == mon.active_workspace_idx;
-                        ws.refresh(workspace_is_active, is_focused);
+                        ws.refresh(workspace_is_active, is_focused, workspace_focus_ring);
 
                         if let Some(is_scrolling) = ongoing_scrolling_dnd {
                             // Lock or unlock the view for scrolling interactive move.
@@ -6815,12 +6817,14 @@ impl<W: LayoutElement> Layout<W> {
                     }
 
                     let sticky_is_active = is_active && mon.sticky_is_active();
-                    mon.sticky.refresh(sticky_is_active, sticky_is_active, true);
+                    let sticky_focus_ring = mon.sticky_is_active();
+                    mon.sticky
+                        .refresh(sticky_is_active, sticky_is_active, true, sticky_focus_ring);
                 }
             }
             MonitorSet::NoOutputs { workspaces, .. } => {
                 for ws in workspaces {
-                    ws.refresh(false, false);
+                    ws.refresh(false, false, true);
                     ws.view_offset_gesture_end(None);
                 }
             }

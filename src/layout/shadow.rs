@@ -26,6 +26,10 @@ impl Shadow {
         self.config = config;
     }
 
+    pub fn is_on(&self) -> bool {
+        self.config.on
+    }
+
     pub fn update_shaders(&mut self) {
         for elem in &mut self.shaders {
             elem.damage_all();
@@ -35,7 +39,7 @@ impl Shadow {
     pub fn update_render_elements(
         &mut self,
         win_size: Size<f64, Logical>,
-        is_active: bool,
+        focus_progress: f64,
         radius: CornerRadius,
         scale: f64,
         alpha: f32,
@@ -73,13 +77,18 @@ impl Shadow {
 
         let shader_size = box_size + Size::from((width, width)).upscale(2.);
 
-        let color = if is_active {
-            self.config.color
-        } else {
-            // Default to slightly more transparent.
-            self.config
-                .inactive_color
-                .unwrap_or(self.config.color * 0.75)
+        let inactive = self
+            .config
+            .inactive_color
+            .unwrap_or(self.config.color * 0.75);
+        let progress = focus_progress.clamp(0., 1.) as f32;
+        let mix = |from: f32, to: f32| from + (to - from) * progress;
+        let active = self.config.color;
+        let color = niri_config::Color {
+            r: mix(inactive.r, active.r),
+            g: mix(inactive.g, active.g),
+            b: mix(inactive.b, active.b),
+            a: mix(inactive.a, active.a),
         };
 
         let shader_geo = Rectangle::new(Point::from((-width, -width)), shader_size);

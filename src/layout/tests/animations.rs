@@ -1184,3 +1184,103 @@ fn drag_physics_follows_move_release_and_disable() {
         }
     }
 }
+
+#[test]
+fn focus_fades_between_sticky_and_tiling_without_blocking_pointer_refresh() {
+    let mut options = make_options();
+    options.animations.focus_ring.0 = niri_config::Animation {
+        off: false,
+        kind: Kind::Easing(EasingParams {
+            duration_ms: 1000,
+            curve: Curve::Linear,
+        }),
+    };
+    options.layout.shadow.on = true;
+    let mut layout = check_ops_with_options(
+        options,
+        [
+            Op::AddOutput(1),
+            Op::AddWindow {
+                params: TestWindowParams::new(1),
+            },
+            Op::AddWindow {
+                params: TestWindowParams::new(2),
+            },
+            Op::CompleteAnimations,
+        ],
+    );
+    layout.toggle_window_sticky(Some(&2));
+    Op::CompleteAnimations.apply(&mut layout);
+    layout.refresh(true);
+    let progress = |layout: &Layout<TestWindow>, id| {
+        let monitor = layout.active_monitor_ref().unwrap();
+        monitor
+            .sticky
+            .tiles()
+            .chain(monitor.active_workspace_ref().tiles())
+            .find(|tile| *tile.window().id() == id)
+            .unwrap()
+            .focus_progresses()
+    };
+    assert_eq!(progress(&layout, 2), (1., 1.));
+    assert_eq!(progress(&layout, 1), (0., 0.));
+
+    layout.focus_tiling();
+    layout.refresh(true);
+    Op::AdvanceAnimations { msec_delta: 400 }.apply(&mut layout);
+    for (id, expected) in [(1, 0.4), (2, 0.6)] {
+        let (ring, shadow) = progress(&layout, id);
+        assert!((ring - expected).abs() < 1e-6);
+        assert!((shadow - expected).abs() < 1e-6);
+    }
+    assert!(layout.are_animations_ongoing(None));
+    assert!(!layout
+        .active_monitor_ref()
+        .unwrap()
+        .are_transitions_ongoing());
+
+    layout.focus_floating();
+    layout.refresh(true);
+    assert!((progress(&layout, 2).0 - 0.6).abs() < 1e-6);
+    Op::CompleteAnimations.apply(&mut layout);
+    assert_eq!(progress(&layout, 2), (1., 1.));
+    assert_eq!(progress(&layout, 1), (0., 0.));
+    assert!(!layout.are_animations_ongoing(None));
+
+    // Disabling the feature during a fade must clear the outgoing ring immediately.
+    layout.focus_tiling();
+    layout.refresh(true);
+    Op::AdvanceAnimations { msec_delta: 400 }.apply(&mut layout);
+    let mut options = (*layout.options).clone();
+    options.animations.focus_ring.0.off = true;
+    layout.update_options(options);
+    layout.refresh(true);
+    assert_eq!(progress(&layout, 2), (0., 0.));
+    assert_eq!(progress(&layout, 1), (1., 1.));
+    assert!(!layout.are_animations_ongoing(None));
+}
+
+#[test]
+fn focus_ring_selection_survives_monitor_change() {
+    let mut layout = check_ops([
+        Op::AddOutput(1),
+        Op::AddWindow {
+            params: TestWindowParams::new(1),
+        },
+        Op::AddOutput(2),
+        Op::FocusOutput(2),
+        Op::AddWindow {
+            params: TestWindowParams::new(2),
+        },
+        Op::CompleteAnimations,
+    ]);
+    layout.refresh(true);
+    for (_, _, ws) in layout.workspaces() {
+        for tile in ws.tiles() {
+            assert_eq!(
+                tile.focus_progresses(),
+                (1., f64::from(*tile.window().id() == 2))
+            );
+        }
+    }
+}

@@ -7793,6 +7793,15 @@ fn decoration_redraw_visibility(custom: bool, light: bool) {
 
 #[test]
 fn egl_decoration_light_precedes_floating_and_tiled_content() {
+    decoration_light_stacking_and_fades(false);
+}
+
+#[test]
+fn egl_focus_fade_keeps_shader_light_in_live_and_carousel_renders() {
+    decoration_light_stacking_and_fades(true);
+}
+
+fn decoration_light_stacking_and_fades(fade: bool) {
     use smithay::backend::egl::native::EGLSurfacelessDisplay;
     use smithay::backend::egl::{EGLContext, EGLDisplay};
     use smithay::backend::renderer::element::{Element as _, Id};
@@ -7814,10 +7823,19 @@ fn egl_decoration_light_precedes_floating_and_tiled_content() {
     resources::init(&mut renderer);
     shaders::init(&mut renderer);
     shaders::set_decoration_programs(&mut renderer, &config);
-    let options = Options {
+    let mut options = Options {
         layout: config.layout,
         ..Default::default()
     };
+    if fade {
+        options.animations.focus_ring.0 = niri_config::Animation {
+            off: false,
+            kind: niri_config::animations::Kind::Easing(niri_config::animations::EasingParams {
+                duration_ms: 1000,
+                curve: niri_config::animations::Curve::Linear,
+            }),
+        };
+    }
     let mut layout = check_ops_with_options(
         options,
         [
@@ -7836,6 +7854,7 @@ fn egl_decoration_light_precedes_floating_and_tiled_content() {
         ],
     );
     let output = layout.outputs().next().unwrap().clone();
+    layout.refresh(true);
     layout.update_render_elements(Some(&output));
     let light_ids: Vec<_> = layout
         .active_workspace()
@@ -7874,6 +7893,28 @@ fn egl_decoration_light_precedes_floating_and_tiled_content() {
         assert!(!ids[light_ids.len()..]
             .iter()
             .any(|id| light_ids.contains(id)));
+    }
+    if fade {
+        layout.focus_floating();
+        layout.refresh(true);
+        Op::AdvanceAnimations { msec_delta: 400 }.apply(&mut layout);
+        layout.update_render_elements(Some(&output));
+        for overview in [false, true] {
+            let ids = render(&layout, &mut renderer, overview);
+            assert!(
+                ids.contains(&light_ids[0]),
+                "outgoing shader light must survive during fade-out"
+            );
+        }
+        Op::CompleteAnimations.apply(&mut layout);
+        layout.update_render_elements(Some(&output));
+        for overview in [false, true] {
+            assert!(!render(&layout, &mut renderer, overview).contains(&light_ids[0]));
+        }
+        layout.focus_tiling();
+        layout.refresh(true);
+        Op::CompleteAnimations.apply(&mut layout);
+        layout.update_render_elements(Some(&output));
     }
     let mut options = (*layout.options).clone();
     options.layout.focus_ring.shader.as_mut().unwrap().light = None;

@@ -123,7 +123,7 @@ impl MappedLayer {
         let radius = self.rules.geometry_corner_radius.unwrap_or_default();
         // FIXME: is_active based on keyboard focus?
         self.shadow
-            .update_render_elements(size, true, radius, self.scale, 1.);
+            .update_render_elements(size, 1., radius, self.scale, 1.);
     }
 
     pub fn are_animations_ongoing(&self) -> bool {

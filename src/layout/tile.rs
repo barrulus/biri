@@ -38,6 +38,110 @@ use crate::utils::{
     baba_is_float_offset, round_logical_in_physical, round_logical_in_physical_max1,
 };
 
+#[derive(Debug, Default)]
+struct FocusTransition {
+    target: Option<bool>,
+    animation: Option<Animation>,
+}
+
+impl FocusTransition {
+    fn set_target(&mut self, target: bool, clock: &Clock, config: niri_config::Animation) {
+        if config.off {
+            self.target = Some(target);
+            self.animation = None;
+            return;
+        }
+
+        if let Some(previous) = self.target {
+            if previous != target {
+                self.animation = Some(Animation::new(
+                    clock.clone(),
+                    self.value(),
+                    f64::from(target as u8),
+                    0.,
+                    config,
+                ));
+            }
+        }
+
+        // The first refresh establishes the state without a startup fade.
+        self.target = Some(target);
+    }
+
+    fn value(&self) -> f64 {
+        self.animation
+            .as_ref()
+            .map(Animation::clamped_value)
+            .unwrap_or(f64::from(self.target.unwrap_or(false) as u8))
+    }
+
+    fn advance(&mut self) {
+        if self.animation.as_ref().is_some_and(Animation::is_done) {
+            self.animation = None;
+        }
+    }
+
+    fn is_ongoing(&self) -> bool {
+        self.animation.is_some()
+    }
+
+    fn is_fading_out(&self) -> bool {
+        self.target == Some(false) && self.is_ongoing()
+    }
+}
+
+#[cfg(test)]
+mod focus_transition_tests {
+    use std::time::Duration;
+
+    use niri_config::animations::{Curve, EasingParams, Kind};
+
+    use super::*;
+
+    #[test]
+    fn starts_from_initial_state_and_reverses_without_a_jump() {
+        let mut clock = Clock::with_time(Duration::ZERO);
+        let config = niri_config::Animation {
+            off: false,
+            kind: Kind::Easing(EasingParams {
+                duration_ms: 1000,
+                curve: Curve::Linear,
+            }),
+        };
+        let mut transition = FocusTransition::default();
+
+        transition.set_target(true, &clock, config);
+        assert_eq!(transition.value(), 1.);
+        assert!(!transition.is_ongoing());
+
+        transition.set_target(false, &clock, config);
+        assert_eq!(transition.value(), 1.);
+        assert!(transition.is_fading_out());
+        clock.set_unadjusted(Duration::from_millis(400));
+        assert!((transition.value() - 0.6).abs() < 1e-6);
+
+        transition.set_target(true, &clock, config);
+        assert!((transition.value() - 0.6).abs() < 1e-6);
+        assert!(!transition.is_fading_out());
+        clock.set_unadjusted(Duration::from_millis(1400));
+        transition.advance();
+        assert!(!transition.is_ongoing());
+        assert_eq!(transition.value(), 1.);
+
+        transition.set_target(false, &clock, niri_config::Animation::new_off());
+        assert!(!transition.is_ongoing());
+        assert_eq!(transition.value(), 0.);
+
+        clock.set_complete_instantly(true);
+        transition.set_target(true, &clock, config);
+        assert_eq!(transition.value(), 1.);
+        transition.advance();
+        assert!(!transition.is_ongoing());
+        clock.set_complete_instantly(false);
+        assert_eq!(transition.value(), 1.);
+    }
+}
+
 /// Toplevel window with decorations.
 #[derive(Debug)]
 pub struct Tile<W: LayoutElement> {
@@ -104,6 +208,11 @@ pub struct Tile<W: LayoutElement> {
 
     /// The animation of the tile's opacity.
     pub(super) alpha_animation: Option<AlphaAnimation>,
+
+    // Selection persists on inactive outputs; shadow activation does not.
+    focus_ring_transition: FocusTransition,
+    focus_ring_fade_out_active_color: bool,
+    shadow_transition: FocusTransition,
 
     /// Offset during the initial interactive move rubberband.
     pub(super) interactive_move_offset: Point<f64, Logical>,
@@ -229,6 +338,9 @@ impl<W: LayoutElement> Tile<W> {
             move_x_animation: None,
             move_y_animation: None,
             alpha_animation: None,
+            focus_ring_transition: FocusTransition::default(),
+            focus_ring_fade_out_active_color: false,
+            shadow_transition: FocusTransition::default(),
             interactive_move_offset: Point::from((0., 0.)),
             unmap_snapshot: None,
             rounded_corner_damage: Default::default(),
@@ -511,6 +623,8 @@ impl<W: LayoutElement> Tile<W> {
     }
 
     pub fn advance_animations(&mut self) {
+        self.focus_ring_transition.advance();
+        self.shadow_transition.advance();
         self.advance_drag_physics();
         if let Some(open) = &mut self.open_animation {
             if open.is_done() {
@@ -543,7 +657,10 @@ impl<W: LayoutElement> Tile<W> {
     }
 
     pub fn are_animations_ongoing(&self) -> bool {
-        self.are_transitions_ongoing() || self.window.rules().baba_is_float == Some(true)
+        self.are_transitions_ongoing()
+            || self.focus_ring_transition.is_ongoing()
+            || self.shadow_transition.is_ongoing()
+            || self.window.rules().baba_is_float == Some(true)
     }
 
     pub fn are_transitions_ongoing(&self) -> bool {
@@ -556,6 +673,36 @@ impl<W: LayoutElement> Tile<W> {
                 .alpha_animation
                 .as_ref()
                 .is_some_and(|alpha| !alpha.anim.is_done())
+    }
+
+    pub fn update_focus(&mut self, is_selected: bool, is_active: bool) {
+        let config = self.options.animations.focus_ring.0;
+        if self.focus_ring_transition.target == Some(true) && !is_selected {
+            self.focus_ring_fade_out_active_color =
+                self.shadow_transition.target.unwrap_or(is_active);
+        }
+        let ring_config = if self.focus_ring.is_off() {
+            niri_config::Animation::new_off()
+        } else {
+            config
+        };
+        self.focus_ring_transition
+            .set_target(is_selected, &self.clock, ring_config);
+        let shadow_config = if self.shadow.is_on() {
+            config
+        } else {
+            niri_config::Animation::new_off()
+        };
+        self.shadow_transition
+            .set_target(is_active, &self.clock, shadow_config);
+    }
+
+    #[cfg(test)]
+    pub(super) fn focus_progresses(&self) -> (f64, f64) {
+        (
+            self.focus_ring_transition.value(),
+            self.shadow_transition.value(),
+        )
     }
 
     pub fn is_moving_between_workspaces(&self) -> bool {
@@ -632,7 +779,9 @@ impl<W: LayoutElement> Tile<W> {
         };
         self.shadow.update_render_elements(
             animated_tile_size,
-            is_active,
+            self.shadow_transition
+                .target
+                .map_or(f64::from(is_active), |_| self.shadow_transition.value()),
             radius,
             self.scale,
             1. - expanded_progress as f32,
@@ -644,15 +793,23 @@ impl<W: LayoutElement> Tile<W> {
             false
         };
         let radius = radius.expanded_by(self.focus_ring.width() as f32);
+        let ring_is_active = if self.focus_ring_transition.is_fading_out() {
+            self.focus_ring_fade_out_active_color
+        } else {
+            is_active
+        };
         self.focus_ring.update_render_elements(
             animated_tile_size,
-            is_active,
+            ring_is_active,
             !draw_focus_ring_with_background,
             self.window.is_urgent(),
             view_rect,
             radius,
             self.scale,
-            1. - expanded_progress as f32,
+            self.focus_ring_transition
+                .target
+                .map_or(1., |_| self.focus_ring_transition.value()) as f32
+                * (1. - expanded_progress as f32),
         );
 
         self.fullscreen_backdrop.resize(animated_tile_size);
@@ -1242,7 +1399,10 @@ impl<W: LayoutElement> Tile<W> {
         // being outside the monitor or obscured by a solid colored bar, but it is visible under
         // semitransparent bars in maximized state (which is a bit weird) and in the overview (also
         // a bit weird).
-        if focus_ring && expanded_progress < 1. && self.focus_ring.draws_above_window() {
+        if (focus_ring || self.focus_ring_transition.is_fading_out())
+            && expanded_progress < 1.
+            && self.focus_ring.draws_above_window()
+        {
             self.focus_ring
                 .render(ctx.renderer, location, &mut |elem| push(elem.into()));
         }
@@ -1507,7 +1667,10 @@ impl<W: LayoutElement> Tile<W> {
         // being outside the monitor or obscured by a solid colored bar, but it is visible under
         // semitransparent bars in maximized state (which is a bit weird) and in the overview (also
         // a bit weird).
-        if focus_ring && expanded_progress < 1. && !self.focus_ring.draws_above_window() {
+        if (focus_ring || self.focus_ring_transition.is_fading_out())
+            && expanded_progress < 1.
+            && !self.focus_ring.draws_above_window()
+        {
             self.focus_ring
                 .render(ctx.renderer, location, &mut |elem| push(elem.into()));
         }
@@ -1551,7 +1714,7 @@ impl<W: LayoutElement> Tile<W> {
         // Custom opening transforms have no stable scene-space light origin until they finish.
         if self.open_animation.is_none() && self.expanded_progress() < 1. {
             let location = location + self.bob_offset();
-            if focus_ring {
+            if focus_ring || self.focus_ring_transition.is_fading_out() {
                 if let Some(light) =
                     self.focus_ring
                         .render_light(ctx.renderer, location, tile_alpha)
@@ -1809,7 +1972,8 @@ impl<W: LayoutElement> Tile<W> {
         !self.clock.should_complete_instantly()
             && self.clock.rate() > 0.
             && self.expanded_progress() < 1.
-            && ((focus_ring && self.focus_ring.is_animating())
+            && (((focus_ring || self.focus_ring_transition.is_fading_out())
+                && self.focus_ring.is_animating())
                 || (self.visual_border_width().is_some() && self.border.is_animating()))
     }
 

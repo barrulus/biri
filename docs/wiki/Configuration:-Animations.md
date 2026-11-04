@@ -513,6 +513,25 @@ animations {
 }
 ```
 
+#### `focus-ring` (Biri)
+
+Fades focus-ring opacity when the selected window changes and interpolates shadows between their active and inactive colours. This animation is off by default. An empty `focus-ring {}` block enables a 300 ms ease-out-quad fade.
+
+```kdl
+animations {
+    focus-ring {
+        duration-ms 300
+        curve "ease-out-quad"
+    }
+}
+```
+
+Use `focus-ring { off; }` to restore instant changes. The global `animations { off; }` setting also disables the fades. Easing and spring parameters are supported.
+
+An interrupted fade continues from its current opacity. Selected rings on inactive monitors remain visible in their inactive style; their shadows fade to the inactive colour. Sticky windows, carousel panels, custom ring shaders, and light spill use the same fade. Existing ring colour alpha and fullscreen/maximize opacity still apply.
+
+The port is adapted from [Cillian Power's prototype](https://github.com/cillianpower/niri/tree/sync-focus-ring-anim), proposed in [discussion #47](https://github.com/barrulus/biri/discussions/47).
+
 ### Specifying `custom-shader` by Path
 
 <sup>Since: next release</sup>

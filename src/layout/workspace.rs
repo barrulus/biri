@@ -424,7 +424,7 @@ impl<W: LayoutElement> Workspace<W> {
         if layer.is_normal() {
             self.shadow.update_render_elements(
                 self.view_size,
-                true,
+                1.,
                 CornerRadius::default(),
                 self.scale.fractional_scale(),
                 1.,
@@ -2011,13 +2011,17 @@ impl<W: LayoutElement> Workspace<W> {
         }
     }
 
-    pub fn refresh(&mut self, is_active: bool, is_focused: bool) {
-        self.scrolling
-            .refresh(is_active && !self.floating_is_active.get(), is_focused);
+    pub fn refresh(&mut self, is_active: bool, is_focused: bool, focus_ring: bool) {
+        self.scrolling.refresh(
+            is_active && !self.floating_is_active.get(),
+            is_focused,
+            focus_ring && !self.floating_is_active.get(),
+        );
         self.floating.refresh(
             is_active && self.floating_is_active.get(),
             is_focused,
             false,
+            focus_ring && self.floating_is_active.get(),
         );
     }
 

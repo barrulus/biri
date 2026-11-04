@@ -1316,9 +1316,20 @@ impl<W: LayoutElement> FloatingSpace<W> {
         self.interactive_resize = None;
     }
 
-    pub fn refresh(&mut self, is_active: bool, is_focused: bool, is_sticky: bool) {
+    pub fn refresh(
+        &mut self,
+        is_active: bool,
+        is_focused: bool,
+        is_sticky: bool,
+        focus_ring: bool,
+    ) {
         let active = self.active_window_id.clone();
         for tile in &mut self.tiles {
+            let selected = focus_ring && Some(tile.window().id()) == active.as_ref();
+            tile.update_focus(
+                selected,
+                is_active && Some(tile.window().id()) == active.as_ref(),
+            );
             let win = tile.window_mut();
 
             win.set_active_in_column(true);

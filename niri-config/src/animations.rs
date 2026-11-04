@@ -25,6 +25,7 @@ pub struct Animations {
     pub overview_open_close: OverviewOpenCloseAnim,
     pub overview_zoom: OverviewZoomAnim,
     pub recent_windows_close: RecentWindowsCloseAnim,
+    pub focus_ring: FocusRingAnim,
 }
 
 impl Default for Animations {
@@ -44,6 +45,7 @@ impl Default for Animations {
             overview_open_close: Default::default(),
             overview_zoom: Default::default(),
             recent_windows_close: Default::default(),
+            focus_ring: Default::default(),
         }
     }
 }
@@ -80,6 +82,8 @@ pub struct AnimationsPart {
     pub overview_zoom: Option<OverviewZoomAnim>,
     #[knuffel(child)]
     pub recent_windows_close: Option<RecentWindowsCloseAnim>,
+    #[knuffel(child)]
+    pub focus_ring: Option<FocusRingAnim>,
 }
 
 impl MergeWith<AnimationsPart> for Animations {
@@ -107,6 +111,7 @@ impl MergeWith<AnimationsPart> for Animations {
             overview_open_close,
             overview_zoom,
             recent_windows_close,
+            focus_ring,
         );
     }
 }
@@ -661,6 +666,38 @@ where
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct FocusRingAnim(pub Animation);
+
+impl Default for FocusRingAnim {
+    fn default() -> Self {
+        // Off by default: the focus ring appears/disappears instantly unless the user opts in
+        // via `animations { focus-ring { ... } }`.
+        Self(Animation {
+            off: true,
+            kind: Kind::Easing(EasingParams {
+                duration_ms: 300,
+                curve: Curve::EaseOutQuad,
+            }),
+        })
+    }
+}
+
+impl<S> knuffel::Decode<S> for FocusRingAnim
+where
+    S: knuffel::traits::ErrorSpan,
+{
+    fn decode_node(
+        node: &knuffel::ast::SpannedNode<S>,
+        ctx: &mut knuffel::decode::Context<S>,
+    ) -> Result<Self, DecodeError<S>> {
+        let default = Self::default().0;
+        Ok(Self(Animation::decode_node(node, ctx, default, |_, _| {
+            Ok(false)
+        })?))
+    }
+}
+
 impl Animation {
     pub fn new_off() -> Self {
         Self {
@@ -970,5 +1007,36 @@ where
             stiffness,
             epsilon,
         })
+    }
+}
+
+#[cfg(test)]
+mod focus_ring_tests {
+    use super::*;
+
+    #[test]
+    fn focus_fade_is_opt_in_and_accepts_easing_and_off() {
+        assert!(crate::Config::default().animations.focus_ring.0.off);
+        let config = crate::Config::parse_mem(
+            r#"animations { focus-ring { duration-ms 300; curve "ease-out-quad"; }; }"#,
+        )
+        .unwrap();
+        assert_eq!(
+            config.animations.focus_ring.0,
+            Animation {
+                off: false,
+                kind: Kind::Easing(EasingParams {
+                    duration_ms: 300,
+                    curve: Curve::EaseOutQuad
+                })
+            }
+        );
+        let default = crate::Config::parse_mem("animations { focus-ring {}; }").unwrap();
+        assert_eq!(
+            default.animations.focus_ring.0,
+            config.animations.focus_ring.0
+        );
+        let config = crate::Config::parse_mem("animations { focus-ring { off; }; }").unwrap();
+        assert!(config.animations.focus_ring.0.off);
     }
 }
