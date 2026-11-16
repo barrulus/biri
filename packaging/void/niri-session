@@ -1,0 +1,6 @@
+#!/bin/sh
+# Void uses runit rather than a systemd user manager.
+if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ]; then
+    exec dbus-run-session -- niri --session "$@"
+fi
+exec niri --session "$@"

@@ -1,0 +1,24 @@
+#!/usr/bin/make -f
+%:
+	dh $@
+
+override_dh_auto_configure:
+
+override_dh_auto_build:
+	bash scripts/packaging/build.sh systemd
+
+override_dh_auto_test:
+	# Unit tests run in the existing CI/Nix workflows; this job tests installation.
+
+override_dh_auto_install:
+	bash scripts/packaging/install.sh debian/biri systemd
+
+override_dh_auto_clean:
+
+override_dh_strip:
+	# Keep line-table backtraces in the installed compositor.
+
+override_dh_dwz:
+
+override_dh_installsystemduser:
+	dh_installsystemduser --no-enable --no-start

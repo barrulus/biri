@@ -1,0 +1,27 @@
+# Exact-checkout template. CI supplies the verified source archive and checksum.
+pkgname=biri
+version=26.4.0
+revision=1
+build_style=gnu-make
+hostmakedepends="pkg-config clang19-devel python3"
+makedepends="eudev-libudev-devel libxkbcommon-devel libinput-devel libgbm-devel
+ libdisplay-info-devel pipewire-devel pango-devel libseat-devel wayland-devel"
+depends="wayland libglvnd dbus"
+short_desc="Scrollable-tiling Wayland compositor with Biri enhancements"
+maintainer="Biri maintainers <barrulus@users.noreply.github.com>"
+license="GPL-3.0-or-later"
+homepage="https://github.com/barrulus/biri"
+distfiles="https://invalid.invalid/local-checkout/biri-source.tar.gz"
+checksum=CHECKOUT_SHA256
+provides="niri-${version}_${revision}"
+conflicts="niri>=0"
+make_check=no
+nostrip=yes
+
+do_build() {
+    bash scripts/packaging/build.sh void
+}
+
+do_install() {
+    bash scripts/packaging/install.sh "$DESTDIR" void
+}

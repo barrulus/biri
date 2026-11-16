@@ -2,6 +2,7 @@
 /target
 /result
 /result-*
+__pycache__/
 
 # Editors / IDEs
 .idea

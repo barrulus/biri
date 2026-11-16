@@ -1,0 +1,32 @@
+# Exact-checkout recipe used by CI. The root PKGBUILD remains the VCS recipe.
+pkgname=biri
+pkgver=26.4.0
+pkgrel=1
+pkgdesc='Scrollable-tiling Wayland compositor with Biri enhancements'
+arch=('x86_64')
+url='https://github.com/barrulus/biri'
+license=('GPL-3.0-or-later')
+depends=('glibc' 'gcc-libs' 'cairo' 'glib2' 'libdisplay-info' 'libinput'
+         'libpipewire' 'libxkbcommon' 'libglvnd' 'mesa' 'pango' 'pixman'
+         'seatd' 'wayland' 'systemd-libs' 'dbus' 'procps-ng')
+makedepends=('clang' 'rust' 'python' 'pkgconf')
+optdepends=('xwayland-satellite: X11 applications'
+            'xdg-desktop-portal-gnome: screencasting'
+            'xdg-desktop-portal-gtk: desktop portals'
+            'gnome-keyring: secret portal'
+            'fuzzel: application launcher' 'alacritty: terminal' 'mako: notifications')
+provides=('niri')
+conflicts=('niri' 'niri-git' 'niri-bin' 'biri-git')
+options=('!debug' '!lto' '!strip')
+source=('biri-source.tar.gz')
+sha256sums=('CHECKOUT_SHA256')
+
+build() {
+    cd biri-checkout
+    bash scripts/packaging/build.sh systemd
+}
+
+package() {
+    cd biri-checkout
+    bash scripts/packaging/install.sh "$pkgdir" systemd
+}

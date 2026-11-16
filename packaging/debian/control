@@ -1,0 +1,24 @@
+Source: biri
+Section: x11
+Priority: optional
+Maintainer: Biri maintainers <barrulus@users.noreply.github.com>
+Build-Depends: debhelper-compat (= 13), rustup, python3, pkg-config, clang,
+ libudev-dev, libgbm-dev, libxkbcommon-dev, libegl-dev, libwayland-dev,
+ libinput-dev, libdbus-1-dev, libsystemd-dev, libseat-dev,
+ libpipewire-0.3-dev, libpango1.0-dev, libdisplay-info-dev
+Standards-Version: 4.7.2
+Rules-Requires-Root: no
+Homepage: https://github.com/barrulus/biri
+
+Package: biri
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, libwayland-server0, libegl1, dbus-user-session, procps
+Recommends: xdg-desktop-portal-gnome, xdg-desktop-portal-gtk, gnome-keyring, libgl1-mesa-dri
+Suggests: xwayland-satellite, fuzzel, alacritty, mako-notifier
+Provides: niri
+Conflicts: niri
+Replaces: niri
+Description: Scrollable-tiling Wayland compositor with Biri enhancements
+ Biri is a fork of niri with vertical scrolling, post-process shaders,
+ animated focus rings, a multi-monitor carousel overview and other additions.
+ The package retains the niri executable and configuration paths.

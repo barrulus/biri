@@ -26,6 +26,24 @@
 
 https://github.com/user-attachments/assets/a5e2b72b-a5a3-4aab-a83d-51973a75f6cc
 
+## Native package downloads
+
+[Latest development build](https://github.com/barrulus/biri/releases/tag/development)
+provides x86-64 packages built and installation-tested in CI:
+
+| Distribution | Download |
+| --- | --- |
+| Void Linux (glibc) | [XBPS package and repository index](https://github.com/barrulus/biri/releases/download/development/biri-void-glibc-x86_64.tar.gz) |
+| Debian 13 | [DEB](https://github.com/barrulus/biri/releases/download/development/biri-debian13-amd64.deb) |
+| Arch Linux | [Arch package](https://github.com/barrulus/biri/releases/download/development/biri-arch-x86_64.pkg.tar.zst) |
+| Fedora 44 | [Fedora RPM](https://github.com/barrulus/biri/releases/download/development/biri-fedora44-x86_64.rpm) |
+| openSUSE Tumbleweed | [Tumbleweed RPM](https://github.com/barrulus/biri/releases/download/development/biri-tumbleweed-x86_64.rpm) |
+
+These are unsigned development snapshots that replace upstream niri and retain
+its commands and configuration paths. See [installation and build details](./packaging/README.md),
+[checksums](https://github.com/barrulus/biri/releases/download/development/SHA256SUMS),
+and [source with vendored dependencies](https://github.com/barrulus/biri/releases/download/development/biri-source.tar.gz).
+
 ## Nix binary cache
 
 Biri's public cache is `https://biri.cachix.org`. CI builds and tests the default

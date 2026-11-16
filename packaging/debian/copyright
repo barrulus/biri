@@ -1,0 +1,18 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: biri
+Source: https://github.com/barrulus/biri
+
+Files: *
+Copyright: 2023-2026 Ivan Molodetskikh and niri contributors
+           2026 Biri contributors
+License: GPL-3+
+ This program is free software: you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation, either version 3 of the License, or
+ (at your option) any later version.
+ .
+ On Debian systems the complete text is in /usr/share/common-licenses/GPL-3.
+
+Comment: The CI source archive also includes the locked Rust dependencies under
+ vendor/. Each vendored crate retains its Cargo.toml license metadata and
+ upstream copyright/license files; see those files for their individual terms.

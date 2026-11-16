@@ -1,0 +1,5 @@
+biri (26.4.0-1) unstable; urgency=medium
+
+  * CI source snapshot; the builder supplies the exact revision and version.
+
+ -- Biri maintainers <barrulus@users.noreply.github.com>  Mon, 16 Nov 2026 00:00:00 +0000

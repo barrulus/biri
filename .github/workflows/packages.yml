@@ -1,0 +1,152 @@
+name: Packages
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: packages-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  source:
+    name: Package source and tooling checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Read pinned Rust version
+        id: rust
+        run: |
+          source scripts/packaging/environment
+          echo "version=$RUST_VERSION" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ steps.rust.outputs.version }}
+      - name: Check packaging tools
+        run: |
+          for script in scripts/packaging/*.sh; do bash -n "$script"; done
+          shellcheck -x -e SC1091 scripts/packaging/*.sh
+          python3 -m unittest discover -s scripts/packaging/tests -v
+      - name: Export exact checkout with locked Cargo dependencies
+        run: python3 scripts/packaging/export-source.py "$RUNNER_TEMP/package-source"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package-source
+          path: ${{ runner.temp }}/package-source/
+          retention-days: 14
+          compression-level: 0
+          if-no-files-found: error
+
+  native:
+    name: ${{ matrix.distro }} package and clean install
+    needs: source
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - format: void
+            distro: Void glibc
+          - format: deb
+            distro: Debian 13
+          - format: arch
+            distro: Arch Linux
+          - format: rpm
+            distro: Fedora 44
+          - format: tumbleweed
+            distro: openSUSE Tumbleweed
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: package-source
+          path: ${{ runner.temp }}/package-source
+      - name: Build and install the package in disposable containers
+        env:
+          PACKAGE_FORMAT: ${{ matrix.format }}
+          CI_JOBS: 2
+        run: |
+          set -o pipefail
+          bash scripts/packaging/native.sh "$PACKAGE_FORMAT" "$RUNNER_TEMP/package-source" \
+            "$RUNNER_TEMP/package" 2>&1 | tee "$RUNNER_TEMP/package.log"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: package-${{ matrix.format }}
+          path: ${{ runner.temp }}/package/
+          retention-days: 14
+          compression-level: 0
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: log-${{ matrix.format }}
+          path: ${{ runner.temp }}/package.log
+          retention-days: 14
+
+  downloads:
+    name: Prepare verified development downloads
+    needs: native
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: package-*
+          path: ${{ runner.temp }}/artifacts
+      - name: Verify identities, checksums and installation receipts
+        run: |
+          python3 scripts/packaging/prepare-downloads.py "$RUNNER_TEMP/artifacts" \
+            "$RUNNER_TEMP/artifacts/package-source" "$RUNNER_TEMP/downloads" \
+            --commit "$GITHUB_SHA" --repository "$GITHUB_REPOSITORY" --run-id "$GITHUB_RUN_ID"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: development-downloads
+          path: ${{ runner.temp }}/downloads/
+          retention-days: 14
+          compression-level: 0
+          if-no-files-found: error
+
+  publish:
+    name: Publish development prerelease
+    needs: downloads
+    if: >-
+      github.repository == 'barrulus/biri' && github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 130
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: development-downloads
+          path: ${{ runner.temp }}/downloads
+      - name: Require regular CI and Nix checks for this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: python3 scripts/packaging/wait-checks.py "$GITHUB_SHA"
+      - name: Update the rolling development prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: bash scripts/packaging/publish-downloads.sh "$RUNNER_TEMP/downloads" "$GITHUB_SHA"
