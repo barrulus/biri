@@ -49,4 +49,3 @@ def debian_source_files(directory, identity):
     return [descriptor, *components,
             only(directory, 'biri_*_source.changes'),
             only(directory, 'biri_*_source.buildinfo')]
-

@@ -28,6 +28,7 @@ Requires:       libwayland-server.so.0()(64bit)
 Requires:       libEGL.so.1()(64bit)
 Requires:       /usr/bin/dbus-update-activation-environment
 Requires:       /usr/bin/ps
+Requires:       /usr/bin/systemctl
 Recommends:     xdg-desktop-portal-gnome
 Recommends:     xdg-desktop-portal-gtk
 Recommends:     gnome-keyring

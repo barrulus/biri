@@ -12,7 +12,7 @@ Homepage: https://github.com/barrulus/biri
 
 Package: biri
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, libwayland-server0, libegl1, dbus-user-session, procps
+Depends: ${shlibs:Depends}, ${misc:Depends}, libwayland-server0, libegl1, dbus-user-session, systemd, procps
 Recommends: xdg-desktop-portal-gnome, xdg-desktop-portal-gtk, gnome-keyring, libgl1-mesa-dri
 Suggests: xwayland-satellite, fuzzel, alacritty, mako-notifier
 Provides: niri
