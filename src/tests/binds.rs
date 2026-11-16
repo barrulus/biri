@@ -2142,7 +2142,10 @@ fn mru_close_forwards_key_release_without_bind() {
 }
 
 #[test]
-fn mru_ignores_generic_modifier_binds() {
+fn egl_mru_ignores_generic_modifier_binds() {
+    // The normal-trigger snapshots below require the screenshot UI to open, which
+    // needs an EGL renderer. Keep this test with the other EGL-dependent tests so
+    // sandboxed Nix builds can exclude it with --skip=::egl.
     let c = "
     binds {
         Alt+Ctrl { screenshot; }
