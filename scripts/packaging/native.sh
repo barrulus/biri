@@ -22,9 +22,14 @@ output=$(realpath "$output")
 docker run --rm --platform linux/amd64 \
     -v "$root:/source:ro" -v "$input:/input:ro" -v "$output:/output" \
     -e CI_JOBS="${CI_JOBS:-2}" "$build_image" bash /source/scripts/packaging/native-build.sh "$format"
+install_command=(bash /source/scripts/packaging/native-install.sh "$format")
+if [[ $format == void ]]; then
+    # The minimal runtime image has only /bin/sh; install the test driver's shell.
+    install_command=(sh -c 'xbps-install -Syu xbps && xbps-install -yu && xbps-install -y bash && exec bash /source/scripts/packaging/native-install.sh void')
+fi
 docker run --rm --platform linux/amd64 \
     -v "$root:/source:ro" -v "$output:/output:ro" \
-    "$install_image" bash /source/scripts/packaging/native-install.sh "$format"
+    "$install_image" "${install_command[@]}"
 # This receipt is only written after the fresh-container check succeeds.
 python3 - "$input/source.json" "$output" "$format" <<'PY'
 import hashlib, json, pathlib, sys

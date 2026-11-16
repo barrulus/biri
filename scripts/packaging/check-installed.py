@@ -33,9 +33,14 @@ with tempfile.TemporaryDirectory(prefix='biri-smoke-') as temp:
                         outputs = json.loads(result.stdout)
                         assert outputs, 'Headless compositor did not create an output'
                         print(result.stdout)
-                        subprocess.run(['/usr/bin/niri', 'msg', 'action', 'quit', '--skip-confirmation'],
-                                       env=client_env, check=True, timeout=5)
-                        assert process.wait(timeout=10) == 0
+                        quit_result = subprocess.run(
+                            ['/usr/bin/niri', 'msg', 'action', 'quit', '--skip-confirmation'],
+                            env=client_env, capture_output=True, text=True, timeout=5)
+                        # Shutdown can close the IPC connection before its reply is written.
+                        # Only tolerate that specific EOF; still require a clean process exit.
+                        if quit_result.returncode:
+                            assert 'EOF while parsing a value' in quit_result.stderr, quit_result.stderr
+                        assert process.wait(timeout=10) == 0, 'Compositor did not exit cleanly'
                         break
                 time.sleep(0.2)
             else:

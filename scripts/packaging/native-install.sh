@@ -5,12 +5,14 @@ format=${1:?}
 case "$format" in
     deb)
         export DEBIAN_FRONTEND=noninteractive
+        # Minimal images omit documentation. Verify our complete installed payload.
+        sed -i '\@^path-exclude /usr/share/doc/@d' /etc/dpkg/dpkg.cfg.d/docker
         apt-get update
         apt-get install -y --no-install-recommends /output/packages/biri_*_amd64.deb
         dpkg --verify biri
         ;;
     rpm)
-        dnf install -y --setopt=install_weak_deps=False /output/packages/biri-[0-9]*.x86_64.rpm
+        dnf install -y --setopt=install_weak_deps=False --setopt=tsflags= /output/packages/biri-[0-9]*.x86_64.rpm
         rpm --verify biri
         ;;
     tumbleweed)
