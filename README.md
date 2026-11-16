@@ -26,6 +26,22 @@
 
 https://github.com/user-attachments/assets/a5e2b72b-a5a3-4aab-a83d-51973a75f6cc
 
+## Nix binary cache
+
+Biri's public cache is `https://biri.cachix.org`. CI builds and tests the default
+release package for `x86_64-linux` and `aarch64-linux`, then uploads builds from
+`main` and `v*` release tags. Pull requests use the cache without uploading.
+
+```sh
+nix run nixpkgs#cachix -- use biri
+nix build github:barrulus/biri/main
+./result/bin/niri --version
+```
+
+The flake also advertises the cache; accept its Nix configuration prompt when
+building it directly. For NixOS configuration and maintainer setup, see
+[NixOS/Nix installation](./docs/wiki/Getting-Started.md#nixosnix).
+
 ## Fork Features
 
 These exist only in biri, not in upstream niri. Unless noted, each is off by default and inert when unconfigured.

@@ -208,12 +208,36 @@ For example, you can replace systemd integration with dinit integration using `c
 
 ### NixOS/Nix
 
-We have a community-maintained flake which provides a devshell with required dependencies. Use `nix build` to build niri, and then run `./results/bin/niri`.
+We have a community-maintained flake which provides a devshell with required dependencies. Use `nix build` to build niri, and then run `./result/bin/niri`.
+
+Biri publishes tested release builds for `x86_64-linux` and `aarch64-linux` to a public Cachix cache. Enable it and build the fork with:
+
+```sh
+nix run nixpkgs#cachix -- use biri
+nix build github:barrulus/biri/main
+```
+
+The flake advertises the same cache through `nixConfig`; accept the configuration prompt when using it directly. NixOS users can configure it persistently:
+
+```nix
+{
+  nix.settings = {
+    extra-substituters = [ "https://biri.cachix.org" ];
+    extra-trusted-public-keys = [ "biri.cachix.org-1:/7mkl8JUUmW3uumnU8XfqsAyDrKq0+H/EkS3Mpb8T6k=" ];
+  };
+}
+```
+
+Apply the NixOS configuration before rebuilding with Biri. Flake inputs used inside a NixOS configuration do not automatically apply their own `nixConfig` settings.
+
+Cache hits require the same package, revision, locked dependencies, and build options as CI. The default package is cached; overriding its dependencies (including with an overlay or `nixpkgs.follows`) can require a local build. A newly pushed revision becomes available after its **Nix** workflow finishes.
+
+For maintainers: create a write token scoped to the `biri` cache in Cachix, and store it as the repository Actions secret `CACHIX_AUTH_TOKEN`. The token's label in Cachix can be anything. `.github/workflows/nix.yml` builds on pull requests, pushes to `main`, and `v*` tags. Only pushes in `barrulus/biri` and manual runs on `main` upload; pull requests never receive the token. To repopulate the cache, run the **Nix** workflow manually on `main`. Release builds run the package's tests, with the existing EGL exclusions required by the Nix sandbox.
 
 If you're not on NixOS, you may need [NixGL](https://github.com/nix-community/nixGL) to run the resulting binary:
 
 ```sh
-nix run --impure github:guibou/nixGL -- ./results/bin/niri
+nix run --impure github:guibou/nixGL -- ./result/bin/niri
 ```
 
 ### Manual Installation

@@ -1,0 +1,79 @@
+name: Nix
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nix-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    name: Nix (${{ matrix.system }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - system: x86_64-linux
+            runner: ubuntu-24.04
+          - system: aarch64-linux
+            runner: ubuntu-24.04-arm
+    env:
+      # PRs (including same-repository PRs) never receive the cache write token.
+      CACHIX_PUSH: ${{ github.repository == 'barrulus/biri' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')) }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          show-progress: false
+
+      - name: Check cache publishing credentials
+        if: env.CACHIX_PUSH == 'true'
+        env:
+          CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
+        run: |
+          if [ -z "$CACHIX_AUTH_TOKEN" ]; then
+            echo "::error::Set the CACHIX_AUTH_TOKEN repository secret to a write token for the biri cache."
+            exit 1
+          fi
+
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@v1.3.1
+        with:
+          dotnet: false
+          large-packages: false
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@3dc140bfc76c49fbd4dd958429132e3746bcb086 # v31.11.5
+        with:
+          extra_nix_config: |
+            accept-flake-config = true
+
+      - name: Configure Cachix
+        uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
+        with:
+          name: biri
+          authToken: ${{ env.CACHIX_PUSH == 'true' && secrets.CACHIX_AUTH_TOKEN || '' }}
+          skipPush: ${{ env.CACHIX_PUSH != 'true' }}
+          # Publish the tested release and its closure, rather than debug builds.
+          useDaemon: false
+          pathsToPush: result
+
+      - name: Check flake evaluation
+        run: nix flake check --no-build --no-update-lock-file
+
+      - name: Build and test release package
+        run: nix build --print-build-logs --no-update-lock-file .#packages.${{ matrix.system }}.default
+
+      - name: Check installed binary
+        run: ./result/bin/niri --version

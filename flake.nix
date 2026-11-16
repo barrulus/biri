@@ -2,6 +2,11 @@
 {
   description = "Niri: A scrollable-tiling Wayland compositor.";
 
+  nixConfig = {
+    extra-substituters = [ "https://biri.cachix.org" ];
+    extra-trusted-public-keys = [ "biri.cachix.org-1:/7mkl8JUUmW3uumnU8XfqsAyDrKq0+H/EkS3Mpb8T6k=" ];
+  };
+
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
 
   outputs =
