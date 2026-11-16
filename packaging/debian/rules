@@ -21,4 +21,4 @@ override_dh_strip:
 override_dh_dwz:
 
 override_dh_installsystemduser:
-	dh_installsystemduser --no-enable --no-start
+	dh_installsystemduser --no-enable

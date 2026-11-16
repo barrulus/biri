@@ -92,7 +92,7 @@ accounts are needed for these local packages.
 
 ## Reproducing a build
 
-Host requirements: Docker, Git, Python 3.11+, GNU tar, and Cargo matching the pinned
+Host requirements: Docker, Git, Python 3.12+, GNU tar, and Cargo matching the pinned
 Rust version in [environment](../scripts/packaging/environment). Commit the intended
 source first. Untracked files are excluded by `git archive`; tracked edits are
 rejected so package metadata cannot misidentify the checkout.
