@@ -14,6 +14,9 @@ case "$format" in
         rpm --verify biri
         ;;
     tumbleweed)
+        # The container's /usr/etc policy omits %doc payloads; validate the full package.
+        mkdir -p /etc/zypp/zypp.conf.d
+        printf 'rpm.install.excludedocs = no\n' > /etc/zypp/zypp.conf.d/excludedocs.conf
         zypper --non-interactive refresh
         zypper --non-interactive dup --no-recommends
         zypper --non-interactive install --no-recommends --allow-unsigned-rpm /output/packages/biri-[0-9]*.x86_64.rpm
@@ -60,5 +63,9 @@ case "$format" in
     arch) pacman -S --noconfirm --needed python desktop-file-utils mesa dbus ;;
     void) xbps-install -y python3 desktop-file-utils mesa-dri dbus ;;
 esac
-desktop-file-validate /usr/share/wayland-sessions/niri.desktop
+# DesktopNames is a display-manager session extension, not an application key.
+# Verify it explicitly, then validate the remaining standard desktop-entry fields.
+grep -Fxq 'DesktopNames=niri' /usr/share/wayland-sessions/niri.desktop
+sed '/^DesktopNames=/d' /usr/share/wayland-sessions/niri.desktop > /tmp/biri-session.desktop
+desktop-file-validate /tmp/biri-session.desktop
 python3 /source/scripts/packaging/check-installed.py /output/source.json

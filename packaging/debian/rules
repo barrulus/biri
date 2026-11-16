@@ -15,10 +15,18 @@ override_dh_auto_install:
 
 override_dh_auto_clean:
 
+override_dh_clean:
+	# Cargo checksums include upstream *.orig files, which dh_clean normally removes.
+	dh_clean --exclude=vendor/
+
 override_dh_strip:
 	# Keep line-table backtraces in the installed compositor.
 
 override_dh_dwz:
+
+override_dh_compress:
+	# Keep the example configuration and shader collection directly usable.
+	dh_compress --exclude=usr/share/doc/biri/
 
 override_dh_installsystemduser:
 	dh_installsystemduser --no-enable
