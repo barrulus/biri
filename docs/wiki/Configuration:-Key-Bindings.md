@@ -753,3 +753,26 @@ binds {
     Mod+WheelScrollDown cooldown-ms=150 { overview-zoom-out; }
 }
 ```
+
+#### `move-column-to-new-workspace-below`, `move-column-to-new-workspace-above`, `move-window-to-new-workspace-below`, `move-window-to-new-workspace-above`
+
+<sup>Since: next release</sup>
+
+Move the focused column or window to a new workspace, inserted right below or above the focused workspace.
+
+You can pass a workspace index or name to insert the new workspace next to that workspace instead.
+Like with `move-column-to-workspace`, the `focus=false` property keeps the focus on the current workspace.
+
+```kdl
+binds {
+    Mod+Ctrl+Shift+Page_Down { move-column-to-new-workspace-below; }
+    Mod+Ctrl+Shift+Page_Up   { move-column-to-new-workspace-above; }
+
+    // Put the window into a new workspace right below the "chat" workspace.
+    Mod+Ctrl+C { move-window-to-new-workspace-below "chat" focus=false; }
+}
+```
+
+In biri, newly inserted workspaces stay in the visible region, before hidden workspaces.
+A reference past that region (including a hidden workspace) uses the last visible workspace.
+These actions do nothing when a sticky window is focused.

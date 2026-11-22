@@ -12,7 +12,16 @@ authors = ["Ivan Molodetskikh <yalterz@gmail.com>"]
 license = "GPL-3.0-or-later"
 edition = "2021"
 repository = "https://github.com/niri-wm/niri"
-rust-version = "1.87"
+rust-version = "1.88"
+
+[workspace.lints.clippy]
+new_without_default = "allow"
+collapsible_match = "allow"
+needless_bool = "allow"
+
+# Silence, Clippy
+# A Smithay user is talking
+too_many_arguments = "allow"
 
 [workspace.dependencies]
 anyhow = "1.0.104"
@@ -28,13 +37,13 @@ tracy-client = { version = "0.18.5", default-features = false }
 [workspace.dependencies.smithay]
 # version = "0.4.1"
 git = "https://github.com/Smithay/smithay.git"
-rev = "65aa86fa5236e41775c313408102a5d5c2d1e2ca"
+rev = "a38bb709a0400759b6a4fab6129e0f1dd72808c3"
 default-features = false
 
 [workspace.dependencies.smithay-drm-extras]
 # version = "0.1.0"
 git = "https://github.com/Smithay/smithay.git"
-rev = "65aa86fa5236e41775c313408102a5d5c2d1e2ca"
+rev = "a38bb709a0400759b6a4fab6129e0f1dd72808c3"
 # path = "../smithay/smithay-drm-extras"
 
 [package]
@@ -146,9 +155,8 @@ profile-with-tracy-allocations = ["profile-with-tracy"]
 # Enables dinit integration (global environment).
 dinit = []
 
-[lints.clippy]
-new_without_default = "allow"
-collapsible_match = "allow"
+[lints]
+workspace = true
 
 [profile.release]
 debug = "line-tables-only"

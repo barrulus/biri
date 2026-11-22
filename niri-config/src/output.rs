@@ -71,6 +71,8 @@ pub struct Output {
     #[knuffel(child)]
     pub variable_refresh_rate: Option<Vrr>,
     #[knuffel(child)]
+    pub drm_lease: bool,
+    #[knuffel(child)]
     pub focus_at_startup: bool,
     #[knuffel(child)]
     pub isolated: bool,
@@ -106,6 +108,7 @@ impl Default for Output {
         Self {
             off: false,
             create_virtual: false,
+            drm_lease: false,
             focus_at_startup: false,
             isolated: false,
             name: String::new(),

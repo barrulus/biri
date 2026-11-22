@@ -1799,6 +1799,7 @@ mod tests {
                 ),
                 focus_follows_mouse: Some(
                     FocusFollowsMouse {
+                        outputs_only: None,
                         max_scroll_amount: None,
                     },
                 ),
@@ -1851,6 +1852,7 @@ mod tests {
                                 on_demand: true,
                             },
                         ),
+                        drm_lease: false,
                         focus_at_startup: true,
                         isolated: true,
                         background_color: Some(
@@ -1896,6 +1898,7 @@ mod tests {
                         ),
                         modeline: None,
                         variable_refresh_rate: None,
+                        drm_lease: false,
                         focus_at_startup: false,
                         isolated: false,
                         background_color: None,
@@ -1929,6 +1932,7 @@ mod tests {
                             },
                         ),
                         variable_refresh_rate: None,
+                        drm_lease: false,
                         focus_at_startup: false,
                         isolated: false,
                         background_color: None,
@@ -2510,9 +2514,9 @@ mod tests {
                             ),
                         ),
                     ),
-                    open_on_output: Some(
+                    open_on_output: [
                         "eDP-1",
-                    ),
+                    ],
                     open_on_workspace: None,
                     open_maximized: Some(
                         true,
@@ -2666,7 +2670,10 @@ mod tests {
                     excludes: [],
                     opacity: None,
                     block_out_from: Some(
-                        Screencast,
+                        BlockOutFrom {
+                            target: Screencast,
+                            kind: Fill,
+                        },
                     ),
                     shadow: ShadowRule {
                         off: false,
@@ -2680,6 +2687,7 @@ mod tests {
                     },
                     geometry_corner_radius: None,
                     place_within_backdrop: None,
+                    focus_on_type_in_overview: None,
                     baba_is_float: None,
                     background_effect: BackgroundEffectRule {
                         xray: None,

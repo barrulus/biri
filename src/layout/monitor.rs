@@ -604,6 +604,21 @@ impl<W: LayoutElement> Monitor<W> {
         }
     }
 
+    /// Returns the index of an empty workspace at `idx` that a window can be put into.
+    ///
+    /// Adds a new workspace at `idx`, unless `idx` points at the top (with
+    /// `empty_workspace_above_first`) or the bottom empty workspace, which are reused instead.
+    pub fn add_or_reuse_empty_workspace_at(&mut self, idx: usize) -> usize {
+        if self.options.layout.empty_workspace_above_first && idx == 0 {
+            0
+        } else if self.visible_workspace_count() - 1 <= idx {
+            self.visible_workspace_count() - 1
+        } else {
+            self.add_workspace_at(idx);
+            idx
+        }
+    }
+
     pub fn add_workspace_top(&mut self) {
         self.add_workspace_at(0);
     }
@@ -832,7 +847,6 @@ impl<W: LayoutElement> Monitor<W> {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub fn add_tile(
         &mut self,
         tile: Tile<W>,
@@ -1315,13 +1329,13 @@ impl<W: LayoutElement> Monitor<W> {
     }
 
     pub fn move_down_or_to_workspace_down(&mut self) {
-        if !self.active_workspace().move_down() {
+        if !self.active_workspace().move_down(true) {
             self.move_to_workspace_down(ActivateWindow::Smart);
         }
     }
 
     pub fn move_up_or_to_workspace_up(&mut self) {
-        if !self.active_workspace().move_up() {
+        if !self.active_workspace().move_up(true) {
             self.move_to_workspace_up(ActivateWindow::Smart);
         }
     }

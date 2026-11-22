@@ -724,3 +724,49 @@ fn sticky_window_is_hit_above_fullscreen() {
         .expect("sticky window should be hit above fullscreen");
     assert_eq!(*win.id(), 2);
 }
+
+#[test]
+fn move_without_focus_of_fullscreen_window() {
+    let ops = [
+        Op::AddOutput(1),
+        Op::AddWindow {
+            params: TestWindowParams::new(1),
+        },
+        Op::AddWindow {
+            params: TestWindowParams::new(2),
+        },
+        Op::FullscreenWindow(2),
+        Op::Communicate(2),
+        Op::CompleteAnimations,
+        Op::MoveColumnLeft { focus: false },
+    ];
+
+    check_ops(ops);
+}
+
+#[test]
+fn swap_without_focus_of_fullscreen_window() {
+    let ops = [
+        Op::AddOutput(1),
+        Op::AddWindow {
+            params: TestWindowParams::new(1),
+        },
+        Op::AddWindow {
+            params: TestWindowParams::new(3),
+        },
+        Op::ConsumeOrExpelWindowLeft { id: None },
+        Op::ToggleColumnTabbedDisplay,
+        Op::AddWindow {
+            params: TestWindowParams::new(2),
+        },
+        Op::FullscreenWindow(2),
+        Op::Communicate(2),
+        Op::CompleteAnimations,
+        Op::SwapWindowInDirection {
+            direction: ScrollDirection::Left,
+            focus: false,
+        },
+    ];
+
+    check_ops(ops);
+}

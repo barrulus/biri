@@ -8,7 +8,7 @@ Source0:        biri-source.tar.gz
 BuildRequires:  gcc
 BuildRequires:  clang
 BuildRequires:  cargo
-BuildRequires:  rust >= 1.87
+BuildRequires:  rust >= 1.88
 BuildRequires:  python3
 BuildRequires:  pkgconfig
 BuildRequires:  pkgconfig(libudev)
