@@ -186,7 +186,6 @@ impl ShaderProgram {
 }
 
 impl ShaderRenderElement {
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         program: ProgramType,
         size: Size<f64, Logical>,

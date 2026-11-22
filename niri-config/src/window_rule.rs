@@ -47,8 +47,8 @@ pub struct WindowRule {
     pub default_column_width: Option<DefaultPresetSize>,
     #[knuffel(child)]
     pub default_window_height: Option<DefaultPresetSize>,
-    #[knuffel(child, unwrap(argument))]
-    pub open_on_output: Option<String>,
+    #[knuffel(children(name = "open-on-output"), unwrap(argument))]
+    pub open_on_output: Vec<String>,
     #[knuffel(child, unwrap(argument))]
     pub open_on_workspace: Option<String>,
     #[knuffel(child, unwrap(argument))]
@@ -96,7 +96,7 @@ pub struct WindowRule {
     pub baba_is_float: Option<bool>,
     #[knuffel(child, unwrap(argument))]
     pub float_above_fullscreen: Option<bool>,
-    #[knuffel(child, unwrap(argument))]
+    #[knuffel(child)]
     pub block_out_from: Option<BlockOutFrom>,
     #[knuffel(child, unwrap(argument))]
     pub variable_refresh_rate: Option<VrrRule>,

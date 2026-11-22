@@ -202,7 +202,6 @@ pub trait LayoutElement {
     }
 
     /// Renders the background effect behind the main surface of the element.
-    #[allow(clippy::too_many_arguments)]
     fn render_background_effect(
         &self,
         _ctx: RenderCtx<GlesRenderer>,
@@ -1176,7 +1175,6 @@ impl<W: LayoutElement> Layout<W> {
     /// Adds a new window to the layout.
     ///
     /// Returns an output that the window was added to, if there were any outputs.
-    #[allow(clippy::too_many_arguments)]
     pub fn add_window(
         &mut self,
         window: W,
@@ -2621,37 +2619,37 @@ impl<W: LayoutElement> Layout<W> {
         self.monitors().map(|mon| &mon.output)
     }
 
-    pub fn move_left(&mut self) {
+    pub fn move_left(&mut self, focus: bool) {
         let Some(workspace) = self.active_workspace_mut() else {
             return;
         };
-        workspace.move_left();
+        workspace.move_left(focus);
     }
 
-    pub fn move_right(&mut self) {
+    pub fn move_right(&mut self, focus: bool) {
         let Some(workspace) = self.active_workspace_mut() else {
             return;
         };
-        workspace.move_right();
+        workspace.move_right(focus);
     }
 
-    pub fn move_column_to_first(&mut self) {
+    pub fn move_column_to_first(&mut self, focus: bool) {
         let Some(workspace) = self.active_workspace_mut() else {
             return;
         };
-        workspace.move_column_to_first();
+        workspace.move_column_to_first(focus);
     }
 
-    pub fn move_column_to_last(&mut self) {
+    pub fn move_column_to_last(&mut self, focus: bool) {
         let Some(workspace) = self.active_workspace_mut() else {
             return;
         };
-        workspace.move_column_to_last();
+        workspace.move_column_to_last(focus);
     }
 
     pub fn move_column_left_or_to_output(&mut self, output: &Output) -> bool {
         if let Some(workspace) = self.active_workspace_mut() {
-            if workspace.move_left() {
+            if workspace.move_left(true) {
                 return false;
             }
         }
@@ -2662,7 +2660,7 @@ impl<W: LayoutElement> Layout<W> {
 
     pub fn move_column_right_or_to_output(&mut self, output: &Output) -> bool {
         if let Some(workspace) = self.active_workspace_mut() {
-            if workspace.move_right() {
+            if workspace.move_right(true) {
                 return false;
             }
         }
@@ -2671,25 +2669,25 @@ impl<W: LayoutElement> Layout<W> {
         true
     }
 
-    pub fn move_column_to_index(&mut self, index: usize) {
+    pub fn move_column_to_index(&mut self, index: usize, focus: bool) {
         let Some(workspace) = self.active_workspace_mut() else {
             return;
         };
-        workspace.move_column_to_index(index);
+        workspace.move_column_to_index(index, focus);
     }
 
-    pub fn move_down(&mut self) {
+    pub fn move_down(&mut self, focus: bool) {
         let Some(workspace) = self.active_workspace_mut() else {
             return;
         };
-        workspace.move_down();
+        workspace.move_down(focus);
     }
 
-    pub fn move_up(&mut self) {
+    pub fn move_up(&mut self, focus: bool) {
         let Some(workspace) = self.active_workspace_mut() else {
             return;
         };
-        workspace.move_up();
+        workspace.move_up(focus);
     }
 
     pub fn move_down_or_to_workspace_down(&mut self) {
@@ -3034,6 +3032,109 @@ impl<W: LayoutElement> Layout<W> {
         monitor.move_to_workspace(window, idx, activate, allow_hidden);
     }
 
+    /// Moves the focused window to a new workspace right below or above the reference workspace.
+    ///
+    /// Without a reference, uses the active workspace. A reference without an output means the
+    /// active output.
+    pub fn move_to_new_workspace(
+        &mut self,
+        reference: Option<(Option<Output>, usize)>,
+        below: bool,
+        focus: bool,
+    ) {
+        let Some((output, idx)) = self.add_workspace_for_move(reference, below) else {
+            return;
+        };
+
+        let activate = if focus {
+            ActivateWindow::Smart
+        } else {
+            ActivateWindow::No
+        };
+
+        if let Some(output) = output {
+            self.move_to_output(None, &output, Some(idx), activate);
+        } else {
+            // This animates the window and the view the same way as move-window-to-workspace,
+            // since the new workspace is a regular workspace by now.
+            let monitor = self.active_monitor().unwrap();
+            monitor.move_to_workspace(None, idx, activate, false);
+        }
+    }
+
+    /// Moves the focused column to a new workspace right below or above the reference workspace.
+    ///
+    /// Without a reference, uses the active workspace. A reference without an output means the
+    /// active output.
+    pub fn move_column_to_new_workspace(
+        &mut self,
+        reference: Option<(Option<Output>, usize)>,
+        below: bool,
+        focus: bool,
+    ) {
+        let Some((output, idx)) = self.add_workspace_for_move(reference, below) else {
+            return;
+        };
+
+        if let Some(output) = output {
+            self.move_column_to_output(&output, Some(idx), focus);
+        } else {
+            let monitor = self.active_monitor().unwrap();
+            monitor.move_column_to_workspace(idx, focus, false);
+        }
+    }
+
+    /// Adds a workspace right below or above the reference workspace to move the focused window
+    /// or column to.
+    ///
+    /// Returns the workspace's output (`None` for the active output) and index, or `None` if
+    /// there's nothing to move.
+    fn add_workspace_for_move(
+        &mut self,
+        reference: Option<(Option<Output>, usize)>,
+        below: bool,
+    ) -> Option<(Option<Output>, usize)> {
+        if let Some(InteractiveMoveState::Moving(_)) = &self.interactive_move {
+            return None;
+        }
+
+        let MonitorSet::Normal {
+            monitors,
+            active_monitor_idx,
+            ..
+        } = &mut self.monitor_set
+        else {
+            return None;
+        };
+
+        // Sticky windows are not part of the active workspace and cannot be moved this way.
+        if monitors[*active_monitor_idx].sticky_is_active() {
+            return None;
+        }
+        // Check this before adding a workspace so that we don't leave a stray empty one.
+        monitors[*active_monitor_idx].active_window()?;
+
+        let (mon_idx, ref_idx) = match reference {
+            Some((Some(output), ref_idx)) => {
+                let mon_idx = monitors.iter().position(|mon| mon.output == output)?;
+                (mon_idx, ref_idx)
+            }
+            Some((None, ref_idx)) => (*active_monitor_idx, ref_idx),
+            None => {
+                let mon_idx = *active_monitor_idx;
+                (mon_idx, monitors[mon_idx].active_workspace_idx)
+            }
+        };
+
+        let mon = &mut monitors[mon_idx];
+        let ref_idx = ref_idx.min(mon.visible_workspace_count() - 1);
+        let idx = if below { ref_idx + 1 } else { ref_idx };
+        let new_idx = mon.add_or_reuse_empty_workspace_at(idx);
+
+        let output = (mon_idx != *active_monitor_idx).then(|| mon.output.clone());
+        Some((output, new_idx))
+    }
+
     pub fn move_column_to_workspace_up(&mut self, activate: bool) {
         let Some(monitor) = self.active_monitor() else {
             return;
@@ -3107,11 +3208,11 @@ impl<W: LayoutElement> Layout<W> {
         workspace.expel_from_column();
     }
 
-    pub fn swap_window_in_direction(&mut self, direction: ScrollDirection) {
+    pub fn swap_window_in_direction(&mut self, direction: ScrollDirection, focus: bool) {
         let Some(workspace) = self.active_workspace_mut() else {
             return;
         };
-        workspace.swap_window_in_direction(direction);
+        workspace.swap_window_in_direction(direction, focus);
     }
 
     pub fn toggle_column_tabbed_display(&mut self) {
@@ -4991,7 +5092,12 @@ impl<W: LayoutElement> Layout<W> {
             let ws = current.active_workspace();
 
             if ws.floating_is_active() {
-                self.move_to_output(None, output, None, ActivateWindow::Smart);
+                let activate = if activate {
+                    ActivateWindow::Smart
+                } else {
+                    ActivateWindow::No
+                };
+                self.move_to_output(None, output, target_ws_idx, activate);
                 return;
             }
 
@@ -5989,18 +6095,7 @@ impl<W: LayoutElement> Layout<W> {
 
                 let ws_idx = match insert_ws {
                     InsertWorkspace::Existing(ws_id) => mon.idx_of_ws(ws_id).unwrap(),
-                    InsertWorkspace::NewAt(ws_idx) => {
-                        if mon.options.layout.empty_workspace_above_first && ws_idx == 0 {
-                            // Reuse the top empty workspace.
-                            0
-                        } else if mon.workspaces.len() - 1 <= ws_idx {
-                            // Reuse the bottom empty workspace.
-                            mon.workspaces.len() - 1
-                        } else {
-                            mon.add_workspace_at(ws_idx);
-                            ws_idx
-                        }
-                    }
+                    InsertWorkspace::NewAt(ws_idx) => mon.add_or_reuse_empty_workspace_at(ws_idx),
                 };
 
                 match position {

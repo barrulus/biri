@@ -804,90 +804,6 @@ impl<W: LayoutElement> ScrollingSpace<W> {
         }
     }
 
-    fn push_snap_if_between_bounds(
-        snaps: &mut Vec<ViewSnap>,
-        view_main_pos: f64,
-        col_idx: usize,
-        startmost_snap: f64,
-        endmost_snap: f64,
-    ) {
-        if startmost_snap < view_main_pos && view_main_pos < endmost_snap {
-            snaps.push(ViewSnap {
-                view_main_pos,
-                col_idx,
-            });
-        }
-    }
-
-    fn aligned_column_snap_range(
-        &self,
-        column_main: f64,
-        col: &Column<W>,
-        prev_column_span: Option<f64>,
-        next_column_span: Option<f64>,
-    ) -> (f64, f64) {
-        let center_on_overflow = matches!(
-            self.options.layout.center_focused_column,
-            CenterFocusedColumn::OnOverflow
-        );
-
-        let view_main_span = self.view_size.w;
-        let gaps = self.options.layout.gaps;
-        let column_span = col.width();
-        let mode = col.sizing_mode();
-
-        let work_area = if mode.is_maximized() {
-            self.parent_area
-        } else {
-            self.working_area
-        };
-
-        let start_strut = work_area.loc.x;
-        let end_strut = self.view_size.w - work_area.size.w - work_area.loc.x;
-
-        // Normal columns align with the working area, but fullscreen columns align with the whole
-        // view.
-        if mode.is_fullscreen() {
-            let start = column_main;
-            let end = start + column_span;
-            return (start, end);
-        }
-
-        let padding = if mode.is_maximized() {
-            0.
-        } else {
-            ((work_area.size.w - column_span) / 2.).clamp(0., gaps)
-        };
-
-        let centered_view_main = if work_area.size.w <= column_span {
-            column_main - start_strut
-        } else {
-            column_main - (work_area.size.w - column_span) / 2. - start_strut
-        };
-        let is_overflowing = |adjacent_column_span: Option<f64>| {
-            center_on_overflow
-                && adjacent_column_span
-                    .filter(|adjacent_column_span| {
-                        // NOTE: This logic won't work entirely correctly with small fixed-size
-                        // maximized windows (they have a different area and padding).
-                        adjacent_column_span + 3.0 * gaps + column_span > work_area.size.w
-                    })
-                    .is_some()
-        };
-
-        let start = if is_overflowing(next_column_span) {
-            centered_view_main
-        } else {
-            column_main - padding - start_strut
-        };
-        let end = if is_overflowing(prev_column_span) {
-            centered_view_main + view_main_span
-        } else {
-            column_main + column_span + padding + end_strut
-        };
-        (start, end)
-    }
-
     fn collect_centered_view_snaps(&self) -> Vec<ViewSnap> {
         let mut snaps = Vec::with_capacity(self.columns.len());
         let mut column_main = 0.;
@@ -921,73 +837,67 @@ impl<W: LayoutElement> ScrollingSpace<W> {
     }
 
     fn collect_aligned_view_snaps(&self) -> Vec<ViewSnap> {
+        let center_on_overflow = matches!(
+            self.options.layout.center_focused_column,
+            CenterFocusedColumn::OnOverflow
+        );
         let view_main_span = self.view_size.w;
         let gaps = self.options.layout.gaps;
-        let last_col_idx = self.columns.len() - 1;
-
-        let startmost_snap = self
-            .aligned_column_snap_range(
-                0.,
-                &self.columns[0],
-                None,
-                self.columns.get(1).map(|c| c.width()),
-            )
-            .0;
-        let last_column_main = self
-            .columns
-            .iter()
-            .take(last_col_idx)
-            .fold(0., |column_main, col| column_main + col.width() + gaps);
-        let endmost_snap =
-            self.aligned_column_snap_range(
-                last_column_main,
-                &self.columns[last_col_idx],
-                last_col_idx
-                    .checked_sub(1)
-                    .and_then(|idx| self.columns.get(idx).map(|c| c.width())),
-                None,
-            )
-            .1 - view_main_span;
-
-        let mut snaps = vec![
-            ViewSnap {
-                view_main_pos: startmost_snap,
-                col_idx: 0,
-            },
-            ViewSnap {
-                view_main_pos: endmost_snap,
-                col_idx: last_col_idx,
-            },
-        ];
-
+        let mut snaps = Vec::new();
         let mut column_main = 0.;
         for (col_idx, col) in self.columns.iter().enumerate() {
-            let (start, end) = self.aligned_column_snap_range(
-                column_main,
-                col,
-                col_idx
+            let column_span = col.width();
+            let mode = col.sizing_mode();
+            let area = if mode.is_maximized() {
+                self.parent_area
+            } else {
+                self.working_area
+            };
+            let start_strut = area.loc.x;
+            let end_strut = view_main_span - area.size.w - area.loc.x;
+            if mode.is_fullscreen() {
+                snaps.push(ViewSnap {
+                    view_main_pos: column_main,
+                    col_idx,
+                });
+            } else {
+                let padding = if mode.is_maximized() {
+                    0.
+                } else {
+                    ((area.size.w - column_span) / 2.).clamp(0., gaps)
+                };
+                let center = if area.size.w <= column_span {
+                    column_main - start_strut
+                } else {
+                    column_main - (area.size.w - column_span) / 2. - start_strut
+                };
+                snaps.push(ViewSnap {
+                    view_main_pos: center,
+                    col_idx,
+                });
+                let is_overflowing = |adjacent: Option<f64>| {
+                    center_on_overflow
+                        && adjacent.is_some_and(|span| span + 3. * gaps + column_span > area.size.w)
+                };
+                if !is_overflowing(self.columns.get(col_idx + 1).map(|c| c.width())) {
+                    snaps.push(ViewSnap {
+                        view_main_pos: column_main - padding - start_strut,
+                        col_idx,
+                    });
+                }
+                let previous = col_idx
                     .checked_sub(1)
-                    .and_then(|idx| self.columns.get(idx).map(|c| c.width())),
-                self.columns.get(col_idx + 1).map(|c| c.width()),
-            );
-            Self::push_snap_if_between_bounds(
-                &mut snaps,
-                start,
-                col_idx,
-                startmost_snap,
-                endmost_snap,
-            );
-            Self::push_snap_if_between_bounds(
-                &mut snaps,
-                end - view_main_span,
-                col_idx,
-                startmost_snap,
-                endmost_snap,
-            );
-
-            column_main += col.width() + gaps;
+                    .and_then(|idx| self.columns.get(idx).map(|c| c.width()));
+                if !is_overflowing(previous) {
+                    snaps.push(ViewSnap {
+                        view_main_pos: column_main + column_span + padding + end_strut
+                            - view_main_span,
+                        col_idx,
+                    });
+                }
+            }
+            column_main += column_span + gaps;
         }
-
         snaps
     }
 
@@ -2077,15 +1987,15 @@ impl<W: LayoutElement> ScrollingSpace<W> {
         self.columns[self.active_column_idx].focus_bottom()
     }
 
-    pub fn move_column_to_index(&mut self, index: usize) {
+    pub fn move_column_to_index(&mut self, index: usize, focus: bool) {
         if self.columns.is_empty() {
             return;
         }
 
-        self.move_column_to(index.saturating_sub(1).min(self.columns.len() - 1));
+        self.move_column_to(index.saturating_sub(1).min(self.columns.len() - 1), focus);
     }
 
-    fn move_column_to(&mut self, new_idx: usize) {
+    fn move_column_to(&mut self, new_idx: usize, focus: bool) {
         if self.active_column_idx == new_idx {
             return;
         }
@@ -2119,58 +2029,69 @@ impl<W: LayoutElement> ScrollingSpace<W> {
             }
         }
 
-        self.activate_column_with_anim_config(
-            new_idx,
-            self.options.animations.window_movement.anim,
-        );
+        let config = self.options.animations.window_movement.anim;
+        if focus {
+            self.activate_column_with_anim_config(new_idx, config);
+        } else {
+            // Make sure the newly active window stays in view.
+            self.animate_view_offset_to_column_with_config(
+                None,
+                self.active_column_idx,
+                None,
+                config,
+            );
+            // Clear flags since the active window changed.
+            self.activate_prev_column_on_removal = None;
+            self.view_offset_to_restore = None;
+        }
     }
 
-    pub fn move_left(&mut self) -> bool {
+    pub fn move_left(&mut self, focus: bool) -> bool {
         if self.active_column_idx == 0 {
             return false;
         }
 
-        self.move_column_to(self.active_column_idx - 1);
+        self.move_column_to(self.active_column_idx - 1, focus);
         true
     }
 
-    pub fn move_right(&mut self) -> bool {
+    pub fn move_right(&mut self, focus: bool) -> bool {
         let new_idx = self.active_column_idx + 1;
         if new_idx >= self.columns.len() {
             return false;
         }
 
-        self.move_column_to(new_idx);
+        self.move_column_to(new_idx, focus);
         true
     }
 
-    pub fn move_column_to_first(&mut self) {
-        self.move_column_to(0);
+    pub fn move_column_to_first(&mut self, focus: bool) {
+        self.move_column_to(0, focus);
     }
 
-    pub fn move_column_to_last(&mut self) {
+    pub fn move_column_to_last(&mut self, focus: bool) {
         if self.columns.is_empty() {
             return;
         }
 
         let new_idx = self.columns.len() - 1;
-        self.move_column_to(new_idx);
+        self.move_column_to(new_idx, focus);
     }
 
-    pub fn move_down(&mut self) -> bool {
+    pub fn move_down(&mut self, focus: bool) -> bool {
         if self.columns.is_empty() {
             return false;
         }
 
-        self.columns[self.active_column_idx].move_down()
+        self.columns[self.active_column_idx].move_down(focus)
     }
 
-    pub fn move_up(&mut self) -> bool {
+    pub fn move_up(&mut self, focus: bool) -> bool {
         if self.columns.is_empty() {
             return false;
         }
 
-        self.columns[self.active_column_idx].move_up()
+        self.columns[self.active_column_idx].move_up(focus)
     }
 
     pub fn consume_or_expel_window_left(&mut self, window: Option<&W::Id>) {
@@ -2444,7 +2365,7 @@ impl<W: LayoutElement> ScrollingSpace<W> {
         new_col.tiles[0].animate_move_from(move_offset);
     }
 
-    pub fn swap_window_in_direction(&mut self, direction: ScrollDirection) {
+    pub fn swap_window_in_direction(&mut self, direction: ScrollDirection, focus: bool) {
         if self.columns.is_empty() {
             return;
         }
@@ -2475,7 +2396,7 @@ impl<W: LayoutElement> ScrollingSpace<W> {
         if self.columns[source_column_idx].tiles.len() == 1
             && self.columns[target_column_idx].tiles.len() == 1
         {
-            return self.move_column_to(target_column_idx);
+            return self.move_column_to(target_column_idx, focus);
         }
 
         let source_tile_idx = self.columns[source_column_idx].active_tile_idx;
@@ -2569,7 +2490,12 @@ impl<W: LayoutElement> ScrollingSpace<W> {
             .animate_move_from(target_pt - source_pt);
         self.columns[source_column_idx].tiles[source_tile_idx].ensure_alpha_animates_to_1();
 
-        self.activate_column(target_column_idx);
+        if focus {
+            self.activate_column(target_column_idx);
+        } else {
+            // Make sure the column stays in view even after a potentially wider window arrives.
+            self.animate_view_offset_to_column(None, self.active_column_idx, None);
+        }
     }
 
     pub fn toggle_column_tabbed_display(&mut self) {
@@ -3420,8 +3346,9 @@ impl<W: LayoutElement> ScrollingSpace<W> {
             let view_loc = self.map_point_out(main_space_vec(self.view_main_pos()));
             let view_rect = Rectangle::new(view_loc, view_size);
             for closing in self.closing_windows.iter().rev() {
-                let elem = closing.render(ctx.as_gles(), view_rect, scale);
-                push(elem.into());
+                if let Some(elem) = closing.render(ctx.as_gles(), view_rect, scale) {
+                    push(elem.into());
+                }
             }
         }
 
@@ -4205,7 +4132,6 @@ impl WindowHeight {
 }
 
 impl<W: LayoutElement> Column<W> {
-    #[allow(clippy::too_many_arguments)]
     fn new_with_tile(
         tile: Tile<W>,
         view_size: Size<f64, Logical>,
@@ -4821,6 +4747,15 @@ impl<W: LayoutElement> Column<W> {
         tile.window_height_for_tile_height(tile_cross_span)
     }
 
+    fn width_px_to_proportion(&self, width_px: f64) -> f64 {
+        let full = self.working_area.size.w - self.options.layout.gaps;
+        if full == 0. {
+            1.
+        } else {
+            (width_px + self.options.layout.gaps + self.extra_size().w) / full
+        }
+    }
+
     fn update_tile_sizes(&mut self, animate: bool) {
         self.update_tile_sizes_with_transaction(animate, Transaction::new());
     }
@@ -5177,7 +5112,7 @@ impl<W: LayoutElement> Column<W> {
         self.activate_idx(self.tiles.len() - 1);
     }
 
-    fn move_active_tile_to_adjacent(&mut self, new_idx: usize) -> bool {
+    fn move_active_tile_to_adjacent(&mut self, new_idx: usize, focus: bool) -> bool {
         let old_idx = self.active_tile_idx;
         if old_idx == new_idx {
             return false;
@@ -5186,9 +5121,13 @@ impl<W: LayoutElement> Column<W> {
         let active_cross_pos = self.tile_offset(old_idx).y;
         let adjacent_cross_pos = self.tile_offset(new_idx).y;
 
-        self.tiles.swap(old_idx, new_idx);
-        self.data.swap(old_idx, new_idx);
-        self.active_tile_idx = new_idx;
+        self.tiles.swap(self.active_tile_idx, new_idx);
+        self.data.swap(self.active_tile_idx, new_idx);
+        if focus {
+            self.active_tile_idx = new_idx;
+        } else {
+            self.tiles[self.active_tile_idx].ensure_alpha_animates_to_1();
+        }
 
         // Animate the movement along the cross axis.
         let new_active_cross_pos = self.tile_offset(new_idx).y;
@@ -5202,14 +5141,14 @@ impl<W: LayoutElement> Column<W> {
         true
     }
 
-    fn move_up(&mut self) -> bool {
+    fn move_up(&mut self, focus: bool) -> bool {
         let new_idx = self.active_tile_idx.saturating_sub(1);
-        self.move_active_tile_to_adjacent(new_idx)
+        self.move_active_tile_to_adjacent(new_idx, focus)
     }
 
-    fn move_down(&mut self) -> bool {
+    fn move_down(&mut self, focus: bool) -> bool {
         let new_idx = min(self.active_tile_idx + 1, self.tiles.len() - 1);
-        self.move_active_tile_to_adjacent(new_idx)
+        self.move_active_tile_to_adjacent(new_idx, focus)
     }
 
     fn toggle_width(&mut self, tile_idx: Option<usize>, forwards: bool) {
@@ -5312,15 +5251,9 @@ impl<W: LayoutElement> Column<W> {
                 ColumnWidth::Proportion(new_proportion)
             }
             (ColumnWidth::Fixed(_), SizeChange::AdjustProportion(delta)) => {
-                let available_main_span = self.working_area.size.w - self.options.layout.gaps;
-                let current_proportion = if available_main_span == 0. {
-                    1.
-                } else {
-                    (current_main_span + self.options.layout.gaps + self.extra_size().w)
-                        / available_main_span
-                };
-                let new_proportion = (current_proportion + delta / 100.).clamp(0., MAX_PROPORTION);
-                ColumnWidth::Proportion(new_proportion)
+                let current = self.width_px_to_proportion(current_main_span);
+                let proportion = (current + delta / 100.).clamp(0., MAX_PROPORTION);
+                ColumnWidth::Proportion(proportion)
             }
         };
 

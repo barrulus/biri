@@ -74,7 +74,6 @@ impl FocusRing {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub fn update_render_elements(
         &mut self,
         win_size: Size<f64, Logical>,

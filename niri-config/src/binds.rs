@@ -259,6 +259,8 @@ pub enum Action {
     Quit(#[knuffel(property(name = "skip-confirmation"), default)] bool),
     ChangeVt(#[knuffel(argument)] u8),
     Suspend,
+    #[knuffel(skip)]
+    PowerKeySuspend,
     PowerOffMonitors(#[knuffel(property(name = "skip-isolated"), default)] bool),
     PowerOnMonitors,
     ToggleDebugTint,
@@ -331,7 +333,10 @@ pub enum Action {
     #[knuffel(skip)]
     FocusWindow(u64),
     FocusWindowInColumn(#[knuffel(argument)] u8),
-    FocusWindowPrevious,
+    FocusWindowPrevious(
+        #[knuffel(property(name = "scope"), default)] MruScope,
+        #[knuffel(property(name = "filter"), default)] MruFilter,
+    ),
     FocusColumnLeft,
     #[knuffel(skip)]
     FocusColumnLeftUnderMouse,
@@ -359,15 +364,18 @@ pub enum Action {
     FocusWindowBottom,
     FocusWindowDownOrTop,
     FocusWindowUpOrBottom,
-    MoveColumnLeft,
-    MoveColumnRight,
-    MoveColumnToFirst,
-    MoveColumnToLast,
+    MoveColumnLeft(#[knuffel(property(name = "focus"), default = true)] bool),
+    MoveColumnRight(#[knuffel(property(name = "focus"), default = true)] bool),
+    MoveColumnToFirst(#[knuffel(property(name = "focus"), default = true)] bool),
+    MoveColumnToLast(#[knuffel(property(name = "focus"), default = true)] bool),
     MoveColumnLeftOrToMonitorLeft,
     MoveColumnRightOrToMonitorRight,
-    MoveColumnToIndex(#[knuffel(argument)] usize),
-    MoveWindowDown,
-    MoveWindowUp,
+    MoveColumnToIndex(
+        #[knuffel(argument)] usize,
+        #[knuffel(property(name = "focus"), default = true)] bool,
+    ),
+    MoveWindowDown(#[knuffel(property(name = "focus"), default = true)] bool),
+    MoveWindowUp(#[knuffel(property(name = "focus"), default = true)] bool),
     MoveWindowDownOrToWorkspaceDown,
     MoveWindowUpOrToWorkspaceUp,
     ConsumeOrExpelWindowLeft,
@@ -378,8 +386,8 @@ pub enum Action {
     ConsumeOrExpelWindowRightById(u64),
     ConsumeWindowIntoColumn,
     ExpelWindowFromColumn,
-    SwapWindowLeft,
-    SwapWindowRight,
+    SwapWindowLeft(#[knuffel(property(name = "focus"), default = true)] bool),
+    SwapWindowRight(#[knuffel(property(name = "focus"), default = true)] bool),
     ToggleColumnTabbedDisplay,
     SetColumnDisplay(#[knuffel(argument, str)] ColumnDisplay),
     CenterColumn,
@@ -407,6 +415,22 @@ pub enum Action {
         reference: WorkspaceReference,
         focus: bool,
     },
+    MoveWindowToNewWorkspaceBelow(
+        #[knuffel(argument)] Option<WorkspaceReference>,
+        #[knuffel(property(name = "focus"), default = true)] bool,
+    ),
+    MoveWindowToNewWorkspaceAbove(
+        #[knuffel(argument)] Option<WorkspaceReference>,
+        #[knuffel(property(name = "focus"), default = true)] bool,
+    ),
+    MoveColumnToNewWorkspaceBelow(
+        #[knuffel(argument)] Option<WorkspaceReference>,
+        #[knuffel(property(name = "focus"), default = true)] bool,
+    ),
+    MoveColumnToNewWorkspaceAbove(
+        #[knuffel(argument)] Option<WorkspaceReference>,
+        #[knuffel(property(name = "focus"), default = true)] bool,
+    ),
     MoveColumnToWorkspaceDown(#[knuffel(property(name = "focus"), default = true)] bool),
     MoveColumnToWorkspaceUp(#[knuffel(property(name = "focus"), default = true)] bool),
     MoveColumnToWorkspace(
@@ -678,7 +702,17 @@ impl From<niri_ipc::Action> for Action {
             }
             niri_ipc::Action::FocusWindow { id } => Self::FocusWindow(id),
             niri_ipc::Action::FocusWindowInColumn { index } => Self::FocusWindowInColumn(index),
-            niri_ipc::Action::FocusWindowPrevious {} => Self::FocusWindowPrevious,
+            niri_ipc::Action::FocusWindowPrevious { scope, filter } => Self::FocusWindowPrevious(
+                match scope {
+                    None | Some(niri_ipc::RecentWindowsScope::All) => MruScope::All,
+                    Some(niri_ipc::RecentWindowsScope::Output) => MruScope::Output,
+                    Some(niri_ipc::RecentWindowsScope::Workspace) => MruScope::Workspace,
+                },
+                match filter {
+                    None | Some(niri_ipc::RecentWindowsFilter::All) => MruFilter::All,
+                    Some(niri_ipc::RecentWindowsFilter::AppId) => MruFilter::AppId,
+                },
+            ),
             niri_ipc::Action::FocusColumnLeft {} => Self::FocusColumnLeft,
             niri_ipc::Action::FocusColumnRight {} => Self::FocusColumnRight,
             niri_ipc::Action::FocusColumnFirst {} => Self::FocusColumnFirst,
@@ -702,19 +736,21 @@ impl From<niri_ipc::Action> for Action {
             niri_ipc::Action::FocusWindowBottom {} => Self::FocusWindowBottom,
             niri_ipc::Action::FocusWindowDownOrTop {} => Self::FocusWindowDownOrTop,
             niri_ipc::Action::FocusWindowUpOrBottom {} => Self::FocusWindowUpOrBottom,
-            niri_ipc::Action::MoveColumnLeft {} => Self::MoveColumnLeft,
-            niri_ipc::Action::MoveColumnRight {} => Self::MoveColumnRight,
-            niri_ipc::Action::MoveColumnToFirst {} => Self::MoveColumnToFirst,
-            niri_ipc::Action::MoveColumnToLast {} => Self::MoveColumnToLast,
-            niri_ipc::Action::MoveColumnToIndex { index } => Self::MoveColumnToIndex(index),
+            niri_ipc::Action::MoveColumnLeft { focus } => Self::MoveColumnLeft(focus),
+            niri_ipc::Action::MoveColumnRight { focus } => Self::MoveColumnRight(focus),
+            niri_ipc::Action::MoveColumnToFirst { focus } => Self::MoveColumnToFirst(focus),
+            niri_ipc::Action::MoveColumnToLast { focus } => Self::MoveColumnToLast(focus),
+            niri_ipc::Action::MoveColumnToIndex { index, focus } => {
+                Self::MoveColumnToIndex(index, focus)
+            }
             niri_ipc::Action::MoveColumnLeftOrToMonitorLeft {} => {
                 Self::MoveColumnLeftOrToMonitorLeft
             }
             niri_ipc::Action::MoveColumnRightOrToMonitorRight {} => {
                 Self::MoveColumnRightOrToMonitorRight
             }
-            niri_ipc::Action::MoveWindowDown {} => Self::MoveWindowDown,
-            niri_ipc::Action::MoveWindowUp {} => Self::MoveWindowUp,
+            niri_ipc::Action::MoveWindowDown { focus } => Self::MoveWindowDown(focus),
+            niri_ipc::Action::MoveWindowUp { focus } => Self::MoveWindowUp(focus),
             niri_ipc::Action::MoveWindowDownOrToWorkspaceDown {} => {
                 Self::MoveWindowDownOrToWorkspaceDown
             }
@@ -733,8 +769,8 @@ impl From<niri_ipc::Action> for Action {
             }
             niri_ipc::Action::ConsumeWindowIntoColumn {} => Self::ConsumeWindowIntoColumn,
             niri_ipc::Action::ExpelWindowFromColumn {} => Self::ExpelWindowFromColumn,
-            niri_ipc::Action::SwapWindowRight {} => Self::SwapWindowRight,
-            niri_ipc::Action::SwapWindowLeft {} => Self::SwapWindowLeft,
+            niri_ipc::Action::SwapWindowRight { focus } => Self::SwapWindowRight(focus),
+            niri_ipc::Action::SwapWindowLeft { focus } => Self::SwapWindowLeft(focus),
             niri_ipc::Action::ToggleColumnTabbedDisplay {} => Self::ToggleColumnTabbedDisplay,
             niri_ipc::Action::SetColumnDisplay { display } => Self::SetColumnDisplay(display),
             niri_ipc::Action::CenterColumn {} => Self::CenterColumn,
@@ -772,6 +808,18 @@ impl From<niri_ipc::Action> for Action {
                 reference: WorkspaceReference::from(reference),
                 focus,
             },
+            niri_ipc::Action::MoveWindowToNewWorkspaceBelow { reference, focus } => {
+                Self::MoveWindowToNewWorkspaceBelow(reference.map(WorkspaceReference::from), focus)
+            }
+            niri_ipc::Action::MoveWindowToNewWorkspaceAbove { reference, focus } => {
+                Self::MoveWindowToNewWorkspaceAbove(reference.map(WorkspaceReference::from), focus)
+            }
+            niri_ipc::Action::MoveColumnToNewWorkspaceBelow { reference, focus } => {
+                Self::MoveColumnToNewWorkspaceBelow(reference.map(WorkspaceReference::from), focus)
+            }
+            niri_ipc::Action::MoveColumnToNewWorkspaceAbove { reference, focus } => {
+                Self::MoveColumnToNewWorkspaceAbove(reference.map(WorkspaceReference::from), focus)
+            }
             niri_ipc::Action::MoveColumnToWorkspaceDown { focus } => {
                 Self::MoveColumnToWorkspaceDown(focus)
             }
