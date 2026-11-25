@@ -37,7 +37,7 @@ Promoting an idea is a maintainer decision: promote, merge into an existing idea
 
 ## Pull requests
 
-- Target `main`. The `upstream` branch is a pristine mirror of niri and never receives fork commits.
+- Target `main`, the fork's only maintained branch.
 - Reference the issue the PR closes; the PR inherits that issue's theme.
 - Run `cargo fmt`, `cargo clippy`, and the tests. For wiki changes, `cd docs && uv run --locked mkdocs build` must pass in strict mode.
 

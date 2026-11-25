@@ -12,8 +12,7 @@ __pycache__/
 /.direnv/
 /.envrc
 
-# Superpowers plugin scratch dirs (any depth). NOT docs/superpowers/ — that
-# holds committed design specs and plans.
+# Superpowers plugin scratch directories
 .superpowers/
 
 # insta pending inline snapshots
