@@ -836,7 +836,7 @@ impl<W: LayoutElement> ScrollingSpace<W> {
         snaps
     }
 
-    fn collect_aligned_view_snaps(&self) -> Vec<ViewSnap> {
+    fn collect_aligned_view_snaps(&self, current_view_main: f64) -> Vec<ViewSnap> {
         let center_on_overflow = matches!(
             self.options.layout.center_focused_column,
             CenterFocusedColumn::OnOverflow
@@ -844,6 +844,11 @@ impl<W: LayoutElement> ScrollingSpace<W> {
         let view_main_span = self.view_size.w;
         let gaps = self.options.layout.gaps;
         let mut snaps = Vec::new();
+        // These are the first column's start snap and the last column's end snap,
+        // not necessarily the outermost snaps when struts or size limits are involved.
+        let mut start_snap = None;
+        let mut end_snap = None;
+        let last_col_idx = self.columns.len() - 1;
         let mut column_main = 0.;
         for (col_idx, col) in self.columns.iter().enumerate() {
             let column_span = col.width();
@@ -860,6 +865,12 @@ impl<W: LayoutElement> ScrollingSpace<W> {
                     view_main_pos: column_main,
                     col_idx,
                 });
+                if col_idx == 0 {
+                    start_snap = Some(column_main);
+                }
+                if col_idx == last_col_idx {
+                    end_snap = Some(column_main);
+                }
             } else {
                 let padding = if mode.is_maximized() {
                     0.
@@ -875,37 +886,65 @@ impl<W: LayoutElement> ScrollingSpace<W> {
                     view_main_pos: center,
                     col_idx,
                 });
+                // Keep the center as the boundary if overflow suppresses an aligned snap.
+                if col_idx == 0 {
+                    start_snap = Some(center);
+                }
+                if col_idx == last_col_idx {
+                    end_snap = Some(center);
+                }
                 let is_overflowing = |adjacent: Option<f64>| {
                     center_on_overflow
                         && adjacent.is_some_and(|span| span + 3. * gaps + column_span > area.size.w)
                 };
                 if !is_overflowing(self.columns.get(col_idx + 1).map(|c| c.width())) {
+                    let view_main_pos = column_main - padding - start_strut;
                     snaps.push(ViewSnap {
-                        view_main_pos: column_main - padding - start_strut,
+                        view_main_pos,
                         col_idx,
                     });
+                    if col_idx == 0 {
+                        start_snap = Some(view_main_pos);
+                    }
                 }
                 let previous = col_idx
                     .checked_sub(1)
                     .and_then(|idx| self.columns.get(idx).map(|c| c.width()));
                 if !is_overflowing(previous) {
+                    let view_main_pos =
+                        column_main + column_span + padding + end_strut - view_main_span;
                     snaps.push(ViewSnap {
-                        view_main_pos: column_main + column_span + padding + end_strut
-                            - view_main_span,
+                        view_main_pos,
                         col_idx,
                     });
+                    if col_idx == last_col_idx {
+                        end_snap = Some(view_main_pos);
+                    }
                 }
             }
             column_main += column_span + gaps;
         }
+
+        if let Some((mut start, mut end)) = Option::zip(start_snap, end_snap) {
+            // A strip narrower than the view still needs its intermediate snaps.
+            if start > end {
+                std::mem::swap(&mut start, &mut end);
+            }
+            // Momentum alone should not take us past an edge. Deliberately dragging
+            // beyond it before releasing still permits overscroll on either axis.
+            snaps.retain(|snap| {
+                (current_view_main < start || start <= snap.view_main_pos)
+                    && (end < current_view_main || snap.view_main_pos <= end)
+            });
+        }
         snaps
     }
 
-    fn collect_view_snaps(&self) -> Vec<ViewSnap> {
+    fn collect_view_snaps(&self, current_view_main: f64) -> Vec<ViewSnap> {
         let mut snaps = if self.is_centering_focused_column() {
             self.collect_centered_view_snaps()
         } else {
-            self.collect_aligned_view_snaps()
+            self.collect_aligned_view_snaps(current_view_main)
         };
         snaps.sort_by_key(|snap| NotNan::new(snap.view_main_pos).unwrap());
         snaps
@@ -3632,9 +3671,10 @@ impl<W: LayoutElement> ScrollingSpace<W> {
         let target_view_offset = end_pos + gesture.delta_from_tracker;
 
         let active_column_main = self.column_main_pos(self.active_column_idx);
+        let current_view_main = active_column_main + current_view_offset;
         let target_view_main = active_column_main + target_view_offset;
 
-        let snapping_points = self.collect_view_snaps();
+        let snapping_points = self.collect_view_snaps(current_view_main);
         let target_snap = self.closest_view_snap(&snapping_points, target_view_main);
         let new_col_idx = self.furthest_visible_column_from_snap(
             target_snap,
