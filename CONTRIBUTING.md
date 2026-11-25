@@ -2,6 +2,8 @@
 
 biri is a fork of [niri](https://github.com/niri-wm/niri). Upstream's contributing guide follows below and still applies to code; this section covers how work is organised in this repo.
 
+You can also support biri development by [supporting barrulus on Ko-fi](https://ko-fi.com/barrulus).
+
 ## Where things go
 
 - **Bugs** → [Issues](https://github.com/barrulus/biri/issues/new/choose). If the problem also happens on upstream niri, report it there instead.

@@ -1,5 +1,7 @@
 Welcome to the niri documentation!
 
+Using the biri fork? You can [support biri development on Ko-fi](https://ko-fi.com/barrulus).
+
 Feel free to look through usage and [Getting started](./Getting-Started.md).
 If you're looking for ways to configure niri, check out the [introduction to configuration](./Configuration:-Introduction.md).
 
