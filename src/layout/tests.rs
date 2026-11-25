@@ -8959,6 +8959,85 @@ fn vertical_moves_without_focus_keep_destination_selected() {
 }
 
 #[test]
+fn view_gesture_requires_deliberate_overscroll_on_both_axes() {
+    for axis in [MainAxis::Horizontal, MainAxis::Vertical] {
+        for at_end in [false, true] {
+            for deliberate in [false, true] {
+                let mut options = Options::default();
+                options.layout.main_axis = axis;
+                options.layout.gaps = 0.;
+                options.layout.center_focused_column = CenterFocusedColumn::Never;
+                let mut layout = check_ops_with_options(
+                    options,
+                    [
+                        Op::AddOutput(1),
+                        Op::AddWindow {
+                            params: TestWindowParams::new(1),
+                        },
+                        Op::SetColumnWidth(SizeChange::SetFixed(600)),
+                        Op::Communicate(1),
+                        Op::AddWindow {
+                            params: TestWindowParams::new(2),
+                        },
+                        Op::SetColumnWidth(SizeChange::SetFixed(600)),
+                        Op::Communicate(2),
+                        Op::AddWindow {
+                            params: TestWindowParams::new(3),
+                        },
+                        Op::SetColumnWidth(SizeChange::SetFixed(600)),
+                        Op::Communicate(3),
+                        if at_end {
+                            Op::FocusColumnLast
+                        } else {
+                            Op::FocusColumnFirst
+                        },
+                        Op::CompleteAnimations,
+                    ],
+                );
+                let main_span = if axis == MainAxis::Vertical {
+                    720.
+                } else {
+                    1280.
+                };
+                let direction = if at_end { 1. } else { -1. };
+                let overscroll = direction * (main_span - 600.) / 2.;
+                let now = layout.clock.now_unadjusted();
+                let scrolling = layout.active_workspace_mut().unwrap().scrolling_mut();
+                let boundary = scrolling.view_pos();
+                scrolling.view_offset_gesture_begin(false);
+                if deliberate {
+                    // Drag the edge column to the center, then pause before releasing.
+                    scrolling.view_offset_gesture_update(overscroll, now, false);
+                    Op::AdvanceAnimations { msec_delta: 1000 }.apply(&mut layout);
+                } else {
+                    // Release inside the strip with enough outward momentum to overshoot.
+                    scrolling.view_offset_gesture_update(-direction * 100., now, false);
+                    scrolling.view_offset_gesture_update(
+                        direction * 50.,
+                        now + Duration::from_millis(200),
+                        false,
+                    );
+                    Op::AdvanceAnimations { msec_delta: 210 }.apply(&mut layout);
+                }
+                layout
+                    .active_workspace_mut()
+                    .unwrap()
+                    .scrolling_mut()
+                    .view_offset_gesture_end(Some(false));
+                Op::CompleteAnimations.apply(&mut layout);
+                layout.verify_invariants();
+                let actual = layout.active_workspace().unwrap().scrolling().view_pos();
+                let expected = boundary + if deliberate { overscroll } else { 0. };
+                assert!(
+                    (actual - expected).abs() < 1.,
+                    "{axis:?}, at_end={at_end}, deliberate={deliberate}: expected {expected}, got {actual}",
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn view_gesture_can_center_single_column_on_both_axes() {
     for axis in [MainAxis::Horizontal, MainAxis::Vertical] {
         let mut options = Options::default();

@@ -88,7 +88,7 @@ use smithay::wayland::image_capture_source::{
     ImageCaptureSource, ImageCaptureSourceState, OutputCaptureSourceState,
 };
 use smithay::wayland::image_copy_capture::{CaptureFailureReason, ImageCopyCaptureState};
-use smithay::wayland::input_method::InputMethodManagerState;
+use smithay::wayland::input_method::{InputMethodManagerState, InputMethodSeat};
 use smithay::wayland::keyboard_shortcuts_inhibit::{
     KeyboardShortcutsInhibitState, KeyboardShortcutsInhibitor,
 };
@@ -3952,6 +3952,12 @@ impl Niri {
             state.lock_color_buffer.resize(output_size);
             if let Some(lock_surface) = &state.lock_surface {
                 configure_lock_surface(lock_surface, output);
+
+                for (popup, _) in PopupManager::popups_for_surface(lock_surface.wl_surface()) {
+                    with_surfaces_surface_tree(popup.wl_surface(), |surface, data| {
+                        send_scale_transform(surface, data, scale, transform);
+                    });
+                }
             }
         }
 
@@ -4285,18 +4291,76 @@ impl Niri {
         if self.exit_confirm_dialog.is_open() {
             return rv;
         } else if self.is_locked() {
+            // Include some layer surfaces on the lock screen, e.g. an on-screen keyboard.
+            let layer_map = layer_map_for_output(output);
+            let layer_under = |layer, surface_type| {
+                self.lock_screen_layers(&layer_map, layer)
+                    .find_map(|(mapped, geo)| {
+                        let mut layer_pos_within_output = geo.loc.to_f64();
+                        layer_pos_within_output += mapped.bob_offset();
+
+                        mapped
+                            .surface()
+                            .surface_under(
+                                pos_within_output - layer_pos_within_output,
+                                surface_type,
+                            )
+                            .map(|(surface, pos_within_layer)| {
+                                let pos = pos_within_layer.to_f64() + layer_pos_within_output;
+                                (
+                                    (surface, pos + output_pos_in_global_space.to_f64()),
+                                    mapped.surface().clone(),
+                                )
+                            })
+                    })
+            };
+            let popup = WindowSurfaceType::POPUP | WindowSurfaceType::SUBSURFACE;
+            let toplevel = WindowSurfaceType::TOPLEVEL | WindowSurfaceType::SUBSURFACE;
+            let layer_under = layer_under(Layer::Overlay, popup)
+                .or_else(|| layer_under(Layer::Overlay, toplevel))
+                .or_else(|| layer_under(Layer::Top, popup))
+                .or_else(|| layer_under(Layer::Top, toplevel));
+            drop(layer_map);
+
+            if let Some((surface, layer)) = layer_under {
+                rv.surface = Some(surface);
+                rv.layer = Some(layer);
+                return rv;
+            }
+
             let Some(state) = self.output_state.get(output) else {
                 return rv;
             };
             let Some(surface) = state.lock_surface.as_ref() else {
                 return rv;
             };
+            let surface = surface.wl_surface();
+            let location = Point::new(0, 0);
+
+            // Check the popups (e.g. an IME popup).
+            for (popup, offset) in PopupManager::popups_for_surface(surface) {
+                let surface = popup.wl_surface();
+                let popup_geo = popup.geometry();
+                let surface_loc = location + offset - popup_geo.loc;
+
+                if let Some((surface, pos_within_output)) = under_from_surface_tree(
+                    surface,
+                    pos_within_output,
+                    surface_loc,
+                    WindowSurfaceType::ALL,
+                ) {
+                    rv.surface = Some((
+                        surface,
+                        (pos_within_output + output_pos_in_global_space).to_f64(),
+                    ));
+                    return rv;
+                }
+            }
 
             rv.surface = under_from_surface_tree(
-                surface.wl_surface(),
+                surface,
                 pos_within_output,
-                // We put lock surfaces at (0, 0).
-                (0, 0),
+                location,
                 WindowSurfaceType::ALL,
             )
             .map(|(surface, pos_within_output)| {
@@ -4631,13 +4695,17 @@ impl Niri {
             return output;
         }
 
-        // Check layer-shell.
-        let has_layer_surface = |o: &&Output| {
-            layer_map_for_output(o)
-                .layer_for_surface(root, WindowSurfaceType::TOPLEVEL)
-                .is_some()
+        // Check layer-shell and ext-session-lock.
+        let has_surface = |o: &&Output| {
+            self.output_state[o]
+                .lock_surface
+                .as_ref()
+                .is_some_and(|s| s.wl_surface() == root)
+                || layer_map_for_output(o)
+                    .layer_for_surface(root, WindowSurfaceType::TOPLEVEL)
+                    .is_some()
         };
-        self.layout.outputs().find(has_layer_surface)
+        self.layout.outputs().find(has_surface)
     }
 
     pub fn lock_surface_focus(&self) -> Option<WlSurface> {
@@ -5785,11 +5853,65 @@ impl Niri {
 
         // If the session is locked, draw the lock surface.
         if self.is_locked() {
+            // Render without xray, which would show the unlocked contents.
+            let mut ctx = RenderCtx {
+                xray: None,
+                ..ctx.r()
+            };
+
+            // Include some layer surfaces on the lock screen, e.g. an on-screen keyboard.
+            let layer_map = layer_map_for_output(output);
+            macro_rules! push_popups_from_layer {
+                ($layer:expr) => {{
+                    for (mapped, geo) in self.lock_screen_layers(&layer_map, $layer) {
+                        let loc = geo.loc.to_f64();
+                        mapped.render_popups(ctx.r(), None, loc, XrayPos::default(), &mut |elem| {
+                            push(elem.into())
+                        });
+                    }
+                }};
+            }
+            macro_rules! push_normal_from_layer {
+                ($layer:expr) => {{
+                    for (mapped, geo) in self.lock_screen_layers(&layer_map, $layer) {
+                        let loc = geo.loc.to_f64();
+                        mapped.render_normal(ctx.r(), None, loc, XrayPos::default(), &mut |elem| {
+                            push(elem.into())
+                        });
+                    }
+                }};
+            }
+            push_popups_from_layer!(Layer::Overlay);
+            push_normal_from_layer!(Layer::Overlay);
+            push_popups_from_layer!(Layer::Top);
+            push_normal_from_layer!(Layer::Top);
+            drop(layer_map);
+
             if let Some(surface) = state.lock_surface.as_ref() {
+                let surface = surface.wl_surface();
+                let location = Point::new(0, 0);
+
+                // Render the popups (e.g. an IME popup).
+                for (popup, offset) in PopupManager::popups_for_surface(surface) {
+                    let surface = popup.wl_surface();
+                    let popup_geo = popup.geometry();
+                    let surface_loc = location + offset - popup_geo.loc;
+
+                    push_elements_from_surface_tree(
+                        ctx.renderer,
+                        surface,
+                        surface_loc.to_physical_precise_round(output_scale),
+                        output_scale,
+                        1.,
+                        Kind::ScanoutCandidate,
+                        &mut |elem| push(elem.into()),
+                    );
+                }
+
                 push_elements_from_surface_tree(
                     ctx.renderer,
-                    surface.wl_surface(),
-                    Point::new(0, 0),
+                    surface,
+                    location.to_physical_precise_round(output_scale),
                     output_scale,
                     1.,
                     Kind::ScanoutCandidate,
@@ -6506,6 +6628,24 @@ impl Niri {
         })
     }
 
+    /// Layer surfaces to show when the session is locked.
+    ///
+    /// Includes layer surfaces of the active input method, so that an on-screen keyboard
+    /// can be used on the lock screen.
+    fn lock_screen_layers<'a>(
+        &'a self,
+        layer_map: &'a LayerMap,
+        layer: Layer,
+    ) -> impl Iterator<Item = (&'a MappedLayer, Rectangle<i32, Logical>)> {
+        // FIXME: changes to input_method().client() currently don't queue a redraw because there's
+        // no convenient place to do it.
+        let client = self.seat.input_method().client();
+        self.layers_in_render_order(layer_map, layer, false)
+            .filter(move |(mapped, _)| {
+                client.is_some() && mapped.surface().wl_surface().client() == client
+            })
+    }
+
     fn render_layer_normal<R: NiriRenderer>(
         &self,
         mut ctx: RenderCtx<R>,
@@ -7028,8 +7168,10 @@ impl Niri {
         }
 
         if let Some(surface) = &self.output_state[output].lock_surface {
+            let surface = surface.wl_surface();
+
             with_surface_tree_downward(
-                surface.wl_surface(),
+                surface,
                 (),
                 |_, _, _| TraversalAction::DoChildren(()),
                 |surface, states, _| {
@@ -7044,6 +7186,21 @@ impl Niri {
                 },
                 |_, _, _| true,
             );
+
+            for (popup, _) in PopupManager::popups_for_surface(surface) {
+                let surface = popup.wl_surface();
+                with_surfaces_surface_tree(surface, |surface, states| {
+                    update_surface_primary_scanout_output(
+                        surface,
+                        output,
+                        states,
+                        None,
+                        render_element_states,
+                        // Lock surfaces are shown only on one output at a time.
+                        |_, _, output, _| output,
+                    );
+                });
+            }
         }
     }
 
@@ -7089,8 +7246,10 @@ impl Niri {
         }
 
         if let Some(surface) = &self.output_state[output].lock_surface {
+            let surface = surface.wl_surface();
+
             send_dmabuf_feedback_surface_tree(
-                surface.wl_surface(),
+                surface,
                 output,
                 |_, _| Some(output.clone()),
                 |surface, _| {
@@ -7102,6 +7261,23 @@ impl Niri {
                     )
                 },
             );
+
+            for (popup, _) in PopupManager::popups_for_surface(surface) {
+                let surface = popup.wl_surface();
+                send_dmabuf_feedback_surface_tree(
+                    surface,
+                    output,
+                    |_, _| Some(output.clone()),
+                    |surface, _| {
+                        select_dmabuf_feedback(
+                            surface,
+                            render_element_states,
+                            &feedback.render,
+                            &feedback.scanout,
+                        )
+                    },
+                );
+            }
         }
 
         if let Some(surface) = self.dnd_icon.as_ref().map(|icon| &icon.surface) {
@@ -7226,13 +7402,26 @@ impl Niri {
         }
 
         if let Some(surface) = &self.output_state[output].lock_surface {
+            let surface = surface.wl_surface();
+
             send_frames_surface_tree(
-                surface.wl_surface(),
+                surface,
                 output,
                 frame_callback_time,
                 FRAME_CALLBACK_THROTTLE,
                 should_send,
             );
+
+            for (popup, _) in PopupManager::popups_for_surface(surface) {
+                let surface = popup.wl_surface();
+                send_frames_surface_tree(
+                    surface,
+                    output,
+                    frame_callback_time,
+                    FRAME_CALLBACK_THROTTLE,
+                    should_send,
+                );
+            }
         }
 
         if let Some(surface) = self.dnd_icon.as_ref().map(|icon| &icon.surface) {
@@ -7344,13 +7533,26 @@ impl Niri {
             }
 
             if let Some(surface) = &state.lock_surface {
+                let surface = surface.wl_surface();
+
                 send_frames_surface_tree(
-                    surface.wl_surface(),
+                    surface,
                     output,
                     frame_callback_time,
                     FRAME_CALLBACK_THROTTLE,
                     |_, _| None,
                 );
+
+                for (popup, _) in PopupManager::popups_for_surface(surface) {
+                    let surface = popup.wl_surface();
+                    send_frames_surface_tree(
+                        surface,
+                        output,
+                        frame_callback_time,
+                        FRAME_CALLBACK_THROTTLE,
+                        |_, _| None,
+                    );
+                }
             }
         }
 
@@ -7441,8 +7643,10 @@ impl Niri {
         }
 
         if let Some(surface) = &self.output_state[output].lock_surface {
+            let surface = surface.wl_surface();
+
             take_presentation_feedback_surface_tree(
-                surface.wl_surface(),
+                surface,
                 &mut feedback,
                 surface_primary_scanout_output,
                 |surface, _| {
@@ -7453,6 +7657,23 @@ impl Niri {
                     )
                 },
             );
+
+            for (popup, _) in PopupManager::popups_for_surface(surface) {
+                let surface = popup.wl_surface();
+
+                take_presentation_feedback_surface_tree(
+                    surface,
+                    &mut feedback,
+                    surface_primary_scanout_output,
+                    |surface, _| {
+                        surface_presentation_feedback_flags_from_states(
+                            surface,
+                            None,
+                            render_element_states,
+                        )
+                    },
+                );
+            }
         }
 
         feedback
