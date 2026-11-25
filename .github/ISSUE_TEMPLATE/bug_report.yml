@@ -7,6 +7,7 @@ body:
       value: |
         biri is a fork of [niri](https://github.com/niri-wm/niri). If the problem also happens on upstream niri, please report it there instead.
         For feature ideas use [Discussions → Ideas](https://github.com/barrulus/biri/discussions/new?category=ideas); for questions use [Q&A](https://github.com/barrulus/biri/discussions/new?category=q-a).
+        LLM-assisted reports are welcome under our [LLM policy](https://github.com/barrulus/biri/blob/main/CONTRIBUTING.md#llm-policy). Review the report for accuracy and distinguish what you observed from suspected causes.
   - type: textarea
     id: description
     attributes:

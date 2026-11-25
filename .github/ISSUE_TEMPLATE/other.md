@@ -7,13 +7,12 @@ assignees: ''
 ---
 
 <!-- Please describe the issue here at the top. -->
+<!-- LLM-assisted reports are welcome. Review the text and verify its claims before submitting: https://github.com/barrulus/biri/blob/main/CONTRIBUTING.md#llm-policy -->
 
 ### Checklist
 
 <!-- You can put an x inside the following checkboxes to check them. -->
 * [ ] I searched existing issues and discussions and this issue was not already reported.
 
-<!-- We do not allow LLM-written issues and comments. -->
-<!-- https://github.com/niri-wm/niri/blob/main/CONTRIBUTING.md -->
-* [ ] I did not use an LLM to write this issue.
+* [ ] I reviewed this report for accuracy and distinguished observations from suspected causes or suggestions.
 

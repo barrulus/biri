@@ -5,8 +5,9 @@ Using the biri fork? You can [support biri development on Ko-fi](https://ko-fi.c
 Feel free to look through usage and [Getting started](./Getting-Started.md).
 If you're looking for ways to configure niri, check out the [introduction to configuration](./Configuration:-Introduction.md).
 
-If you'd like to help with niri, there are plenty of both coding- and non-coding-related ways to do so.
-See [CONTRIBUTING.md](https://github.com/niri-wm/niri/blob/main/CONTRIBUTING.md) for an overview.
+If you'd like to help with biri, there are plenty of both coding- and non-coding-related ways to do so.
+See [CONTRIBUTING.md](https://github.com/barrulus/biri/blob/main/CONTRIBUTING.md) for an overview.
+LLM-assisted contributions are welcome when you review and verify the work; see our [LLM policy](https://github.com/barrulus/biri/blob/main/CONTRIBUTING.md#llm-policy).
 
 If you're not already here, check out our new wiki website! https://niri-wm.github.io/niri/
 

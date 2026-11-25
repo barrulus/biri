@@ -1,6 +1,6 @@
 # Contributing to biri
 
-biri is a fork of [niri](https://github.com/niri-wm/niri). Upstream's contributing guide follows below and still applies to code; this section covers how work is organised in this repo.
+biri is a fork of [niri](https://github.com/niri-wm/niri). This guide covers contributions to biri, with development guidance adapted from upstream below. The LLM policy here applies to this repository; other projects set their own contribution policies.
 
 You can also support biri development by [supporting barrulus on Ko-fi](https://ko-fi.com/barrulus).
 
@@ -40,41 +40,28 @@ Promoting an idea is a maintainer decision: promote, merge into an existing idea
 - Target `main`. The `upstream` branch is a pristine mirror of niri and never receives fork commits.
 - Reference the issue the PR closes; the PR inherits that issue's theme.
 - Run `cargo fmt`, `cargo clippy`, and the tests. For wiki changes, `cd docs && uv run --locked mkdocs build` must pass in strict mode.
-- No AI attribution lines in commits or PR bodies.
+
+## LLM policy
+
+LLM-assisted and LLM-generated contributions are welcome in biri, including code, tests, documentation, issues, and reviews. If you use an LLM, you are responsible for reviewing its output, checking that the work does what it claims, and following through on feedback. The same quality standards apply to every contribution, regardless of the tools used.
+
+- **Understand and own the submission.** Read the complete change before submitting it. Be able to explain the problem, how the solution works, and any significant tradeoffs. You are welcome to learn with an LLM; ask for help when something remains unclear.
+- **Verify that it works.** Run the relevant tests and checks, and exercise changed behaviour where practical. For bug fixes, reproduce the failure and check that the fix resolves it. Add focused regression coverage when useful, testing observable behaviour rather than simply repeating the implementation.
+- **Report what you actually checked.** Include the commands or manual steps you ran and their results. State anything you could not test, including hardware or environment limitations. An LLM's claim that tests pass is not a test result.
+- **Check factual claims.** Verify referenced code, APIs, links, logs, and reproduction steps. Distinguish observed behaviour from a suspected cause or a proposed solution. Do not invent evidence or present generated examples as observations from your system.
+- **Keep submissions focused and readable.** Follow the project's existing patterns, remove unrelated changes, and edit generated explanations down to what a reviewer needs. For issues and discussions, describe the problem and relevant context in your own reviewed submission.
+- **Follow through on review.** Answer questions, investigate problems, make corrections, and re-test changes. Do not leave maintainers to validate an unreviewed generated patch on your behalf.
+
+No LLM-use declaration or attribution is required. Reviews focus on correctness, clarity, maintainability, and evidence that the work has been checked.
 
 ---
 
-# Contributing to niri (upstream guide)
+# Development guidance adapted from niri
 
 Thanks for your interest in niri!
 The project has grown quite a bit, and we could use all help that we can.
 
 Make sure to join our Matrix chat if you have any questions or want to discuss anything: https://matrix.to/#/#niri:matrix.org
-
-## LLM policy
-
-You're not allowed to use LLMs to *create*.
-All pull request code (including tests), issue descriptions, comments, public reviews, etc. must be human-written.
-You can use LLMs privately (not like I can check or control that), but not to write from scratch.
-You may use LLMs for *translating* your human-written text; in this case you must also provide the original text to reduce the chance of miscommunication.
-
-This policy is motivated by several observations:
-
-- LLM writing is always long and excessive, and wastes time of the reader.
-- LLM issue analysis is not only overly long and excessive, but also frequently wrong.
-- LLM-assisted PRs are usually a bigger chore to review, and the developer frequently struggles to adequately address comments.
-- For code contributions, our goal is to grow contributors with understanding of the niri codebase.
-    Using LLMs to write code sidesteps this learning process.
-- LLMs remove an important *effort barrier* for writing code, even if the result reads fine.
-    The code ends up overly complex to solve non-existing or impractical problems.
-    Such code would not get written in the first place since the effort-benefit ratio is too high.
-    It increases maintenance burden and takes time away from more important PRs.
-
-    This reasoning applies to test code too.
-    LLM-written tests tend to be overly verbose and hard to understand.
-    Since it's *effortless* to generate test code with LLMs, the tests frequently end up repeating themselves, testing things that are trivially true, or testing internal states of the system rather than the outcomes.
-    Such tests may be helpful for initial verification of a new feature, but they are a chore to review and disproportionately increase maintenance burden.
-- Nobody wants to read AI slop.
 
 ## Issues and discussions
 

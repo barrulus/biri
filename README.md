@@ -288,8 +288,9 @@ The talk is in Russian, but I prepared full English subtitles that you can find 
 
 ## Contributing
 
-If you'd like to help with niri, there are plenty of both coding- and non-coding-related ways to do so.
-See [CONTRIBUTING.md](https://github.com/niri-wm/niri/blob/main/CONTRIBUTING.md) for an overview.
+If you'd like to help with biri, there are plenty of both coding- and non-coding-related ways to do so.
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for an overview.
+LLM-assisted contributions are welcome when you review and verify the work; see our [LLM policy](./CONTRIBUTING.md#llm-policy).
 
 For the fork-specific features listed above, open issues and pull requests against this repository rather than upstream niri.
 

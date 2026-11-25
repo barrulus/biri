@@ -1,7 +1,9 @@
 body:
   - type: markdown
     attributes:
-      value: Before posting, please search existing ideas and upvote instead of duplicating. Votes drive prioritization.
+      value: |
+        Before posting, please search existing ideas and upvote instead of duplicating. Votes drive prioritization.
+        LLM-assisted proposals are welcome under our [LLM policy](https://github.com/barrulus/biri/blob/main/CONTRIBUTING.md#llm-policy). Review the text and check factual claims before submitting.
   - type: textarea
     id: idea
     attributes:
