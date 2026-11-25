@@ -3631,10 +3631,10 @@ impl<W: LayoutElement> ScrollingSpace<W> {
         let end_pos = gesture.tracker.projected_end_pos() * norm_factor;
         let target_view_offset = end_pos + gesture.delta_from_tracker;
 
-        let snapping_points = self.collect_view_snaps();
-
         let active_column_main = self.column_main_pos(self.active_column_idx);
         let target_view_main = active_column_main + target_view_offset;
+
+        let snapping_points = self.collect_view_snaps();
         let target_snap = self.closest_view_snap(&snapping_points, target_view_main);
         let new_col_idx = self.furthest_visible_column_from_snap(
             target_snap,
