@@ -237,6 +237,7 @@ pub enum Action {
     /// Power off monitors via DPMS.
     PowerOffMonitors {
         /// Leave outputs marked `isolated` powered on (e.g. for signage on an idle timeout).
+        #[serde(default)]
         #[cfg_attr(feature = "clap", arg(short, long))]
         skip_isolated: bool,
     },
@@ -686,6 +687,7 @@ pub enum Action {
         #[cfg_attr(feature = "clap", arg())]
         name: String,
         /// Whether to focus the workspace when this makes it visible.
+        #[serde(default)]
         #[cfg_attr(feature = "clap", arg(long, action = clap::ArgAction::Set, default_value_t = false))]
         focus: bool,
     },
@@ -705,6 +707,7 @@ pub enum Action {
         #[cfg_attr(feature = "clap", arg())]
         name: String,
         /// Whether to focus the workspace afterwards.
+        #[serde(default)]
         #[cfg_attr(feature = "clap", arg(long, action = clap::ArgAction::Set, default_value_t = false))]
         focus: bool,
     },
@@ -1275,6 +1278,7 @@ pub enum Action {
     /// No-op if not in overview or no presets configured.
     OverviewZoomCycle {
         /// Cycle in reverse direction (previous preset instead of next).
+        #[serde(default)]
         #[cfg_attr(feature = "clap", arg(short, long))]
         reverse: bool,
     },
